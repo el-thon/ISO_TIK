@@ -80,6 +80,7 @@
 }
 
 .dark {
+  /* Dark-mode color tokens */
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -119,5 +120,199 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Custom utilities defined here so Tailwind generates them from this CSS file
+   (keeps utilities in one place and avoids needing PostCSS config).
+*/
+@layer utilities {
+  .text-heading-1 {
+    font-size: 2.25rem;
+    line-height: 2.5rem;
+  }
+  .text-heading-2 {
+    font-size: 1.75rem;
+    line-height: 2rem;
+  }
+  .text-heading-3 {
+    font-size: 1.5rem;
+    line-height: 1.75rem;
+  }
+
+  .text-body-lg {
+    font-size: 1.125rem;
+    line-height: 1.5rem;
+  }
+  .text-body-md {
+    font-size: 1rem;
+    line-height: 1.5rem;
+  }
+  .text-small {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  /* Color utilities using the existing theme tokens in :root */
+  .text-red {
+    color: #fb2c36;
+  }
+  .text-red-light {
+    color: #fef2f2;
+  }
+  .text-red-dark {
+    color: #9f0712;
+  }
+
+  .text-state {
+    color: #f1f5f9;
+  }
+
+  .text-navy {
+    color: #0f172b;
+  }
+  .text-navy-active {
+    color: #020618;
+  }
+  .text-navy-hover {
+    color: #314158;
+  }
+
+  .text-gray-light {
+    color: #f9fafb;
+  }
+  .text-gray-medium {
+    color: #e2e8f0;
+  }
+  .text-gray-dark {
+    color: #90a1b9;
+  }
+
+  .text-green {
+    color: #00c950;
+  }
+  .text-green-dark {
+    color: #016630;
+  }
+  .text-green-light {
+    color: #f0fdf4;
+  }
+
+  .text-red-dark {
+    color: #9f0712;
+  }
+  .text-red-light {
+    color: #fef2f2;
+  }
+  .text-red {
+    color: #fb2c36;
+  }
+
+  .text-yellow-dark {
+    color: #894b00;
+  }
+  .text-yellow-light {
+    color: #fefce8;
+  }
+  .text-yellow {
+    color: #f0b100;
+  }
+
+  .text-blue-dark {
+    color: #193cb8;
+  }
+  .text-blue-light {
+    color: #eff6ff;
+  }
+  .text-blue {
+    color: #2b7fff;
+  }
+
+  .text-foreground {
+    color: var(--foreground);
+  }
+  .text-muted-foreground {
+    color: var(--muted-foreground);
+  }
+}
+
+/* Background and helper utilities for navy palette */
+@layer utilities {
+  .bg-navy {
+    background-color: #0b3d91;
+  }
+  .bg-navy-hover {
+    background-color: #08306f;
+  }
+  .text-white {
+    color: #ffffff;
+  }
+  /* Background variants matching text utilities */
+  .bg-red {
+    background-color: #fb2c36;
+  }
+  .bg-red-light {
+    background-color: #fef2f2;
+  }
+  .bg-red-dark {
+    background-color: #9f0712;
+  }
+
+  .bg-state {
+    background-color: #f1f5f9;
+  }
+
+  .bg-navy-active {
+    background-color: #020618;
+  }
+  .bg-navy-hover-soft {
+    background-color: #314158;
+  }
+
+  .bg-gray-light {
+    background-color: #f9fafb;
+  }
+  .bg-gray-medium {
+    background-color: #e2e8f0;
+  }
+  .bg-gray-dark {
+    background-color: #90a1b9;
+  }
+
+  .bg-green {
+    background-color: #00c950;
+  }
+  .bg-green-dark {
+    background-color: #016630;
+  }
+  .bg-green-light {
+    background-color: #f0fdf4;
+  }
+
+  .bg-yellow {
+    background-color: #f0b100;
+  }
+  .bg-yellow-dark {
+    background-color: #894b00;
+  }
+  .bg-yellow-light {
+    background-color: #fefce8;
+  }
+
+  .bg-blue {
+    background-color: #2b7fff;
+  }
+  .bg-blue-dark {
+    background-color: #193cb8;
+  }
+  .bg-blue-light {
+    background-color: #eff6ff;
+  }
+
+  .bg-foreground {
+    background-color: var(--foreground);
+  }
+  .bg-muted-foreground {
+    background-color: var(--muted-foreground);
   }
 }
