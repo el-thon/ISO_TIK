@@ -9,7 +9,10 @@ import Rooms from './pages/rooms'
 import RoomDetail from './pages/rooms/detail'
 import Topics from './pages/topics'
 import CreateTopic from './pages/topics/CreateTopic'
+import Assignments from './pages/assignments'
+import AuditPage from './pages/audits'
 import Profile from './pages/profile'
+import Administration from './pages/administration'
 import NotFound from './pages/not-found'
 
 export const router = createBrowserRouter(
@@ -20,6 +23,9 @@ export const router = createBrowserRouter(
   { path: '/groups', element: <Groups /> },
   { path: '/rooms', element: <Rooms /> },
   { path: '/rooms/:id', element: <RoomDetail /> },
+  { path: '/assignments', element: <Assignments /> },
+  { path: '/audit', element: <AuditPage /> },
+  { path: '/administration', element: <Administration /> },
   { path: '/topics', element: <Topics /> },
   { path: '/topics/create', element: <CreateTopic /> },
   { path: '/profile', element: <Profile /> },

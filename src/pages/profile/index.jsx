@@ -1,12 +1,40 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Edit3, User, Briefcase, Shield, FileText } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
+import Overview from './Overview'
+import PersonalData from './PersonalData'
+import Employment from './Employment'
+import Security from './Security'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 export default function ProfilePage() {
+  const [tab, setTab] = useState('overview')
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Sync tab with ?tab= query param so links can control the active section
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const q = params.get('tab')
+    if (q && ['overview', 'personal', 'employment', 'security'].includes(q)) {
+      setTab(q)
+    } else {
+      // default to overview if none
+      setTab('overview')
+      // ensure URL has the tab param for shareable links
+      if (!params.get('tab')) {
+        params.set('tab', 'overview')
+        navigate({ pathname: location.pathname, search: params.toString() }, { replace: true })
+      }
+    }
+  }, [location.search])
+
+  const navItemClass = (key) =>
+    `flex items-center gap-3 px-3 py-2 rounded-md ${tab === key ? 'bg-blue-50 text-blue-700' : 'text-foreground hover:bg-slate-50'}`
+
   return (
     <MainLayout>
       <div className="max-w-full mx-auto px-6 py-6">
@@ -28,18 +56,18 @@ export default function ProfilePage() {
 
                 <div className="mt-6">
                   <nav className="flex flex-col gap-2">
-                    <NavLink to="/profile" className="flex items-center gap-3 px-3 py-2 rounded-md bg-blue-50 text-blue-700">
+                    <Link to="/profile?tab=overview" className={navItemClass('overview')}>
                       <User className="w-4 h-4" /> Overview
-                    </NavLink>
-                    <a className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-foreground hover:bg-slate-50">
+                    </Link>
+                    <Link to="/profile?tab=personal" className={navItemClass('personal')}>
                       <FileText className="w-4 h-4" /> Personal Data
-                    </a>
-                    <a className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-foreground hover:bg-slate-50">
+                    </Link>
+                    <Link to="/profile?tab=employment" className={navItemClass('employment')}>
                       <Briefcase className="w-4 h-4" /> Employment
-                    </a>
-                    <a className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-foreground hover:bg-slate-50">
+                    </Link>
+                    <Link to="/profile?tab=security" className={navItemClass('security')}>
                       <Shield className="w-4 h-4" /> Security & Privacy
-                    </a>
+                    </Link>
                   </nav>
                 </div>
               </CardContent>
@@ -60,36 +88,12 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <Card>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-6">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Full Name</div>
-                    <div className="font-medium">Dr. Budi Santoso, M.Kom.</div>
-
-                    <div className="mt-4 text-xs text-muted-foreground">Institutional Email</div>
-                    <div className="font-medium">budi.santoso@university.ac.id</div>
-
-                    <div className="mt-4 text-xs text-muted-foreground">Phone Number</div>
-                    <div className="font-medium">+62812345678</div>
-
-                    <div className="mt-4 text-xs text-muted-foreground">Department</div>
-                    <div className="font-medium">Teknik Informatika</div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-muted-foreground">Username</div>
-                    <div className="font-medium">budi.santoso</div>
-
-                    <div className="mt-4 text-xs text-muted-foreground">Personal Email</div>
-                    <div className="font-medium">budi@gmail.com</div>
-
-                    <div className="mt-4 text-xs text-muted-foreground">Faculty</div>
-                    <div className="font-medium">Fakultas Teknik</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div>
+              {tab === 'overview' && <Overview />}
+              {tab === 'personal' && <PersonalData />}
+              {tab === 'employment' && <Employment />}
+              {tab === 'security' && <Security />}
+            </div>
           </div>
         </div>
       </div>
