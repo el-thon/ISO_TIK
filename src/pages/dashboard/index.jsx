@@ -1,4 +1,4 @@
-import React from 'react'
+import { Link } from 'react-router-dom'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -54,9 +54,24 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-3">
-                <Button className="bg-navy text-white">+ Create Group</Button>
-                <Button className="bg-navy text-white">+ Create Room</Button>
-                <Button className="bg-navy text-white">+ New Submission</Button>
+                <Link
+                  to={'/groups'}
+                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-9 px-4 py-2 bg-navy text-white hover:opacity-95 no-underline"
+                >
+                  + Buat Grup
+                </Link>
+                <Link
+                  to={'/rooms'}
+                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-9 px-4 py-2 bg-navy text-white hover:opacity-95 no-underline"
+                >
+                  + Buat Ruangan
+                </Link>
+                <Link
+                  to={'/topics/create'}
+                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-9 px-4 py-2 bg-navy text-white hover:opacity-95 no-underline"
+                >
+                  + Buat Topik
+                </Link>
               </div>
             </CardContent>
           </Card>

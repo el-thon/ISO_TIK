@@ -6,9 +6,18 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import TabsBar from '@/components/mainComponents/tabsBar'
 import { Tabs } from '@/components/ui/tabs'
 import RoomTabsContent from '@/pages/rooms/RoomTabsContent'
-import { sampleRooms } from '@/pages/groups/mocks/data'
+import { sampleRooms, defaultGroup } from './mocks/data'
 import { sampleTopics } from '@/pages/topics/mocks/data'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useLocation } from 'react-router-dom'
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+import { Home } from 'lucide-react'
 
 function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
@@ -19,9 +28,48 @@ export default function RoomDetail() {
   const roomId = id || slugify(sampleRooms[0].title)
   const room = sampleRooms.find((r) => slugify(r.title) === roomId) || sampleRooms[0]
 
+  const location = useLocation()
+  const parts = location.pathname.split('/').filter(Boolean)
+  const roomGroupSlug = room.groupSlug || defaultGroup.slug
+  const roomGroupTitle = room.groupTitle || defaultGroup.title
+  let groupLink = `/groups/${roomGroupSlug}`
+  let groupLabel = roomGroupTitle
+  if (parts[0] === 'groups' && parts[1]) {
+    groupLink = `/groups/${parts[1]}`
+    groupLabel = parts[1].replace(/-/g, ' ')
+  }
+
   return (
     <MainLayout>
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-full mx-auto px-6 py-6">
+        <div className="mb-4">
+          <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link to="/dashboard" className="inline-flex items-center gap-2">
+                  <Home className="w-4 h-4" />
+                </Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+
+            <BreadcrumbSeparator />
+
+            <BreadcrumbItem>
+              <BreadcrumbLink asChild>
+                <Link to="/rooms">Ruangan</Link>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+
+            <BreadcrumbSeparator />
+
+            <BreadcrumbItem>
+              <BreadcrumbPage>{room.title}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+
         <div className="mb-6">
           <Card className="p-4">
             <div className="flex items-start justify-between">
@@ -31,8 +79,8 @@ export default function RoomDetail() {
 
                 <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
-                    <span>Group:</span>
-                    <Link to="/groups/tik-universitas" className="text-blue-600 font-medium">TIK Universitas</Link>
+                    <span>Ruangan:</span>
+                    <Link to="/rooms" className="text-blue-600 font-medium">Daftar Ruangan</Link>
                   </div>
 
                   <div className="flex items-center gap-2">
