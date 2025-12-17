@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import Sidebar from './Sidebar'
+import Sidebar from '../components/mainComponents/Sidebar'
 import { Menu } from 'lucide-react'
 
 export default function MainLayout({ children }) {

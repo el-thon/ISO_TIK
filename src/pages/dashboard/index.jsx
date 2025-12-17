@@ -1,5 +1,5 @@
 import React from 'react'
-import MainLayout from '@/mainComponents/MainLayout'
+import MainLayout from '@/layout/MainLayout'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
