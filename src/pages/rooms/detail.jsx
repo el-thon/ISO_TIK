@@ -99,7 +99,9 @@ export default function RoomDetail() {
               </div>
 
               <div className="flex items-center gap-3">
-                <Button size="sm" className="bg-blue-600 text-white">+ Create Topic</Button>
+                <Link to="/topics/create" state={{ roomId: roomId, roomTitle: room.title }}>
+                  <Button size="sm" className="bg-blue-600 text-white">+ Create Topic</Button>
+                </Link>
                 <Button variant="outline" size="sm">Settings</Button>
               </div>
             </div>

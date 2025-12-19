@@ -7,6 +7,8 @@ import Groups from './pages/groups'
 import GroupsDetail from './pages/groups/detail'
 import Rooms from './pages/rooms'
 import RoomDetail from './pages/rooms/detail'
+import Users from './pages/users'
+import UserDetail from './pages/users/detail'
 import Topics from './pages/topics'
 import CreateTopic from './pages/topics/CreateTopic'
 import Assignments from './pages/assignments'
@@ -21,6 +23,8 @@ export const router = createBrowserRouter(
     { path: '/', element: <Navigate to="/auth" replace /> },
   { path: '/dashboard', element: <Dashboard /> },
   { path: '/groups', element: <Groups /> },
+  { path: '/users', element: <Users /> },
+  { path: '/users/:id', element: <UserDetail /> },
   { path: '/rooms', element: <Rooms /> },
   { path: '/rooms/:id', element: <RoomDetail /> },
   { path: '/assignments', element: <Assignments /> },
