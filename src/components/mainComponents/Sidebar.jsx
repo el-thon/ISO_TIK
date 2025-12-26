@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { Home, Users, User, Columns, BookOpen, ClipboardList, Bell, Archive, Settings, LogOut } from 'lucide-react'
 
 const navItems = [
-  { name: 'Dashboard', to: '/dashboard', icon: Home },
+  { name: 'Beranda', to: '/dashboard', icon: Home },
   { name: 'Grup', to: '/groups', icon: Users },
   { name: 'Pengguna', to: '/users', icon: User },
   { name: 'Ruangan', to: '/rooms', icon: Columns },

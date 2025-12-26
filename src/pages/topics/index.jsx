@@ -6,8 +6,48 @@ import { Plus, Sliders } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { sampleTopics } from './mocks/data'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Popover, PopoverTrigger, PopoverContent, PopoverAnchor } from '@/components/ui/popover'
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from '@/components/ui/select'
+import { useState, useMemo, useRef, useEffect } from 'react'
 
 export default function TopicsPage() {
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  const statuses = [
+    { value: 'all', label: 'All Statuses' },
+    { value: 'Draft', label: 'Draft' },
+    { value: 'In Review', label: 'In Review' },
+    { value: 'Changes Requested', label: 'Changes Requested' },
+    { value: 'Approved', label: 'Approved' },
+    { value: 'Closed', label: 'Closed' },
+  ]
+
+  const topics = useMemo(() => {
+    if (!statusFilter || statusFilter === 'all') return sampleTopics
+    return sampleTopics.filter((t) => (t.tags || []).includes(statusFilter))
+  }, [statusFilter])
+
+  const inputWrapperRef = useRef(null)
+  const [inputWidth, setInputWidth] = useState(0)
+
+  useEffect(() => {
+    function measure() {
+      const container = inputWrapperRef.current
+      if (!container) return
+      const inputEl = container.querySelector('input[data-slot="input"]')
+      if (inputEl) setInputWidth(inputEl.offsetWidth)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+
   return (
     <MainLayout>
       <div className="max-w-full mx-auto px-6 py-6">
@@ -19,15 +59,32 @@ export default function TopicsPage() {
 
           <div className="flex items-center w-full">
             <div className="flex-1 w-full mr-4">
-              <div className="flex items-center gap-2 bg-white border border-slate-100 rounded-md px-3 py-2 shadow-sm">
-                <Input placeholder="Search topics..." className="border-0 shadow-none p-0 w-full " />
-                <Button size="sm" variant={null} className="bg-white border-0 shadow-none p-0 hover:bg-transparent">
-                  Filters
-                </Button>
-                <button className="p-2 rounded-md hover:bg-gray-light">
-                  <Sliders className="w-4 h-4 text-slate-500" />
-                </button>
-              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <div ref={inputWrapperRef} className="flex items-center gap-2 bg-white border border-slate-100 rounded-md px-3 py-2 shadow-sm">
+                    <Input placeholder="Search topics..." className="border-0 shadow-none p-0 w-full " />
+                    <Button size="sm" variant={null} className="bg-white border-0 shadow-none p-0 hover:bg-transparent flex items-center gap-2">
+                      <span>Filters</span>
+                      <Sliders className="w-4 h-4 text-slate-500" />
+                    </Button>
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="p-3" side="bottom" align="start" sideOffset={6} style={{ width: inputWidth || 240 }}>
+                  <div className="space-y-2">
+                    <div className="text-sm text-muted-foreground">Status</div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-full" style={{ width: '100%' }}>
+                        <SelectValue placeholder="All Statuses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statuses.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <Link to="/topics/create">
@@ -39,9 +96,10 @@ export default function TopicsPage() {
         </div>
 
         <div className="space-y-4">
-          {sampleTopics.map((t) => (
+          {topics.map((t) => (
             <Card key={t.id}>
-              <CardContent>
+              <Link to={`/topics/${t.id}`} className="block no-underline text-inherit">
+                <CardContent>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-start justify-between gap-4">
@@ -74,7 +132,8 @@ export default function TopicsPage() {
                     <div className="text-xs text-muted-foreground">Updated {t.updated}</div>
                   </div>
                 </div>
-              </CardContent>
+                </CardContent>
+              </Link>
             </Card>
           ))}
         </div>

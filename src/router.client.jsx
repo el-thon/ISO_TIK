@@ -11,6 +11,7 @@ import Users from './pages/users'
 import UserDetail from './pages/users/detail'
 import Topics from './pages/topics'
 import CreateTopic from './pages/topics/CreateTopic'
+import TopicDetail from './pages/topics/detail'
 import Assignments from './pages/assignments'
 import AuditPage from './pages/audits'
 import Profile from './pages/profile'
@@ -31,6 +32,7 @@ export const router = createBrowserRouter(
   { path: '/audit', element: <AuditPage /> },
   { path: '/administration', element: <Administration /> },
   { path: '/topics', element: <Topics /> },
+  { path: '/topics/:id', element: <TopicDetail /> },
   { path: '/topics/create', element: <CreateTopic /> },
   { path: '/profile', element: <Profile /> },
   { path: '/groups/:id', element: <GroupsDetail /> },

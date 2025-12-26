@@ -1,14 +1,31 @@
-import React from 'react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { sampleRooms } from './mocks/data'
-import { sampleTopics } from '@/pages/topics/mocks/data'
+import { defaultGroup } from './mocks/data'
+import { useState } from 'react'
+import {
+  Dialog,
+  DialogTrigger,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@/components/ui/select'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Link } from 'react-router-dom'
-import TabsBar from '@/components/mainComponents/tabsBar'
-import { Tabs } from '@/components/ui/tabs'
+
 
 export default function RoomsPage() {
   return (
@@ -20,9 +37,25 @@ export default function RoomsPage() {
           <p className="text-body-md text-muted-foreground">Manage topic rooms and workspaces</p>
         </div>
         <div>
-          <Button size="sm" className="bg-blue hover:bg-blue-light text-white hover:text-black flex items-center gap-2">
-            <Plus /> Tambah Ruangan
-          </Button>
+          {/* Dialog trigger for create room overlay */}
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button size="sm" className="bg-blue hover:bg-blue-light text-white hover:text-black flex items-center gap-2">
+                <Plus /> Tambah Ruangan
+              </Button>
+            </DialogTrigger>
+
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Buat Ruangan Baru</DialogTitle>
+                <DialogDescription>Isi formulir untuk membuat ruangan baru</DialogDescription>
+              </DialogHeader>
+
+              <CreateRoomForm />
+
+              <DialogFooter />
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -81,5 +114,92 @@ export default function RoomsPage() {
       </div>
       </div>
     </MainLayout>
+  )
+}
+
+function CreateRoomForm() {
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [group, setGroup] = useState("")
+  const [visibility, setVisibility] = useState("")
+
+  // derive options from sampleRooms + defaultGroup
+  const groupSet = Array.from(new Set(sampleRooms.map((r) => r.groupTitle)))
+  const groups = [defaultGroup.title, ...groupSet.filter((g) => g !== defaultGroup.title)]
+
+  const securitySet = Array.from(new Set(sampleRooms.map((r) => r.security))).filter(Boolean)
+  const visibilitySet = Array.from(new Set(sampleRooms.map((r) => r.privacy))).filter(Boolean)
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+
+    const payload = {
+      title: name,
+      description,
+      groupTitle: group || defaultGroup.title,
+      security: security || securitySet[0] || "Internal L0",
+      privacy: visibility || visibilitySet[0] || "Public",
+      createdAt: new Date().toLocaleDateString(),
+    }
+
+    // Untuk demo: log payload dan tutup modal. Di aplikasi nyata, panggil API.
+    // eslint-disable-next-line no-console
+    console.log('Payload pembuatan ruangan:', payload)
+    // Let the DialogClose on the button close the dialog
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4">
+      <div className="mb-4">
+        <label className="text-sm text-muted-foreground mb-2">Nama Ruangan</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Masukkan nama ruangan" />
+      </div>
+
+      <div className="mb-4">
+        <label className="text-sm text-muted-foreground mb-2">Deskripsi</label>
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border border-slate-200 rounded-md p-3 min-h-30 text-sm" placeholder="Jelaskan tujuan ruangan" />
+      </div>
+
+      <div className="mb-4">
+        <div>
+          <label className="text-sm text-muted-foreground mb-2">Grup</label>
+          <Select onValueChange={(v) => setGroup(v)} defaultValue="">
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Pilih grup" />
+            </SelectTrigger>
+            <SelectContent>
+              {groups.map((g) => (
+                <SelectItem key={g} value={g}>{g}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+      </div>
+
+      <div className="mb-6">
+        <label className="text-sm text-muted-foreground mb-2">Visibilitas</label>
+        <Select onValueChange={(v) => setVisibility(v)} defaultValue="">
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Pilih visibilitas" />
+          </SelectTrigger>
+          <SelectContent>
+            {visibilitySet.map((v) => (
+              <SelectItem key={v} value={v}>{v === 'Public' ? 'Publik - Terlihat untuk semua anggota grup' : v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <DialogClose asChild>
+          <Button variant="outline" type="button">Batal</Button>
+        </DialogClose>
+
+        <DialogClose asChild>
+          <Button type="submit">Buat Ruangan</Button>
+        </DialogClose>
+      </div>
+    </form>
   )
 }
