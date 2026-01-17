@@ -16,6 +16,14 @@ import {
   Undo2,
   Loader2,
   X as XIcon,
+  Image as ImageIcon,
+  ListChecks,
+  Paperclip,
+  ExternalLink,
+  Eye,
+  Download,
+  File,
+  AlertCircle,
 } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -37,6 +45,8 @@ import {
   useRevertTopicVersion,
   useTopicReviews,
   useCreateTopicReview,
+  useReplyComment,
+  useTopicInputItems,
 } from '@/services/topicHooks'
 import { useMe } from '@/services/authHooks'
 import { useQuill } from 'react-quilljs'
@@ -52,6 +62,18 @@ const formatDate = (value, withTime = false) => {
     year: 'numeric',
     ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
   })
+}
+
+const formatBytes = (bytes) => {
+  if (!bytes || Number.isNaN(Number(bytes))) return null
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = Number(bytes)
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${size % 1 === 0 ? size : size.toFixed(1)} ${units[unitIndex]}`
 }
 
 const getInitials = (name) => {
@@ -81,14 +103,514 @@ const statusBadgeClass = (status) => {
   }
 }
 
+const isLikelyTopicId = (value) => {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  if (!trimmed) return false
+
+  // Reject obvious filenames with extension
+  if (trimmed.includes('.')) return false
+
+  // Numeric IDs
+  if (/^\d{1,30}$/.test(trimmed)) return true
+
+  // UUID / hex-ish IDs (allow dashes), including Mongo 24-char hex
+  if (/^[0-9a-fA-F-]{16,64}$/.test(trimmed)) return true
+
+  // Slug / alphanumeric with underscore or dash (no dots)
+  if (/^[a-zA-Z0-9_-]{6,64}$/.test(trimmed)) return true
+
+  return false
+}
+
 const typeIcon = (type) => {
   switch (type) {
     case 'file':
-      return <FileText className="w-4 h-4 text-slate-500" />
+      return <Paperclip className="w-4 h-4 text-slate-500" />
+    case 'image':
+      return <ImageIcon className="w-4 h-4 text-slate-500" />
     case 'link':
       return <LinkIcon className="w-4 h-4 text-slate-500" />
+    case 'rich_text':
+      return <FileText className="w-4 h-4 text-slate-500" />
+    case 'form_data':
+      return <ListChecks className="w-4 h-4 text-slate-500" />
+    case 'text':
+      return <FileText className="w-4 h-4 text-slate-500" />
     default:
       return <FileText className="w-4 h-4 text-slate-500" />
+  }
+}
+
+// Helper untuk mendapatkan URL/file info
+const extractFromObject = (obj, fields) => {
+  if (!obj || typeof obj !== 'object') return null
+  for (const field of fields) {
+    const val = obj[field]
+    if (typeof val === 'string' && val.trim() !== '') return val
+  }
+  return null
+}
+
+const normalizeUrl = (url) => {
+  if (!url || typeof url !== 'string') return null
+  const trimmed = url.trim()
+  if (!trimmed) return null
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) return trimmed
+
+  if (trimmed.startsWith('storage/') || trimmed.startsWith('files/') || trimmed.startsWith('uploads/')) {
+    return `/${trimmed}`
+  }
+
+  if (trimmed.startsWith('./')) return trimmed.slice(2)
+  if (trimmed.startsWith('../')) return trimmed.replace(/^\.\//, '/')
+
+  return trimmed
+}
+
+// Helper untuk mendapatkan URL file dari berbagai kemungkinan field
+const getFileUrl = (metadata, value, item) => {
+  const urlFromMeta = normalizeUrl(
+    extractFromObject(metadata, [
+      'url',
+      'path',
+      'link',
+      'download_url',
+      'file_url',
+      'file',
+      'attachment',
+      'file_path',
+      'filepath',
+    ])
+  )
+  if (urlFromMeta) return urlFromMeta
+
+  if (typeof value === 'string') return normalizeUrl(value)
+
+  if (value && typeof value === 'object') {
+    const urlFromValue = normalizeUrl(
+      extractFromObject(value, [
+        'url',
+        'path',
+        'link',
+        'download_url',
+        'file_url',
+        'file',
+        'attachment',
+        'file_path',
+        'filepath',
+      ])
+    )
+    if (urlFromValue) return urlFromValue
+
+    // Attachments fallback
+    const attachments = item?.attachments || value.attachments || []
+    if (attachments.length) {
+      const primary = attachments[0]
+      const attachmentUrl = normalizeUrl(primary?.url || primary?.path || primary?.file || primary?.file_url)
+      if (attachmentUrl) return attachmentUrl
+    }
+  }
+
+  return null
+}
+
+const getPreviewUrl = (metadata, value, fileUrl, item) => {
+  const previewFromMeta = normalizeUrl(
+    extractFromObject(metadata, [
+      'preview_url',
+      'thumbnail_url',
+      'image_url',
+      'preview',
+      'thumbnail',
+      'signed_preview_url',
+      'file_path',
+      'filepath',
+    ])
+  )
+  if (previewFromMeta) return previewFromMeta
+
+  if (value && typeof value === 'object') {
+    const previewFromValue = normalizeUrl(
+      extractFromObject(value, [
+        'preview_url',
+        'thumbnail_url',
+        'image_url',
+        'preview',
+        'thumbnail',
+        'signed_preview_url',
+        'file_path',
+        'filepath',
+      ])
+    )
+    if (previewFromValue) return previewFromValue
+  }
+
+  // Attachments fallback (thumbnail/preview)
+  const attachments = item?.attachments || []
+  if (attachments.length) {
+    const primary = attachments[0]
+    const previewFromAttachment = normalizeUrl(
+      primary?.preview_url || primary?.thumbnail_url || primary?.image_url
+    )
+    if (previewFromAttachment) return previewFromAttachment
+  }
+
+  return fileUrl
+}
+
+// Helper untuk mendapatkan nama file
+const getFileName = (metadata, value, item) => {
+  const nameFromMeta = extractFromObject(metadata, [
+    'name',
+    'filename',
+    'original_name',
+    'original_filename',
+    'file_name',
+    'client_name',
+  ])
+  if (nameFromMeta) return nameFromMeta
+
+  if (value && typeof value === 'object') {
+    const nameFromValue = extractFromObject(value, [
+      'name',
+      'filename',
+      'original_name',
+      'original_filename',
+      'file_name',
+      'client_name',
+    ])
+    if (nameFromValue) return nameFromValue
+
+    const attachments = item?.attachments || []
+    if (attachments.length) {
+      const primary = attachments[0]
+      const attachmentName =
+        primary?.original_name ||
+        primary?.client_name ||
+        primary?.filename ||
+        primary?.file_name ||
+        primary?.name
+      if (attachmentName) return attachmentName
+    }
+  }
+
+  // Derive from URL path as a last resort
+  const url = getFileUrl(metadata, value, item)
+  if (url) {
+    try {
+      const urlObj = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost')
+      const pathname = urlObj.pathname || ''
+      const lastSegment = pathname.split('/').filter(Boolean).pop()
+      if (lastSegment) return decodeURIComponent(lastSegment)
+    } catch (e) {
+      const parts = url.split('?')[0].split('/')
+      const lastSegment = parts.filter(Boolean).pop()
+      if (lastSegment) return decodeURIComponent(lastSegment)
+    }
+  }
+
+  return typeof value === 'string' && value.trim() ? value : 'File'
+}
+
+const renderInputItemContent = (item) => {
+  const metadata = item?.metadata ?? {}
+  const value = item?.value ?? ''
+  const type = item?.type || 'text'
+
+  switch (type) {
+    case 'link':
+      if (!value) {
+        return (
+          <div className="mt-3 p-4 border border-dashed rounded-md text-center">
+            <div className="text-sm text-muted-foreground">Link tidak tersedia</div>
+          </div>
+        )
+      }
+      
+      // Validasi URL sebelum render
+  const isValidUrl = value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')
+      
+      return (
+        <div className="mt-3">
+          {isValidUrl ? (
+            <a
+              href={value}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 border rounded-md hover:bg-slate-50 text-blue-600"
+            >
+              <LinkIcon className="h-4 w-4" />
+              <span className="truncate max-w-md">{value}</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : (
+            <div className="px-4 py-2 border rounded-md bg-slate-50">
+              <div className="flex items-center gap-2">
+                <LinkIcon className="h-4 w-4 text-slate-400" />
+                <span className="text-sm text-slate-700">{value}</span>
+                <AlertCircle className="h-4 w-4 text-amber-500" title="URL tidak valid untuk link langsung" />
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Buka di browser: {value}</div>
+            </div>
+          )}
+        </div>
+      )
+
+    case 'rich_text':
+      if (!value) {
+        return (
+          <div className="mt-3 p-4 border border-dashed rounded-md text-center">
+            <div className="text-sm text-muted-foreground">Konten rich text kosong</div>
+          </div>
+        )
+      }
+      
+      // Sanitize HTML untuk keamanan
+      const sanitizedHtml = value
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/on\w+="[^"]*"/g, '')
+        .replace(/on\w+='[^']*'/g, '')
+        .replace(/javascript:/gi, '')
+      
+      return (
+        <div className="mt-3 p-3 border rounded-md bg-slate-50">
+          <div 
+            className="prose prose-sm max-w-none text-slate-700" 
+            dangerouslySetInnerHTML={{ __html: sanitizedHtml }} 
+          />
+        </div>
+      )
+
+    case 'text':
+      if (!value) {
+        return (
+          <div className="mt-3 p-4 border border-dashed rounded-md text-center">
+            <div className="text-sm text-muted-foreground">Teks kosong</div>
+          </div>
+        )
+      }
+      return (
+        <div className="mt-3 p-3 border rounded-md bg-slate-50">
+          <p className="text-sm text-slate-700 whitespace-pre-line">{value}</p>
+        </div>
+      )
+
+    case 'form_data': {
+      const fields = Array.isArray(metadata?.fields) ? metadata.fields : []
+      if (!fields.length) {
+        return (
+          <div className="mt-3 p-4 border border-dashed rounded-md text-center">
+            <div className="text-sm text-muted-foreground">Tidak ada data form yang tersimpan</div>
+          </div>
+        )
+      }
+      return (
+        <div className="mt-3 border rounded-md divide-y">
+          {fields.map((field, index) => (
+            <div key={field.id || field.name || `field-${index}`} className="px-4 py-3 grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="font-medium text-slate-700">{field.name || `Field ${index + 1}`}</div>
+                <div className="text-xs text-muted-foreground mt-1">Field</div>
+              </div>
+              <div className="text-slate-700 whitespace-pre-line break-words">
+                {field.value || <span className="text-muted-foreground">-</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    case 'image': {
+      const fileName = getFileName(metadata, value, item)
+      const fileUrl = getFileUrl(metadata, value, item)
+      const previewUrl = getPreviewUrl(metadata, value, fileUrl, item)
+      const fileSize = formatBytes(metadata.size || metadata.size_bytes || (value && value.size))
+      const mimeType = metadata.type || metadata.mime_type || 'image/*'
+      const displayUrl = previewUrl || fileUrl
+
+      // Cek apakah URL valid untuk gambar
+      const isValidImageUrl = displayUrl && (
+        displayUrl.startsWith('http://') ||
+        displayUrl.startsWith('https://') ||
+        displayUrl.startsWith('/') ||
+        displayUrl.startsWith('data:image/')
+      )
+
+      return (
+        <div className="mt-3 space-y-3">
+          {/* Informasi file */}
+          <div className="flex items-center justify-between p-3 border rounded-md">
+            <div className="flex items-center gap-3">
+              <ImageIcon className="h-5 w-5 text-blue-500" />
+              <div>
+                <div className="text-sm font-medium text-slate-700">{fileName}</div>
+                <div className="text-xs text-muted-foreground">
+                  {mimeType}
+                  {fileSize && ` • ${fileSize}`}
+                </div>
+              </div>
+            </div>
+            
+            {fileUrl ? (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs px-3 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1"
+              >
+                <Download className="h-3 w-3" /> Buka Gambar
+              </a>
+            ) : (
+              <span className="text-xs px-3 py-1 bg-slate-100 text-slate-700 rounded-md">
+                No URL
+              </span>
+            )}
+          </div>
+
+          {/* Preview jika ada URL yang valid */}
+          {isValidImageUrl ? (
+            <div className="border rounded-md overflow-hidden">
+              <div className="p-3 border-b bg-slate-50 text-xs text-muted-foreground flex items-center justify-between">
+                <span>Preview</span>
+                <span className="flex items-center gap-2">
+                  <Eye className="h-3 w-3" />
+                  {fileSize && <span>{fileSize}</span>}
+                </span>
+              </div>
+              <div className="p-4 flex justify-center bg-slate-50">
+                <div className="relative">
+                  <img
+                    src={previewUrl}
+                    alt={fileName}
+                    className="max-h-64 max-w-full rounded border object-contain"
+                    onError={(e) => {
+                      // Fallback jika gambar gagal load
+                      e.target.style.display = 'none'
+                      const parent = e.target.parentElement
+                      parent.innerHTML = `
+                        <div class="p-8 text-center border border-dashed rounded">
+                          <ImageIcon class="h-12 w-12 mx-auto text-slate-300 mb-2" />
+                          <div class="text-sm text-muted-foreground">Gambar tidak dapat ditampilkan</div>
+                          ${fileUrl ? `
+                            <a href="${fileUrl}" class="mt-2 text-xs text-blue-600 hover:underline inline-flex items-center gap-1" target="_blank">
+                              <ExternalLink class="h-3 w-3" /> Coba buka file
+                            </a>
+                          ` : ''}
+                        </div>
+                      `
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : fileUrl && !isValidImageUrl ? (
+            // URL ada tapi tidak valid untuk preview
+            <div className="p-4 border border-dashed rounded-md text-center">
+              <ImageIcon className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+              <div className="text-sm text-muted-foreground">Preview tidak tersedia</div>
+              {fileUrl && (
+                <div className="mt-2">
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Coba buka file
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : (
+            // Tidak ada URL sama sekali
+            <div className="p-4 border border-dashed rounded-md text-center">
+              <ImageIcon className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+              <div className="text-sm text-muted-foreground">File telah diupload</div>
+              {fileSize && <div className="text-xs text-muted-foreground mt-1">Size: {fileSize}</div>}
+              <div className="text-xs text-muted-foreground mt-1">(URL preview belum tersedia)</div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    case 'file': {
+      const fileName = getFileName(metadata, value, item)
+      const fileUrl = getFileUrl(metadata, value, item)
+  const fileSize = formatBytes(metadata.size || metadata.size_bytes || (value && value.size))
+      const mimeType = metadata.type || metadata.mime_type || 'application/octet-stream'
+      
+      // Cek apakah URL valid
+      const isValidUrl = fileUrl && (
+        fileUrl.startsWith('http://') || 
+        fileUrl.startsWith('https://') || 
+        fileUrl.startsWith('/')
+      )
+
+      return (
+        <div className="mt-3">
+          <div className="flex items-center justify-between p-4 border rounded-md hover:bg-slate-50">
+            <div className="flex items-center gap-3">
+              <File className="h-5 w-5 text-slate-500" />
+              <div>
+                <div className="text-sm font-medium text-slate-700">{fileName}</div>
+                <div className="text-xs text-muted-foreground">
+                  {mimeType}
+                  {fileSize && ` • ${fileSize}`}
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {isValidUrl ? (
+                <>
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs px-3 py-1 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 inline-flex items-center gap-1"
+                  >
+                    <Eye className="h-3 w-3" /> View
+                  </a>
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={fileName}
+                    className="text-xs px-3 py-1 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 inline-flex items-center gap-1"
+                  >
+                    <Download className="h-3 w-3" /> Download
+                  </a>
+                </>
+              ) : (
+                <div className="text-xs px-3 py-1 bg-slate-100 text-slate-700 rounded-md flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  <span>No URL</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    default:
+      return (
+        <div className="mt-3 p-4 border border-dashed rounded-md text-center">
+          <div className="text-sm text-muted-foreground">Tipe konten tidak dikenali: {type}</div>
+          {value && (
+            <div className="mt-2 text-xs text-slate-600">
+              <div className="font-medium">Isi:</div>
+              <code className="block mt-1 p-2 bg-slate-50 rounded border overflow-x-auto">
+                {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+              </code>
+            </div>
+          )}
+        </div>
+      )
   }
 }
 
@@ -144,8 +666,17 @@ const ACTION_METADATA = {
 }
 
 export default function TopicDetail() {
-  const { id } = useParams()
-  const { data: topic, isLoading, isError, error, refetch } = useTopic(id)
+  const { id: paramTopicId } = useParams()
+  const isValidTopicId = useMemo(() => isLikelyTopicId(paramTopicId), [paramTopicId])
+
+  const { data: topic, isLoading, isError, error, refetch } = useTopic(paramTopicId, { enabled: isValidTopicId })
+  const {
+    data: inputItemsData,
+    isLoading: inputItemsLoading,
+    isError: inputItemsError,
+    error: inputItemsErrorObj,
+    refetch: refetchInputItems,
+  } = useTopicInputItems(paramTopicId, {}, { keepPreviousData: true, enabled: isValidTopicId })
   const { data: meData } = useMe()
   const currentUser = meData?.data?.user
 
@@ -161,6 +692,8 @@ export default function TopicDetail() {
   })
   const [reviewError, setReviewError] = useState(null)
   const [reviewNotice, setReviewNotice] = useState(null)
+  const [activeReplyId, setActiveReplyId] = useState(null)
+  const [replyDrafts, setReplyDrafts] = useState({})
 
   const buildErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Terjadi kesalahan saat menjalankan aksi.'
 
@@ -186,7 +719,7 @@ export default function TopicDetail() {
     isError: versionsError,
     error: versionsErrorObj,
     refetch: refetchVersions,
-  } = useTopicVersions(id, versionsParams, { keepPreviousData: true })
+  } = useTopicVersions(paramTopicId, versionsParams, { keepPreviousData: true, enabled: isValidTopicId })
   const revertVersionMutation = useRevertTopicVersion({
     onSuccess: () => handleSuccess('Versi topik berhasil dipulihkan.'),
     onError: handleError,
@@ -198,7 +731,7 @@ export default function TopicDetail() {
     isError: reviewsError,
     error: reviewsErrorObj,
     refetch: refetchReviews,
-  } = useTopicReviews(id, reviewsParams, { keepPreviousData: true })
+  } = useTopicReviews(paramTopicId, reviewsParams, { keepPreviousData: true, enabled: isValidTopicId })
   const createReviewMutation = useCreateTopicReview({
     onSuccess: () => {
       setReviewText('')
@@ -210,11 +743,38 @@ export default function TopicDetail() {
     },
   })
 
-  const topicId = topic?.id || id
+  const replyCommentMutation = useReplyComment({
+    onSuccess: () => {
+      if (activeReplyId) {
+        setReplyDrafts((prev) => ({ ...prev, [activeReplyId]: '' }))
+      }
+      setActiveReplyId(null)
+    },
+    onError: (err) => {
+      setReviewNotice({ type: 'error', text: buildErrorMessage(err) })
+    },
+  })
+
+  const topicId = topic?.id || paramTopicId
   const versions = versionsData?.versions ?? []
   const versionsErrorMessage = versionsErrorObj?.response?.data?.message || versionsErrorObj?.message || 'Gagal memuat riwayat versi.'
   const reviews = reviewsData?.reviews ?? []
   const reviewsErrorMessage = reviewsErrorObj?.response?.data?.message || reviewsErrorObj?.message || 'Gagal memuat tinjauan.'
+  const inputItems = useMemo(() => {
+    const rawItems = inputItemsData?.items ?? topic?.input_items ?? []
+    
+    return rawItems.map((item, index) => ({
+      ...item,
+      id: item.id || `${item.type}-${index}`,
+      metadata: item?.metadata || {},
+      order_index: item?.order_index || item?.order || index + 1,
+      label: item?.label || item?.title || `${item.type} ${index + 1}`,
+      type: item?.type || 'text',
+      value: item?.value || '',
+      visibility: item?.visibility || 'visible',
+    }))
+  }, [inputItemsData, topic])
+  const inputItemsErrorMessage = inputItemsErrorObj?.response?.data?.message || inputItemsErrorObj?.message || 'Gagal memuat konten topik.'
 
   const publishMutation = usePublishTopic({
     onSuccess: () => handleSuccess('Topik berhasil diajukan untuk review.'),
@@ -245,6 +805,18 @@ export default function TopicDetail() {
     onError: handleError,
   })
 
+  if (!isValidTopicId) {
+    return (
+      <MainLayout>
+        <div className="max-w-4xl mx-auto px-6 py-10">
+          <h1 className="text-heading-3 font-semibold mb-2">Topik tidak valid</h1>
+          <p className="text-sm text-muted-foreground mb-4">ID topik tampaknya tidak valid. Silakan kembali ke daftar topik.</p>
+          <Link to="/topics" className="text-primary hover:underline text-sm">Kembali ke daftar topik</Link>
+        </div>
+      </MainLayout>
+    )
+  }
+
   const actionLoadingMap = {
     publish: publishMutation.isLoading,
     approve: approveMutation.isLoading,
@@ -265,7 +837,7 @@ export default function TopicDetail() {
   const currentUserId = currentUser?.id
   const isCreator = Boolean(currentUserId && (topic?.created_by_user_id === currentUserId || topic?.created_by?.id === currentUserId))
   const isResponsible = Boolean(currentUserId && (topic?.room?.responsible_user_id === currentUserId || topic?.room?.responsible_user?.id === currentUserId))
-  const hasContent = (topic?.input_items?.length ?? 0) > 0
+  const hasContent = inputItems.length > 0
   const isFrozen = Boolean(topic?.is_frozen || topic?.frozen_at)
 
   const canPublish = status === 'draft' && isCreator && currentUser?.can_create_topics
@@ -401,6 +973,12 @@ export default function TopicDetail() {
     createReviewMutation.mutate({ topicId, payload: { body: reviewHtml || reviewText || stripped } })
   }
 
+  const handleReplySubmit = (commentId) => {
+    const text = (replyDrafts[commentId] || '').trim()
+    if (!text) return
+    replyCommentMutation.mutate({ commentId, payload: { body: text } })
+  }
+
   useEffect(() => {
     if (!quill) return
     const handler = () => {
@@ -490,82 +1068,122 @@ export default function TopicDetail() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-8 space-y-4">
               <Card>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col gap-4">
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      <Link to="/topics" className="inline-flex items-center gap-2 text-blue-600">
-                        <ArrowLeft className="w-4 h-4" /> Kembali
-                      </Link>
-                      <span className="text-muted-foreground">•</span>
-                      <span>{formatDate(topic.created_at, true)}</span>
+                <CardContent className="pt-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div className="space-y-1">
+                      <h1 className="text-xl font-semibold text-slate-800">{topic.title}</h1>
+                      <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
+                        <span>ID: {topic.id}</span>
+                        {topic.status && (
+                          <span className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 capitalize">
+                            <Lock className="h-3 w-3" />
+                            {String(topic.status).replace('_', ' ')}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-heading-2 font-semibold">{topic.title}</h2>
-                      {topic.status && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${statusBadgeClass(topic.status)}`}>
-                          {topic.status.replace('_', ' ')}
-                        </span>
-                      )}
+                    <div className="flex flex-wrap gap-2">
                       {topic.security_level && (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
                           {topic.security_level}
                         </span>
                       )}
+                      {topic.category && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                          {topic.category}
+                        </span>
+                      )}
                     </div>
-                    {topic.labels?.length ? (
-                      <div className="flex flex-wrap gap-2">
-                        {topic.labels.map((label) => (
-                          <span key={label.id} className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                            {label.name}
-                          </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                    <div className="p-3 rounded-md border bg-slate-50">
+                      <div className="text-xs text-muted-foreground">Pembuat</div>
+                      <div className="font-medium text-slate-800">{authorName}</div>
+                    </div>
+                    <div className="p-3 rounded-md border bg-slate-50">
+                      <div className="text-xs text-muted-foreground">Ruang</div>
+                      <div className="font-medium text-slate-800">{roomName}</div>
+                    </div>
+                    <div className="p-3 rounded-md border bg-slate-50">
+                      <div className="text-xs text-muted-foreground">Dibuat</div>
+                      <div className="font-medium text-slate-800">{formatDate(topic.created_at, true)}</div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-md border bg-slate-50">
+                    <div className="text-xs text-muted-foreground mb-1">Deskripsi</div>
+                    <div className="text-sm text-slate-800 whitespace-pre-line">
+                      {topic.description || 'Tidak ada deskripsi.'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">Konten Topik</p>
+                      <span className="text-xs text-muted-foreground">{inputItems.length} item</span>
+                    </div>
+
+                    {inputItemsLoading ? (
+                      <div className="space-y-3">
+                        {Array.from({ length: 2 }).map((_, idx) => (
+                          <div key={idx} className="space-y-2">
+                            <Skeleton className="h-3 w-1/3" />
+                            <Skeleton className="h-20 w-full" />
+                          </div>
                         ))}
                       </div>
-                    ) : null}
-                    <p className="text-sm text-muted-foreground">{topic.description || 'Belum ada deskripsi.'}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">Konten</CardTitle>
-                  <CardDescription className="text-sm text-muted-foreground">
-                    Input items yang melekat pada topik ini
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {topic.input_items?.length ? (
+                    ) : inputItemsError ? (
+                    <div className="text-sm text-rose-600 flex items-center justify-between gap-3 border border-rose-200 rounded-md p-3">
+                      <span>{inputItemsErrorMessage}</span>
+                      <Button variant="outline" size="sm" onClick={() => refetchInputItems()}>
+                        Coba lagi
+                      </Button>
+                    </div>
+                  ) : inputItems.length ? (
                     <div className="space-y-3">
-                      {topic.input_items.map((item) => (
-                        <div key={item.id} className="border rounded-md p-4">
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex items-center gap-2">
-                              {typeIcon(item.type)}
-                              <div>
-                                <div className="text-sm font-medium">{item.label || item.type}</div>
-                                {item.visibility && (
-                                  <div className="text-xs text-muted-foreground capitalize">{item.visibility}</div>
-                                )}
+                      {inputItems.map((item, index) => {
+                        const contentNode = renderInputItemContent(item)
+                        return (
+                          <div key={item.id} className="border rounded-md p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-2">
+                                {typeIcon(item.type)}
+                                <div>
+                                  <div className="text-sm font-medium">{item.label}</div>
+                                  <div className="text-xs text-muted-foreground capitalize">
+                                    {item.type.replace('_', ' ')}
+                                    {item.visibility !== 'visible' && ` • ${item.visibility}`}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Urutan {item.order_index}
                               </div>
                             </div>
-                            <div className="text-xs text-muted-foreground">{formatDate(item.updated_at, true)}</div>
+                            
+                            {contentNode}
+                            
+                            {process.env.NODE_ENV === 'development' && Object.keys(item.metadata).length > 0 && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-slate-700">
+                                  Metadata Debug
+                                </summary>
+                                <pre className="mt-2 text-xs bg-slate-50 p-2 rounded border overflow-auto max-h-32">
+                                  {JSON.stringify(item.metadata, null, 2)}
+                                </pre>
+                              </details>
+                            )}
                           </div>
-                          {item.value && (
-                            <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">{item.value}</p>
-                          )}
-                          {item.metadata && Object.keys(item.metadata).length > 0 && (
-                            <pre className="mt-3 text-xs bg-slate-50 rounded-md p-3 overflow-auto">
-                              {JSON.stringify(item.metadata, null, 2)}
-                            </pre>
-                          )}
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground border border-dashed rounded-md p-6 text-center">
                       Belum ada konten yang ditambahkan.
                     </div>
                   )}
+                  </div>
                 </CardContent>
               </Card>
 
@@ -683,6 +1301,57 @@ export default function TopicDetail() {
                                 <span className="inline-flex text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 capitalize">
                                   {String(statusEffect).replace('_', ' ')}
                                 </span>
+                              )}
+
+                              <div className="flex items-center gap-3 pt-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-xs"
+                                  onClick={() =>
+                                    setActiveReplyId((prev) => (prev === review.id ? null : review.id))
+                                  }
+                                >
+                                  Balas
+                                </Button>
+                                {replyCommentMutation.isLoading && activeReplyId === review.id && (
+                                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                )}
+                              </div>
+
+                              {activeReplyId === review.id && (
+                                <div className="space-y-2 pt-2">
+                                  <textarea
+                                    className="w-full rounded-md border border-slate-200 p-2 text-sm"
+                                    rows={3}
+                                    placeholder="Tulis balasan..."
+                                    value={replyDrafts[review.id] || ''}
+                                    onChange={(e) =>
+                                      setReplyDrafts((prev) => ({ ...prev, [review.id]: e.target.value }))
+                                    }
+                                  />
+                                  <div className="flex gap-2 justify-end">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setActiveReplyId(null)}
+                                      type="button"
+                                    >
+                                      Batal
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      disabled={replyCommentMutation.isLoading}
+                                      onClick={() => handleReplySubmit(review.id)}
+                                      type="button"
+                                    >
+                                      {replyCommentMutation.isLoading && (
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      )}
+                                      Kirim Balasan
+                                    </Button>
+                                  </div>
+                                </div>
                               )}
                             </div>
                           )

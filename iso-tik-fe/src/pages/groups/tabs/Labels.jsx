@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,11 +13,38 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select'
-import { labels as initialLabels } from '@/pages/groups/mocks/data'
-import { Plus, Trash, Edit } from 'lucide-react'
+import { Plus, Trash, Edit, Loader2 } from 'lucide-react'
+import { useCreateLabel, useDeleteLabel, useLabels, useUpdateLabel } from '@/services/labelHooks'
 
 export default function Labels({ groupId }) {
-  const [labels, setLabels] = useState(initialLabels)
+  const { data, isLoading, isFetching, isError, error, refetch } = useLabels({ scope: 'group', group_id: groupId })
+  const labels = useMemo(() => data?.labels ?? [], [data])
+
+  const createLabel = useCreateLabel({
+    onSuccess: () => {
+      setOpenCreate(false)
+      setName('')
+      setColor('blue')
+      refetch()
+    },
+  })
+  const updateLabel = useUpdateLabel({
+    onSuccess: () => {
+      setOpenEdit(false)
+      setSelected(null)
+      setName('')
+      setColor('blue')
+      refetch()
+    },
+  })
+  const deleteLabel = useDeleteLabel({
+    onSuccess: () => {
+      setOpenDelete(false)
+      setSelected(null)
+      refetch()
+    },
+  })
+
   const [openCreate, setOpenCreate] = useState(false)
   const [openEdit, setOpenEdit] = useState(false)
   const [openDelete, setOpenDelete] = useState(false)
@@ -35,19 +62,11 @@ export default function Labels({ groupId }) {
   function handleCreate(e) {
     e?.preventDefault()
     if (!name.trim()) return
-    const next = {
-      id: Date.now(),
-      name: name.trim(),
-      color,
-    }
-    setLabels((s) => [next, ...s])
-    setName('')
-    setColor('blue')
-    setOpenCreate(false)
+    createLabel.mutate({ name: name.trim(), color, scope: 'group', group_id: groupId })
   }
 
   function handleDelete(id) {
-    setLabels((s) => s.filter((l) => l.id !== id))
+    deleteLabel.mutate(id)
   }
 
   function openEditDialog(label) {
@@ -60,11 +79,10 @@ export default function Labels({ groupId }) {
   function handleUpdate(e) {
     e?.preventDefault()
     if (!selected) return
-    setLabels((s) => s.map((l) => (l.id === selected.id ? { ...l, name: name.trim(), color } : l)))
-    setSelected(null)
-    setName('')
-    setColor('blue')
-    setOpenEdit(false)
+    updateLabel.mutate({
+      labelId: selected.id,
+      payload: { name: name.trim(), color, scope: 'group', group_id: groupId },
+    })
   }
 
   function confirmDelete(id) {
@@ -76,8 +94,15 @@ export default function Labels({ groupId }) {
     if (!selected) return
     handleDelete(selected.id)
     setSelected(null)
-    setOpenDelete(false)
   }
+
+  // Keep selected label values in sync when opening dialogs
+  useEffect(() => {
+    if (selected && openEdit) {
+      setName(selected.name)
+      setColor(selected.color || 'blue')
+    }
+  }, [selected, openEdit])
 
   return (
     <div>
@@ -87,7 +112,7 @@ export default function Labels({ groupId }) {
           <div>
             <Dialog open={openCreate} onOpenChange={setOpenCreate}>
               <DialogTrigger asChild>
-                <Button size="sm" className="bg-blue-600 text-white">
+                <Button size="sm" className="bg-blue-600 text-white" disabled={isLoading || isFetching}>
                   <Plus />
                   Buat Label
                 </Button>
@@ -103,7 +128,7 @@ export default function Labels({ groupId }) {
                   <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama label" />
 
                   <label className="text-small">Warna</label>
-                  <Select onValueChange={(v) => setColor(v)}>
+                  <Select value={color} onValueChange={(v) => setColor(v)}>
                     <SelectTrigger className="w-48">
                       <SelectValue>{colorLabels[color] || color}</SelectValue>
                     </SelectTrigger>
@@ -120,7 +145,9 @@ export default function Labels({ groupId }) {
                     <DialogClose asChild>
                       <Button variant="outline">Batal</Button>
                     </DialogClose>
-                    <Button type="submit">Buat</Button>
+                    <Button type="submit" disabled={createLabel.isPending}>
+                      {createLabel.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Buat'}
+                    </Button>
                   </DialogFooter>
                 </form>
               </DialogContent>
@@ -128,42 +155,54 @@ export default function Labels({ groupId }) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {labels.map((l) => (
-              <div key={l.id} className="p-4 border rounded-md bg-white">
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        l.color === 'red'
-                          ? 'bg-red'
-                          : l.color === 'green'
-                          ? 'bg-green'
-                          : l.color === 'yellow'
-                          ? 'bg-yellow'
-                          : l.color === 'purple'
-                          ? 'bg-purple'
-                          : 'bg-blue'
-                      }`} />
-                      <div className="font-medium">{l.name}</div>
+          {isLoading || isFetching ? (
+            <div className="flex items-center gap-2 text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" /> Memuat label...
+            </div>
+          ) : isError ? (
+            <div className="text-red-600 py-2">Gagal memuat label: {error?.message || 'Terjadi kesalahan'}</div>
+          ) : labels.length === 0 ? (
+            <div className="text-muted-foreground py-4">Belum ada label untuk grup ini.</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {labels.map((l) => (
+                <div key={l.id} className="p-4 border rounded-md bg-white">
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-3 h-3 rounded-full ${
+                            l.color === 'red'
+                              ? 'bg-red'
+                              : l.color === 'green'
+                              ? 'bg-green'
+                              : l.color === 'yellow'
+                              ? 'bg-yellow'
+                              : l.color === 'purple'
+                              ? 'bg-purple'
+                              : 'bg-blue'
+                          }`}
+                        />
+                        <div className="font-medium">{l.name}</div>
+                      </div>
+                      <div className="mt-3">
+                        <span className="text-xs bg-blue-light text-blue rounded-full px-3 py-1">{l.name}</span>
+                      </div>
                     </div>
-                    <div className="mt-3">
-                      <span className="text-xs bg-blue-light text-blue rounded-full px-3 py-1">{l.name}</span>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-4">
-                    <button onClick={() => openEditDialog(l)} className="text-sm text-muted-foreground flex items-center gap-2">
-                      <Edit className="size-4" /> Ubah
-                    </button>
-                    <button onClick={() => confirmDelete(l.id)} className="text-sm text-red flex items-center gap-2">
-                      <Trash className="size-4" />
-                    </button>
+                    <div className="flex items-center gap-4">
+                      <button onClick={() => openEditDialog(l)} className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Edit className="size-4" /> Ubah
+                      </button>
+                      <button onClick={() => confirmDelete(l.id)} className="text-sm text-red flex items-center gap-2">
+                        <Trash className="size-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -180,7 +219,7 @@ export default function Labels({ groupId }) {
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama label" />
 
             <label className="text-small">Warna</label>
-            <Select onValueChange={(v) => setColor(v)}>
+            <Select value={color} onValueChange={(v) => setColor(v)}>
               <SelectTrigger className="w-48">
                 <SelectValue>{colorLabels[color] || color}</SelectValue>
               </SelectTrigger>
@@ -197,7 +236,9 @@ export default function Labels({ groupId }) {
               <DialogClose asChild>
                 <Button variant="outline">Batal</Button>
               </DialogClose>
-              <Button type="submit">Simpan</Button>
+              <Button type="submit" disabled={updateLabel.isPending}>
+                {updateLabel.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Simpan'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -214,7 +255,9 @@ export default function Labels({ groupId }) {
             <DialogClose asChild>
               <Button variant="outline">Batalkan</Button>
             </DialogClose>
-            <Button variant="destructive" onClick={handleConfirmDelete}>Hapus</Button>
+            <Button variant="destructive" onClick={handleConfirmDelete} disabled={deleteLabel.isPending}>
+              {deleteLabel.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Hapus'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

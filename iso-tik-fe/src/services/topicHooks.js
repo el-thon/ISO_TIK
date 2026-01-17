@@ -10,6 +10,7 @@ const invalidateTopicQueries = (queryClient, topicId) => {
   if (!topicId) return
   queryClient.invalidateQueries({ queryKey: ['topics', 'detail', topicId] })
   queryClient.invalidateQueries({ queryKey: ['topics', topicId, 'timeline'] })
+  queryClient.invalidateQueries({ queryKey: ['topics', topicId, 'input-items'] })
   queryClient.invalidateQueries({ queryKey: ['topics', topicId, 'versions'] })
   queryClient.invalidateQueries({ queryKey: ['topics', topicId, 'reviews'] })
 }
@@ -60,6 +61,18 @@ export function useTopicLabels(topicId, options = {}) {
   return useQuery({
     queryKey: ['topics', topicId, 'labels'],
     queryFn: () => topicService.getTopicLabels(topicId),
+    staleTime: 15_000,
+    ...rest,
+    enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
+  })
+}
+
+export function useTopicInputItems(topicId, params = {}, options = {}) {
+  const { enabled, ...rest } = options
+  return useQuery({
+    queryKey: ['topics', topicId, 'input-items', params],
+    queryFn: () => topicService.getTopicInputItems(topicId, params),
+    keepPreviousData: true,
     staleTime: 15_000,
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
@@ -191,6 +204,35 @@ export function useTopicReviews(topicId, params = {}, options = {}) {
   })
 }
 
+export function useAttachment(attachmentId, options = {}) {
+  const { enabled, ...rest } = options
+  return useQuery({
+    queryKey: ['attachments', attachmentId],
+    queryFn: () => topicService.getAttachment(attachmentId),
+    staleTime: 30_000,
+    ...rest,
+    enabled: computeEnabled(enabled ?? true, Boolean(attachmentId)),
+  })
+}
+
+export function useDownloadAttachment(options = {}) {
+  return useMutation({
+    mutationFn: ({ attachmentId }) => topicService.downloadAttachment(attachmentId),
+    ...options,
+  })
+}
+
+export function useComment(topicId, commentId, options = {}) {
+  const { enabled, ...rest } = options
+  return useQuery({
+    queryKey: ['topics', topicId, 'comment', commentId],
+    queryFn: () => topicService.getCommentById(topicId, commentId, options),
+    staleTime: 30_000,
+    ...rest,
+    enabled: computeEnabled(enabled ?? true, Boolean(topicId && commentId)),
+  })
+}
+
 export function useCreateTopicReview(options = {}) {
   const queryClient = useQueryClient()
   const { onSuccess, ...rest } = options
@@ -199,6 +241,33 @@ export function useCreateTopicReview(options = {}) {
     onSuccess: (data, variables, context) => {
       const topicId = variables?.topicId
       invalidateTopicQueries(queryClient, topicId)
+      if (onSuccess) onSuccess(data, variables, context)
+    },
+    ...rest,
+  })
+}
+
+export function useReplyComment(options = {}) {
+  const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options
+  return useMutation({
+    mutationFn: ({ commentId, payload }) => topicService.replyToComment(commentId, payload),
+    onSuccess: (data, variables, context) => {
+      // Invalidate all topic review queries since comments changed
+      queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey.includes('reviews') })
+      if (onSuccess) onSuccess(data, variables, context)
+    },
+    ...rest,
+  })
+}
+
+export function useUploadCommentAttachment(options = {}) {
+  const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options
+  return useMutation({
+    mutationFn: ({ commentId, file, label }) => topicService.uploadCommentAttachment(commentId, file, label),
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey.includes('reviews') })
       if (onSuccess) onSuccess(data, variables, context)
     },
     ...rest,
@@ -250,6 +319,7 @@ export default {
   useTopics,
   useTopic,
   useTopicLabels,
+  useTopicInputItems,
   useCreateTopic,
   useUpdateTopic,
   useDeleteTopic,
@@ -265,6 +335,9 @@ export default {
   useDetachTopicLabel,
   useTopicTimeline,
   useTopicReviews,
+  useAttachment,
+  useDownloadAttachment,
+  useComment,
   useCreateTopicReview,
   useTopicVersions,
   useTopicVersion,

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { GripVertical, Trash2, PlusSquare, UploadCloud, Loader2 } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
@@ -9,6 +9,9 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { useRooms } from '@/services/roomHooks'
 import { useLabels } from '@/services/labelHooks'
 import { useCreateTopic } from '@/services/topicHooks'
+import * as topicService from '@/services/topicService'
+import { useQuill } from 'react-quilljs'
+import 'quill/dist/quill.snow.css'
 
 const securityOptions = [
   { value: 'public', label: 'Public' },
@@ -31,6 +34,138 @@ const blockTitle = {
   form: 'Form block',
 }
 
+const mapBlockTypeToApi = (type) => {
+  switch (type) {
+    case 'richtext':
+      return 'rich_text'
+    case 'form':
+      return 'form_data'
+    case 'text':
+    case 'image':
+    case 'file':
+    case 'link':
+      return type
+    default:
+      return 'text'
+  }
+}
+
+const mapVisibilityToApi = (block) => {
+  if (typeof block.visibility === 'string') return block.visibility
+  return block.visible === false ? 'restricted' : 'visible'
+}
+
+const stringifyId = (value) => {
+  if (value == null) return null
+  if (typeof value === 'string') return value.trim() || null
+  if (typeof value === 'number' && !Number.isNaN(value)) return String(value)
+  return null
+}
+
+const extractIdFromUrl = (url) => {
+  if (!url || typeof url !== 'string') return null
+  try {
+    const parsed = typeof window !== 'undefined' ? new URL(url, window.location.origin) : new URL(url)
+    const match = parsed.pathname.match(/topics\/([^/]+)/i)
+    return match?.[1] ?? null
+  } catch (err) {
+    const fallbackMatch = url.match(/topics\/([^/]+)/i)
+    return fallbackMatch?.[1] ?? null
+  }
+}
+
+const findUuidInValue = (value) => {
+  if (!value) return null
+  const str = typeof value === 'string' ? value : JSON.stringify(value)
+  const match = str && str.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/)
+  return match?.[0] ?? null
+}
+
+const isLikelyTopicId = (value) => {
+  if (typeof value !== 'string') return false
+  const trimmed = value.trim()
+  // Accept UUID-like or numeric IDs
+  if (/^[0-9a-fA-F-]{32,40}$/.test(trimmed)) return true
+  if (/^\d{1,20}$/.test(trimmed)) return true
+  return false
+}
+
+const resolveCreatedTopicId = (payload) => {
+  if (!payload || typeof payload !== 'object') return null
+
+  const candidates = [
+    payload.id,
+    payload.topic_id,
+    payload.topic_uuid,
+    payload.uuid,
+    payload.topic?.id,
+    payload.topic?.topic_id,
+    payload.topic?.uuid,
+    payload.data?.id,
+    payload.data?.topic_id,
+    payload.data?.topic?.id,
+    payload.meta?.topic_id,
+    payload.result?.id,
+    payload.result?.topic_id,
+    payload.message?.topic_id,
+    payload.message?.id,
+    payload.message?.topic?.id,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = stringifyId(candidate)
+    if (normalized && isLikelyTopicId(normalized)) return normalized
+  }
+
+  const linkCandidates = [
+    payload.redirect_url,
+    payload.topic_url,
+    payload.links?.detail,
+    payload.links?.self,
+    payload.topic?.url,
+  ]
+  for (const link of linkCandidates) {
+    const normalized = extractIdFromUrl(link)
+    if (normalized && isLikelyTopicId(normalized)) return normalized
+  }
+
+  // Fallback: attempt to find UUID inside message/strings
+  const messageUuid = findUuidInValue(payload.message)
+  if (messageUuid) return messageUuid
+
+  const rawUuid = findUuidInValue(payload)
+  if (rawUuid) return rawUuid
+
+  return null
+}
+
+function RichTextEditor({ value, onChange, placeholder = 'Enter rich text content...' }) {
+  const { quill, quillRef } = useQuill({ theme: 'snow', placeholder })
+  const lastHtml = useRef('')
+
+  useEffect(() => {
+    if (quill && typeof value === 'string' && value !== lastHtml.current) {
+      lastHtml.current = value
+      quill.clipboard.dangerouslyPasteHTML(value || '')
+    }
+  }, [quill, value])
+
+  useEffect(() => {
+    if (!quill) return
+    const handler = () => {
+      const html = quill.root.innerHTML
+      lastHtml.current = html
+      onChange?.(html)
+    }
+    quill.on('text-change', handler)
+    return () => {
+      quill.off('text-change', handler)
+    }
+  }, [quill, onChange])
+
+  return <div ref={quillRef} />
+}
+
 export default function CreateTopic() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -46,6 +181,17 @@ export default function CreateTopic() {
   const [deadline, setDeadline] = useState('')
   const [blocks, setBlocks] = useState([])
   const [errors, setErrors] = useState({})
+  const [submitting, setSubmitting] = useState(false)
+
+  // Initialize default values
+  useEffect(() => {
+    if (!selectedRoom && roomFromState) {
+      setSelectedRoom(roomFromState)
+    }
+    if (!securityLevel) {
+      setSecurityLevel('internal')
+    }
+  }, [roomFromState, securityLevel])
 
   const {
     data: roomsData,
@@ -65,13 +211,8 @@ export default function CreateTopic() {
   const labels = labelsData?.labels ?? []
   const labelsMeta = labelsData?.meta ?? {}
   const labelsSupported = labelsMeta.supported ?? true
-  const createTopic = useCreateTopic({
-    onSuccess: (data) => {
-      const newTopicId = data?.id || data?.topic?.id
-      if (newTopicId) navigate(`/topics/${newTopicId}`)
-      else navigate('/topics')
-    },
-  })
+  const createTopic = useCreateTopic()
+  const isBusy = createTopic.isPending || submitting
 
   const currentRoomName = useMemo(() => {
     if (selectedRoom) {
@@ -150,20 +291,37 @@ export default function CreateTopic() {
     blocks.map((block, index) => {
       const payload = {
         label: block.title?.trim() || `Konten ${index + 1}`,
-        type: block.type,
-        order: index + 1,
-        visibility: block.visible ? 'public' : 'private',
+        type: mapBlockTypeToApi(block.type),
+        order_index: index + 1,
+        visibility: mapVisibilityToApi(block),
         value: '',
       }
 
-      if (block.type === 'link') payload.value = block.url || ''
-      else if (block.type === 'form') payload.metadata = { fields: block.fields || [] }
-      else if (block.type === 'image' || block.type === 'file') {
-        payload.value = block.fileName || ''
-        if (block.file) payload.metadata = { name: block.file.name, size: block.file.size }
-      } else payload.value = block.content || ''
+      if (payload.type === 'link') {
+        payload.value = (block.url || '').trim()
+      } else if (payload.type === 'form_data') {
+        const fields = (block.fields || []).map((field, fieldIdx) => ({
+          id: field.id || `${block.id}-field-${fieldIdx + 1}`,
+          name: field.name?.trim() || `Field ${fieldIdx + 1}`,
+          value: field.value ?? '',
+        }))
+        payload.metadata = { fields }
+        payload.value = ''
+      } else if (payload.type === 'image' || payload.type === 'file') {
+        payload.value = (block.fileName || '').trim()
+        if (block.file) {
+          payload.metadata = {
+            name: block.file.name,
+            size: block.file.size,
+            type: block.file.type,
+            url: block.fileName || block.file.name,
+          }
+        }
+      } else {
+        payload.value = block.content ?? ''
+      }
 
-      if (!payload.metadata) delete payload.metadata
+      if (!payload.metadata || Object.keys(payload.metadata).length === 0) delete payload.metadata
       return payload
     })
 
@@ -203,31 +361,178 @@ export default function CreateTopic() {
       description: description.trim(),
       security_level: securityLevel || undefined,
       deadline_at: deadline ? new Date(deadline).toISOString() : undefined,
-      input_items: serializeBlocks(),
       status: mode === 'publish' ? 'in_review' : 'draft',
     }
     Object.keys(payload).forEach((key) => {
       if (payload[key] === undefined || payload[key] === '') delete payload[key]
     })
-    if (!payload.input_items?.length) delete payload.input_items
     payload.room_id = normalizeId(roomId)
     if (labelsSupported && selectedLabels.length) {
       const labelIds = selectedLabels
         .map((value) => normalizeId(value))
         .filter((value) => value !== undefined && value !== null && value !== '')
-      if (labelIds.length) payload.label_ids = labelIds
+      if (labelIds.length) payload.labels = labelIds
     }
     return payload
   }
 
-  const handleSubmit = (mode) => {
+  const createInputItemsForTopic = async (topicId) => {
+    const serialized = serializeBlocks()
+    if (!serialized.length) return []
+
+    const createdItems = []
+
+    for (const payload of serialized) {
+      try {
+        const item = await topicService.createInputItem(topicId, payload)
+        createdItems.push(item)
+      } catch (error) {
+        console.error('Failed to create input item', payload, error)
+      }
+    }
+
+    // Upload attachments for file/image blocks after items exist
+    const uploadableBlocks = blocks
+      .map((block, index) => ({ ...block, order_index: index + 1 }))
+      .filter((block) => (block.type === 'image' || block.type === 'file') && block.file)
+
+    // Fallback: if no items were returned (API silent), fetch current items
+    let itemsForMatch = createdItems
+    if (!itemsForMatch.length) {
+      try {
+        const fetched = await topicService.getTopicInputItems(topicId)
+        itemsForMatch = fetched?.items || []
+      } catch (error) {
+        console.error('Failed to fetch input items for attachments', error)
+      }
+    }
+
+    const buildAttachmentMetadata = (uploadResult, file) => {
+      const att = uploadResult?.attachment || {}
+
+      // Resolve best available URL/path from backend (handles renamed files)
+      const resolveUrl = () => {
+        const candidates = [
+          uploadResult?.url,
+          att.download_url,
+          att.url,
+          att.storage_url,
+          att.file_url,
+          att.file_path,
+          att.filepath,
+          att.path,
+          att.location,
+          att.full_path,
+          att.relative_path,
+          att.uri,
+        ].filter(Boolean)
+
+        for (const raw of candidates) {
+          if (typeof raw !== 'string') continue
+          const trimmed = raw.trim()
+          if (!trimmed) continue
+          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
+          if (trimmed.startsWith('/')) return trimmed
+          return `/${trimmed}`
+        }
+
+        if (att.id) return `/api/v1/attachments/${att.id}/download`
+        return null
+      }
+
+      const bestUrl = resolveUrl()
+      const storageUrl = bestUrl && !bestUrl.startsWith('http') ? bestUrl : att.storage_url || (att.path ? `/${att.path}` : undefined)
+      const downloadUrl = bestUrl
+      const mime = uploadResult?.type || att.mime_type || file?.type
+      const filename = uploadResult?.filename || att.filename || att.original_name || file?.name
+      const size = uploadResult?.size || att.size_bytes || att.size || file?.size
+
+      return {
+        metadata: {
+          attachment_id: att.id,
+          name: filename,
+          filename,
+          size,
+          size_bytes: size,
+          type: mime,
+          mime_type: mime,
+          storage_url: storageUrl || undefined,
+          download_url: downloadUrl || undefined,
+          url: downloadUrl || storageUrl || undefined,
+          preview_url: downloadUrl || storageUrl || undefined,
+        },
+        value: downloadUrl || storageUrl || filename || '',
+      }
+    }
+
+    for (const block of uploadableBlocks) {
+      const matchedItem =
+        itemsForMatch.find((item) => {
+          const order = item.order_index ?? item.order
+          const labelMatches = item.label && block.title && String(item.label).trim() === String(block.title).trim()
+          const orderMatches = order && Number(order) === Number(block.order_index)
+          return orderMatches || labelMatches
+        }) || itemsForMatch[block.order_index - 1]
+
+      const inputItemId = matchedItem?.id || matchedItem?.input_item_id || matchedItem?.uuid
+      if (!inputItemId) continue
+
+      try {
+        const uploadResult = await topicService.uploadInputItemAttachment(inputItemId, block.file, block.fileName || block.title)
+
+        const meta = buildAttachmentMetadata(uploadResult, block.file)
+        if (meta?.metadata) {
+          await topicService.updateInputItem(inputItemId, {
+            metadata: meta.metadata,
+            value: meta.value,
+          })
+        }
+      } catch (error) {
+        console.error('Failed to upload attachment for input item', inputItemId, error)
+      }
+    }
+
+    return createdItems
+  }
+
+  const handleSubmit = async (mode) => {
     const { ok, chosenRoom } = validatePhase1()
     if (!ok) {
       setStep(1)
       return
     }
     const payload = buildPayload(mode, chosenRoom)
-    createTopic.mutate({ roomId: normalizeId(chosenRoom), payload })
+    setSubmitting(true)
+    try {
+      const created = await createTopic.mutateAsync({ roomId: normalizeId(chosenRoom), payload })
+      const newTopicId = resolveCreatedTopicId(created)
+      if (newTopicId) {
+        await createInputItemsForTopic(newTopicId)
+      }
+
+      if (newTopicId && isLikelyTopicId(newTopicId)) {
+        navigate(`/topics/${newTopicId}`)
+        return
+      }
+
+      if (created?.redirect_url) {
+        const redirectId = extractIdFromUrl(created.redirect_url)
+        if (redirectId) {
+          navigate(`/topics/${redirectId}`)
+          return
+        }
+        navigate(created.redirect_url)
+        return
+      }
+
+      console.warn('Topic created but ID unavailable in response payload. Redirecting to list.', created)
+      navigate('/topics', { state: { refetch: true } })
+    } catch (error) {
+      console.error('Failed to create topic', error)
+      setStep(3)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const mutationMessage = createTopic.error?.response?.data?.message || createTopic.error?.message || ''
@@ -290,7 +595,12 @@ export default function CreateTopic() {
 
                 <div>
                   <label className="text-sm block mb-1">Room</label>
-                  <Select value={selectedRoom || undefined} onValueChange={(value) => setSelectedRoom(value)} disabled={roomsLoading}>
+                  {/* PERBAIKAN: value tidak boleh undefined */}
+                  <Select 
+                    value={selectedRoom} 
+                    onValueChange={(value) => setSelectedRoom(value)} 
+                    disabled={roomsLoading}
+                  >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder={roomsLoading ? 'Memuat data ruangan...' : 'Select a room...'} />
                     </SelectTrigger>
@@ -315,7 +625,11 @@ export default function CreateTopic() {
 
                 <div>
                   <label className="text-sm block mb-1">Security Level</label>
-                  <Select value={securityLevel} onValueChange={setSecurityLevel}>
+                  {/* PERBAIKAN: value harus selalu ada */}
+                  <Select 
+                    value={securityLevel} 
+                    onValueChange={setSecurityLevel}
+                  >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Pilih level keamanan" />
                     </SelectTrigger>
@@ -382,7 +696,11 @@ export default function CreateTopic() {
 
                 <div>
                   <label className="text-sm block mb-1">Deadline (Optional)</label>
-                  <Input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+                  <Input 
+                    type="datetime-local" 
+                    value={deadline} 
+                    onChange={(e) => setDeadline(e.target.value)} 
+                  />
                 </div>
 
                 <div className="mt-6 flex justify-end">
@@ -554,12 +872,12 @@ export default function CreateTopic() {
                               )}
 
                               {block.type === 'richtext' && (
-                                <textarea
-                                  placeholder="Enter rich text content..."
-                                  className="w-full border rounded p-2 text-sm min-h-24"
-                                  value={block.content}
-                                  onChange={(e) => updateBlock(block.id, { content: e.target.value })}
-                                />
+                                <div className="border rounded">
+                                  <RichTextEditor
+                                    value={block.content || ''}
+                                    onChange={(html) => updateBlock(block.id, { content: html })}
+                                  />
+                                </div>
                               )}
 
                               {block.type === 'text' && (
@@ -681,11 +999,11 @@ export default function CreateTopic() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <Button variant="outline" disabled={createTopic.isPending} onClick={() => handleSubmit('draft')}>
-                        {createTopic.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save as Draft
+                      <Button variant="outline" disabled={isBusy} onClick={() => handleSubmit('draft')}>
+                        {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save as Draft
                       </Button>
-                      <Button className="bg-blue-600 text-white" disabled={createTopic.isPending} onClick={() => handleSubmit('publish')}>
-                        {createTopic.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Publish for Review
+                      <Button className="bg-blue-600 text-white" disabled={isBusy} onClick={() => handleSubmit('publish')}>
+                        {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Publish for Review
                       </Button>
                     </div>
                   </div>

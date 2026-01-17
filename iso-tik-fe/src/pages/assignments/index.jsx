@@ -3,10 +3,12 @@ import MainLayout from '@/layout/MainLayout'
 import AssignedToMe from './AssignedToMe'
 import AssignedByMe from './AssignedByMe'
 import AllAssignments from './AllAssignments'
+import AssignmentCreateDialog from './AssignmentCreateDialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useTopics } from '@/services/topicHooks'
+import { useAssignments } from '@/services/assignmentsHooks'
+import { useMe } from '@/services/authHooks'
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Semua status' },
@@ -23,51 +25,45 @@ export default function AssignmentsPage() {
   const [tab, setTab] = useState('assigned')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [tabPages, setTabPages] = useState({ assigned: 1, assigned_by: 1, all: 1 })
+  const [page, setPage] = useState(1)
+  const { data: meData } = useMe({ staleTime: 1000 * 60 * 5 })
+  const currentUser = meData?.data?.user ?? meData?.user ?? meData ?? null
 
   const commonFilters = useMemo(
     () => ({
       per_page: PER_PAGE,
       search: search.trim() || undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
+      page,
     }),
-    [search, statusFilter]
+    [search, statusFilter, page]
   )
 
-  const assignedParams = useMemo(
-    () => ({
-      ...commonFilters,
-      page: tabPages.assigned,
-      assigned_to_me: true,
-    }),
-    [commonFilters, tabPages.assigned]
-  )
+  const baseQuery = useAssignments(commonFilters)
 
-  const assignedByParams = useMemo(
-    () => ({
-      ...commonFilters,
-      page: tabPages.assigned_by,
-      created_by_me: true,
-    }),
-    [commonFilters, tabPages.assigned_by]
-  )
+  const filteredAssignments = useMemo(() => {
+    const list = baseQuery.data?.assignments ?? []
+    if (!currentUser?.id) {
+      return {
+        assignedToMe: list,
+        assignedByMe: list,
+        all: list,
+      }
+    }
 
-  const allParams = useMemo(
-    () => ({
-      ...commonFilters,
-      page: tabPages.all,
-    }),
-    [commonFilters, tabPages.all]
-  )
-
-  const assignedQuery = useTopics(assignedParams, { keepPreviousData: true })
-  const assignedByQuery = useTopics(assignedByParams, { keepPreviousData: true })
-  const allQuery = useTopics(allParams, { keepPreviousData: true })
+    const assignedToMe = list.filter((item) => item.to_user_id === currentUser.id)
+    const assignedByMe = list.filter((item) => item.from_user_id === currentUser.id)
+    return {
+      assignedToMe,
+      assignedByMe,
+      all: list,
+    }
+  }, [baseQuery.data?.assignments, currentUser?.id])
 
   const counts = {
-    assigned: assignedQuery.isLoading && !assignedQuery.data ? '…' : assignedQuery.data?.pagination?.total ?? 0,
-    assigned_by: assignedByQuery.isLoading && !assignedByQuery.data ? '…' : assignedByQuery.data?.pagination?.total ?? 0,
-    all: allQuery.isLoading && !allQuery.data ? '…' : allQuery.data?.pagination?.total ?? 0,
+    assigned: baseQuery.isLoading && !baseQuery.data ? '…' : filteredAssignments.assignedToMe.length,
+    assigned_by: baseQuery.isLoading && !baseQuery.data ? '…' : filteredAssignments.assignedByMe.length,
+    all: baseQuery.isLoading && !baseQuery.data ? '…' : filteredAssignments.all.length,
   }
 
   const tabs = [
@@ -76,20 +72,23 @@ export default function AssignmentsPage() {
     { key: 'all', label: 'All Assignments', count: counts.all },
   ]
 
-  const handlePageChange = (key, value) => {
-    setTabPages((prev) => ({ ...prev, [key]: Math.max(1, value) }))
+  const handlePageChange = (value) => {
+    setPage(Math.max(1, value))
   }
 
   const resetPagination = () => {
-    setTabPages({ assigned: 1, assigned_by: 1, all: 1 })
+    setPage(1)
   }
 
   return (
     <MainLayout>
       <div className="max-w-full mx-auto px-6 py-6">
-        <div className="mb-6">
-          <h1 className="text-heading-2 font-semibold">Assignments</h1>
-          <p className="text-body-md text-muted-foreground">Pantau seluruh jobdesk topik berdasarkan status penugasan.</p>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-heading-2 font-semibold">Assignments</h1>
+            <p className="text-body-md text-muted-foreground">Pantau seluruh jobdesk topik berdasarkan status penugasan.</p>
+          </div>
+          <AssignmentCreateDialog />
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 mb-6">
@@ -149,26 +148,29 @@ export default function AssignmentsPage() {
         <div className="mt-4">
           {tab === 'assigned' && (
             <AssignedToMe
-              query={assignedQuery}
-              page={tabPages.assigned}
+              query={{ ...baseQuery, data: baseQuery.data ? { ...baseQuery.data, assignments: filteredAssignments.assignedToMe } : baseQuery.data }}
+              page={page}
               perPage={PER_PAGE}
-              onPageChange={(nextPage) => handlePageChange('assigned', nextPage)}
+              onPageChange={(nextPage) => handlePageChange(nextPage)}
+              currentUser={currentUser}
             />
           )}
           {tab === 'assigned_by' && (
             <AssignedByMe
-              query={assignedByQuery}
-              page={tabPages.assigned_by}
+              query={{ ...baseQuery, data: baseQuery.data ? { ...baseQuery.data, assignments: filteredAssignments.assignedByMe } : baseQuery.data }}
+              page={page}
               perPage={PER_PAGE}
-              onPageChange={(nextPage) => handlePageChange('assigned_by', nextPage)}
+              onPageChange={(nextPage) => handlePageChange(nextPage)}
+              currentUser={currentUser}
             />
           )}
           {tab === 'all' && (
             <AllAssignments
-              query={allQuery}
-              page={tabPages.all}
+              query={{ ...baseQuery, data: baseQuery.data ? { ...baseQuery.data, assignments: filteredAssignments.all } : baseQuery.data }}
+              page={page}
               perPage={PER_PAGE}
-              onPageChange={(nextPage) => handlePageChange('all', nextPage)}
+              onPageChange={(nextPage) => handlePageChange(nextPage)}
+              currentUser={currentUser}
             />
           )}
         </div>
