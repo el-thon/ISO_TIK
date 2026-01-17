@@ -1,5 +1,6 @@
 import React from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
+import RootRedirect from './routes/RootRedirect'
 import Login from './pages/auth/index'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import SsoCallback from './pages/auth/SsoCallback'
@@ -21,10 +22,10 @@ import ProtectedRoute from '@/routes/ProtectedRoute'
 
 export const router = createBrowserRouter(
   [
+    { path: '/', element: <RootRedirect /> },
     { path: '/login', element: <Login /> },
-    { path: '/', element: <Navigate to="/login" replace /> },
     { path: '/login/sso', element: <SsoCallback /> },
-  { path: '/dashboard', element: (<ProtectedRoute><Dashboard /></ProtectedRoute>) },
+    { path: '/dashboard', element: (<ProtectedRoute><Dashboard /></ProtectedRoute>) },
   { path: '/groups', element: (<ProtectedRoute><Groups /></ProtectedRoute>) },
   { path: '/users', element: (<ProtectedRoute><Users /></ProtectedRoute>) },
   { path: '/users/:id', element: (<ProtectedRoute><UserDetail /></ProtectedRoute>) },

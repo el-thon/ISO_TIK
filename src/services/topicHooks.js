@@ -72,8 +72,8 @@ export function useTopicInputItems(topicId, params = {}, options = {}) {
   return useQuery({
     queryKey: ['topics', topicId, 'input-items', params],
     queryFn: () => topicService.getTopicInputItems(topicId, params),
-    keepPreviousData: true,
-    staleTime: 15_000,
+    staleTime: 0, // Always fetch fresh data
+    cacheTime: 5 * 60 * 1000, // Keep in cache for 5 minutes but mark as stale immediately
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
   })
@@ -197,8 +197,8 @@ export function useTopicReviews(topicId, params = {}, options = {}) {
   return useQuery({
     queryKey: ['topics', topicId, 'reviews', params],
     queryFn: () => topicService.getTopicReviews(topicId, params),
-    keepPreviousData: true,
-    staleTime: 30_000,
+    staleTime: 0, // Always fetch fresh
+    cacheTime: 5 * 60 * 1000,
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
   })
@@ -279,8 +279,8 @@ export function useTopicVersions(topicId, params = {}, options = {}) {
   return useQuery({
     queryKey: ['topics', topicId, 'versions', params],
     queryFn: () => topicService.getTopicVersions(topicId, params),
-    keepPreviousData: true,
-    staleTime: 60_000,
+    staleTime: 0, // Always fetch fresh
+    cacheTime: 5 * 60 * 1000,
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
   })

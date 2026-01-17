@@ -52,6 +52,16 @@ import { useMe } from '@/services/authHooks'
 import { useQuill } from 'react-quilljs'
 import 'quill/dist/quill.snow.css'
 
+// Config untuk storage base URL
+const getStorageBaseUrl = () => {
+  const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
+  const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?.*$/, '') : ''
+  const proxyTarget = (import.meta.env.VITE_PROXY_TARGET || '').trim()
+  const explicitStorageBase = (import.meta.env.VITE_STORAGE_BASE_URL || '').trim()
+  const runtimeFallback = typeof window !== 'undefined' ? window.location.origin : ''
+  return (explicitStorageBase || apiOrigin || proxyTarget || (import.meta.env.DEV ? 'http://localhost:8000' : runtimeFallback)).replace(/\/$/, '')
+}
+
 const formatDate = (value, withTime = false) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -157,16 +167,43 @@ const normalizeUrl = (url) => {
   const trimmed = url.trim()
   if (!trimmed) return null
 
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) return trimmed
+  // URL sudah absolute (http/https)
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
 
-  if (trimmed.startsWith('storage/') || trimmed.startsWith('files/') || trimmed.startsWith('uploads/')) {
-    return `/${trimmed}`
+  const STORAGE_BASE = getStorageBaseUrl()
+  
+  // Path relatif yang dimulai dengan /
+  if (trimmed.startsWith('/')) {
+    // FIX: Backend return /attachments/ tapi file ada di /storage/attachments/
+    // Karena Laravel storage:link membuat public/storage -> storage/app/public
+    if (trimmed.startsWith('/attachments/')) {
+      return `${STORAGE_BASE}/storage${trimmed}`
+    }
+    return `${STORAGE_BASE}${trimmed}`
   }
 
-  if (trimmed.startsWith('./')) return trimmed.slice(2)
-  if (trimmed.startsWith('../')) return trimmed.replace(/^\.\//, '/')
+  // Path tanpa / di depan
+  if (trimmed.startsWith('attachments/')) {
+    // Fix untuk attachments/ tanpa slash
+    return `${STORAGE_BASE}/storage/${trimmed}`
+  }
+  
+  if (trimmed.startsWith('storage/') || trimmed.startsWith('files/') || trimmed.startsWith('uploads/')) {
+    return `${STORAGE_BASE}/${trimmed}`
+  }
 
-  return trimmed
+  // Relative path dengan ./
+  if (trimmed.startsWith('./')) {
+    return `${STORAGE_BASE}/${trimmed.slice(2)}`
+  }
+  
+  // Relative path dengan ../
+  if (trimmed.startsWith('../')) {
+    return `${STORAGE_BASE}/${trimmed.replace(/^\.\.\//, '')}`
+  }
+
+  // Default: anggap relative path, prepend base URL
+  return `${STORAGE_BASE}/${trimmed}`
 }
 
 // Helper untuk mendapatkan URL file dari berbagai kemungkinan field
@@ -540,14 +577,21 @@ const renderInputItemContent = (item) => {
     case 'file': {
       const fileName = getFileName(metadata, value, item)
       const fileUrl = getFileUrl(metadata, value, item)
-  const fileSize = formatBytes(metadata.size || metadata.size_bytes || (value && value.size))
+      const fileSize = formatBytes(metadata.size || metadata.size_bytes || (value && value.size))
       const mimeType = metadata.type || metadata.mime_type || 'application/octet-stream'
       
-      // Cek apakah URL valid
+      // Debug log untuk melihat URL yang dihasilkan
+      console.log('🔍 [FILE DEBUG]', {
+        fileName,
+        fileUrl,
+        metadata,
+        STORAGE_BASE: getStorageBaseUrl(),
+      })
+      
+      // Cek apakah URL valid (harus http/https setelah normalize)
       const isValidUrl = fileUrl && (
         fileUrl.startsWith('http://') || 
-        fileUrl.startsWith('https://') || 
-        fileUrl.startsWith('/')
+        fileUrl.startsWith('https://')
       )
 
       return (
@@ -669,14 +713,22 @@ export default function TopicDetail() {
   const { id: paramTopicId } = useParams()
   const isValidTopicId = useMemo(() => isLikelyTopicId(paramTopicId), [paramTopicId])
 
-  const { data: topic, isLoading, isError, error, refetch } = useTopic(paramTopicId, { enabled: isValidTopicId })
+  const { data: topic, isLoading, isError, error, refetch } = useTopic(paramTopicId, { 
+    enabled: isValidTopicId,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  })
   const {
     data: inputItemsData,
     isLoading: inputItemsLoading,
     isError: inputItemsError,
     error: inputItemsErrorObj,
     refetch: refetchInputItems,
-  } = useTopicInputItems(paramTopicId, {}, { keepPreviousData: true, enabled: isValidTopicId })
+  } = useTopicInputItems(paramTopicId, {}, { 
+    enabled: isValidTopicId,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  })
   const { data: meData } = useMe()
   const currentUser = meData?.data?.user
 
@@ -719,7 +771,10 @@ export default function TopicDetail() {
     isError: versionsError,
     error: versionsErrorObj,
     refetch: refetchVersions,
-  } = useTopicVersions(paramTopicId, versionsParams, { keepPreviousData: true, enabled: isValidTopicId })
+  } = useTopicVersions(paramTopicId, versionsParams, { 
+    enabled: isValidTopicId,
+    refetchOnMount: true,
+  })
   const revertVersionMutation = useRevertTopicVersion({
     onSuccess: () => handleSuccess('Versi topik berhasil dipulihkan.'),
     onError: handleError,
@@ -731,7 +786,10 @@ export default function TopicDetail() {
     isError: reviewsError,
     error: reviewsErrorObj,
     refetch: refetchReviews,
-  } = useTopicReviews(paramTopicId, reviewsParams, { keepPreviousData: true, enabled: isValidTopicId })
+  } = useTopicReviews(paramTopicId, reviewsParams, { 
+    enabled: isValidTopicId,
+    refetchOnMount: true,
+  })
   const createReviewMutation = useCreateTopicReview({
     onSuccess: () => {
       setReviewText('')
@@ -761,7 +819,9 @@ export default function TopicDetail() {
   const reviews = reviewsData?.reviews ?? []
   const reviewsErrorMessage = reviewsErrorObj?.response?.data?.message || reviewsErrorObj?.message || 'Gagal memuat tinjauan.'
   const inputItems = useMemo(() => {
-    const rawItems = inputItemsData?.items ?? topic?.input_items ?? []
+    // Prioritas: 1) inputItemsData dari endpoint dedicated, 2) fallback kosong
+    // TIDAK fallback ke topic.input_items karena bisa berisi cache lama
+    const rawItems = inputItemsData?.items ?? []
     
     return rawItems.map((item, index) => ({
       ...item,

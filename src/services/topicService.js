@@ -606,6 +606,23 @@ export const refreshTopicInputItems = async (topicId, queryClient) => {
   }
 };
 
+// Create attachment with topic and recipient
+export async function createAttachment(payload) {
+  if (!payload) throw new Error('payload is required to create attachment')
+  const res = await api.post('/attachments', payload)
+  return unwrap(res) ?? {}
+}
+
+// List all attachments
+export async function listAttachments(params = {}) {
+  const res = await api.get('/attachments', { params })
+  const payload = unwrap(res) ?? {}
+  return {
+    attachments: ensureArray(payload.attachments ?? payload.items ?? []),
+    pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+  }
+}
+
 export default {
   listTopics,
   getTopic,
@@ -637,4 +654,6 @@ export default {
   getTopicVersion,
   revertTopicVersion,
   refreshTopicInputItems,
+  createAttachment,
+  listAttachments,
 }
