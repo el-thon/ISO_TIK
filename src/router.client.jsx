@@ -2,6 +2,7 @@ import React from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import Login from './pages/auth/index'
 import ForgotPassword from './pages/auth/ForgotPassword'
+import SsoCallback from './pages/auth/SsoCallback'
 import Dashboard from './pages/dashboard'
 import Groups from './pages/groups'
 import GroupsDetail from './pages/groups/detail'
@@ -13,29 +14,29 @@ import Topics from './pages/topics'
 import CreateTopic from './pages/topics/CreateTopic'
 import TopicDetail from './pages/topics/detail'
 import Assignments from './pages/assignments'
-import AuditPage from './pages/audits'
 import Profile from './pages/profile'
 import Administration from './pages/administration'
 import NotFound from './pages/not-found'
+import ProtectedRoute from '@/routes/ProtectedRoute'
 
 export const router = createBrowserRouter(
   [
-    { path: '/auth', element: <Login /> },
-    { path: '/', element: <Navigate to="/auth" replace /> },
-  { path: '/dashboard', element: <Dashboard /> },
-  { path: '/groups', element: <Groups /> },
-  { path: '/users', element: <Users /> },
-  { path: '/users/:id', element: <UserDetail /> },
-  { path: '/rooms', element: <Rooms /> },
-  { path: '/rooms/:id', element: <RoomDetail /> },
-  { path: '/assignments', element: <Assignments /> },
-  { path: '/audit', element: <AuditPage /> },
-  { path: '/administration', element: <Administration /> },
-  { path: '/topics', element: <Topics /> },
-  { path: '/topics/:id', element: <TopicDetail /> },
-  { path: '/topics/create', element: <CreateTopic /> },
-  { path: '/profile', element: <Profile /> },
-  { path: '/groups/:id', element: <GroupsDetail /> },
+    { path: '/login', element: <Login /> },
+    { path: '/', element: <Navigate to="/login" replace /> },
+    { path: '/login/sso', element: <SsoCallback /> },
+  { path: '/dashboard', element: (<ProtectedRoute><Dashboard /></ProtectedRoute>) },
+  { path: '/groups', element: (<ProtectedRoute><Groups /></ProtectedRoute>) },
+  { path: '/users', element: (<ProtectedRoute><Users /></ProtectedRoute>) },
+  { path: '/users/:id', element: (<ProtectedRoute><UserDetail /></ProtectedRoute>) },
+  { path: '/rooms', element: (<ProtectedRoute><Rooms /></ProtectedRoute>) },
+  { path: '/rooms/:id', element: (<ProtectedRoute><RoomDetail /></ProtectedRoute>) },
+  { path: '/assignments', element: (<ProtectedRoute><Assignments /></ProtectedRoute>) },
+  { path: '/administration', element: (<ProtectedRoute><Administration /></ProtectedRoute>) },
+  { path: '/topics', element: (<ProtectedRoute><Topics /></ProtectedRoute>) },
+  { path: '/topics/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
+  { path: '/topics/create', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },
+  { path: '/profile', element: (<ProtectedRoute><Profile /></ProtectedRoute>) },
+  { path: '/groups/:id', element: (<ProtectedRoute><GroupsDetail /></ProtectedRoute>) },
     { path: '/auth/forgot', element: <ForgotPassword /> },
     { path: '*', element: <NotFound /> },
   ],

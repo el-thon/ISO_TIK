@@ -9,7 +9,6 @@ const navItems = [
   { name: 'Ruangan', to: '/rooms', icon: Columns },
   { name: 'Topik', to: '/topics', icon: BookOpen },
   { name: 'Tugas', to: '/assignments', icon: ClipboardList },
-  { name: 'Audit', to: '/audit', icon: Archive },
   { name: 'Administrasi', to: '/administration', icon: Settings },
 ]
 

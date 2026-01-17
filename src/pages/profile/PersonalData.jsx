@@ -1,134 +1,212 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { useUpdateProfile } from '@/services/profileHooks'
 
-export default function PersonalData() {
+const toDefaultValues = (profileData) => {
+  const profile = profileData?.profile ?? {}
+  const contact = profileData?.contact ?? {}
+  const address = profileData?.address ?? {}
+  const emergency = profileData?.emergency_contact ?? {}
+
+  return {
+    full_name: profile.full_name || '',
+    phone_number: contact.phone_number || '',
+    email_personal: contact.email_personal || '',
+    address_line1: address.address_line1 || '',
+    address_line2: address.address_line2 || '',
+    city: address.city || '',
+    province: address.province || '',
+    postal_code: address.postal_code || '',
+    country: address.country || '',
+    emergency_name: emergency.name || '',
+    emergency_phone: emergency.phone || '',
+    emergency_relationship: emergency.relationship || '',
+  }
+}
+
+const cleanPayload = (obj = {}) => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  )
+}
+
+const buildPayload = (values) => {
+  const profile = cleanPayload({
+    full_name: values.full_name,
+  })
+
+  const contact = cleanPayload({
+    phone_number: values.phone_number,
+    email_personal: values.email_personal,
+  })
+
+  const address = cleanPayload({
+    address_line1: values.address_line1,
+    address_line2: values.address_line2,
+    city: values.city,
+    province: values.province,
+    postal_code: values.postal_code,
+    country: values.country,
+  })
+
+  const emergency = cleanPayload({
+    name: values.emergency_name,
+    phone: values.emergency_phone,
+    relationship: values.emergency_relationship,
+  })
+
+  const payload = {}
+  if (Object.keys(profile).length) payload.profile = profile
+  if (Object.keys(contact).length) payload.contact = contact
+  if (Object.keys(address).length) payload.address = address
+  if (Object.keys(emergency).length) payload.emergency_contact = emergency
+
+  return payload
+}
+
+export default function PersonalData({ profileData }) {
+  const [statusMessage, setStatusMessage] = useState(null)
+  const defaultValues = useMemo(() => toDefaultValues(profileData), [profileData])
+  const form = useForm({
+    defaultValues,
+  })
+
+  useEffect(() => {
+    form.reset(toDefaultValues(profileData))
+  }, [profileData, form])
+
+  const updateProfile = useUpdateProfile({
+    onSuccess: () => {
+      setStatusMessage({ type: 'success', text: 'Data pribadi diperbarui' })
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message || 'Gagal memperbarui data'
+      setStatusMessage({ type: 'error', text: message })
+    },
+  })
+
+  const onSubmit = async (values) => {
+    setStatusMessage(null)
+    const payload = buildPayload(values)
+    if (!Object.keys(payload).length) {
+      setStatusMessage({ type: 'info', text: 'Tidak ada perubahan untuk disimpan' })
+      return
+    }
+    try {
+      await updateProfile.mutateAsync(payload)
+    } catch (error) {
+      // handled via onError callback
+    }
+  }
+
+  const messageColor = statusMessage?.type === 'success' ? 'text-emerald-600' : statusMessage?.type === 'error' ? 'text-red-600' : 'text-muted-foreground'
+
   return (
     <div>
       <Card>
         <CardContent>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-medium">Personal Data</h3>
+              <h3 className="text-lg font-medium">Data Pribadi</h3>
+              <p className="text-xs text-muted-foreground">Perbarui identitas, kontak, dan alamat kamu</p>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => form.reset(toDefaultValues(profileData))}
+              disabled={updateProfile.isPending}
+            >
+              Reset
+            </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div>
-              <div className="text-xs text-muted-foreground">First Name</div>
-              <Input defaultValue="Budi" className="mt-1" />
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground">Last Name</div>
-              <Input defaultValue="Santoso" className="mt-1" />
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground">Gender</div>
-              <Select defaultValue="male">
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="male">Male</SelectItem>
-                  <SelectItem value="female">Female</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground">Birth Place</div>
-              <Input defaultValue="Jakarta" className="mt-1" />
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground">Birth Date</div>
-              <Input defaultValue="01/01/1980" className="mt-1" />
-            </div>
-
-            <div>
-              <div className="text-xs text-muted-foreground">Marital Status</div>
-              <Select defaultValue="single">
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="single">Single</SelectItem>
-                  <SelectItem value="married">Married</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <hr className="my-6" />
-
-          <h4 className="font-medium mb-2">Contact Information</h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs text-muted-foreground">Phone Number</div>
-              <Input defaultValue="+62812345678" className="mt-1" />
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Personal Email</div>
-              <Input defaultValue="budi@gmail.com" className="mt-1" />
-            </div>
-          </div>
-
-          <hr className="my-6" />
-
-          <h4 className="font-medium mb-2">Address</h4>
-          <div className="space-y-4">
-            <div>
-              <div className="text-xs text-muted-foreground">Address Line 1</div>
-              <Input defaultValue="Jl. Sudirman No. 123" className="mt-1" />
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Address Line 2</div>
-              <Input defaultValue="RT 001 / RW 005" className="mt-1" />
-            </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <div className="text-xs text-muted-foreground">City</div>
-                <Input defaultValue="Jakarta" className="mt-1" />
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Province</div>
-                <Input defaultValue="DKI Jakarta" className="mt-1" />
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Postal Code</div>
-                <Input defaultValue="12345" className="mt-1" />
+              <h4 className="font-medium mb-2">Profil</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">Nama Lengkap</div>
+                  <Input className="mt-1" {...form.register('full_name')} placeholder="Nama lengkap" />
+                </div>
               </div>
             </div>
-          </div>
 
-          <hr className="my-6" />
+            <div>
+              <h4 className="font-medium mb-2">Kontak</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">Nomor Telepon</div>
+                  <Input className="mt-1" {...form.register('phone_number')} placeholder="Contoh: +6281xxxx" />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Email Pribadi</div>
+                  <Input className="mt-1" {...form.register('email_personal')} placeholder="nama@gmail.com" />
+                </div>
+              </div>
+            </div>
 
-          <h4 className="font-medium mb-2">Government IDs (Sensitive)</h4>
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-xs text-muted-foreground">National ID (NIK)</div>
-              <Input defaultValue="••••••••••••••••" className="mt-1" />
+              <h4 className="font-medium mb-2">Alamat</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">Alamat Baris 1</div>
+                  <Input className="mt-1" {...form.register('address_line1')} placeholder="Nama jalan" />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Alamat Baris 2</div>
+                  <Input className="mt-1" {...form.register('address_line2')} placeholder="RT / RW / Unit" />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Kota</div>
+                  <Input className="mt-1" {...form.register('city')} />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Provinsi</div>
+                  <Input className="mt-1" {...form.register('province')} />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Kode Pos</div>
+                  <Input className="mt-1" {...form.register('postal_code')} />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Negara</div>
+                  <Input className="mt-1" {...form.register('country')} />
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-xs text-muted-foreground">Tax ID (NPWP)</div>
-              <Input defaultValue="••••••••••••" className="mt-1" />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
-              <div className="text-xs text-muted-foreground">Passport Number</div>
-              <Input placeholder="Optional" className="mt-1" />
+              <h4 className="font-medium mb-2">Kontak Darurat</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">Nama</div>
+                  <Input className="mt-1" {...form.register('emergency_name')} />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Hubungan</div>
+                  <Input className="mt-1" {...form.register('emergency_relationship')} />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Nomor Telepon</div>
+                  <Input className="mt-1" {...form.register('emergency_phone')} />
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="text-xs text-muted-foreground">BPJS Number</div>
-              <Input placeholder="Optional" className="mt-1" />
+
+            {statusMessage && (
+              <p className={`text-sm ${messageColor}`}>{statusMessage.text}</p>
+            )}
+
+            <div className="flex justify-end">
+              <Button type="submit" disabled={updateProfile.isPending || !form.formState.isDirty}>
+                {updateProfile.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
+              </Button>
             </div>
-          </div>
+          </form>
         </CardContent>
       </Card>
     </div>

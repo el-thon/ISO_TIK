@@ -3,42 +3,102 @@ import { TabsContent } from '@/components/ui/tabs'
 import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { sampleTopics } from '@/pages/topics/mocks/data'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useRoomTopics } from '@/services/roomHooks'
 
-export default function TopicsTab() {
+const formatDate = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+const getInitials = (text) => {
+  if (!text) return '??'
+  return text
+    .split(' ')
+    .filter(Boolean)
+    .map((t) => t[0]?.toUpperCase())
+    .slice(0, 2)
+    .join('')
+}
+
+export default function TopicsTab({ roomId }) {
+  const { data, isLoading } = useRoomTopics(roomId, { per_page: 10 })
+  const topics = data?.topics ?? []
+
   return (
-    <TabsContent value="topics">
-      <div className="mt-4">
-        {sampleTopics.map((t) => (
-          <Card className="mb-4" key={t.id}>
-            <Link to={`/topics/${t.id}`} className="block no-underline text-inherit">
-              <CardContent>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="font-medium text-lg">{t.title}</div>
-                    <div className="text-sm text-muted-foreground mt-2">{t.description}</div>
-
-                    <div className="flex items-center gap-3 mt-4">
-                      <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700">{t.tags[0] || 'Status'}</span>
-                      <div className="flex items-center gap-2">
-                        <Avatar>
-                          <AvatarFallback>{t.author.split(' ').map(n => n[0]).slice(0,2).join('')}</AvatarFallback>
-                        </Avatar>
-                        <div className="text-sm">{t.author}</div>
+    <TabsContent value="topics" className="mt-4">
+      {isLoading && <TopicsSkeleton />}
+      {!isLoading && topics.length === 0 && (
+        <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
+          Belum ada topik di ruangan ini.
+        </div>
+      )}
+      {!isLoading && topics.length > 0 && (
+        <div className="space-y-4">
+          {topics.map((topic) => {
+            const authorName = topic.created_by?.username || 'Anonim'
+            return (
+              <Card key={topic.id}>
+                <Link to={`/topics/${topic.id}`} className="block no-underline text-inherit">
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="font-medium text-lg">{topic.title}</div>
+                        <div className="text-sm text-muted-foreground mt-2 line-clamp-3">
+                          {topic.description || 'Tidak ada ringkasan'}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 mt-4 text-xs">
+                          {topic.status && (
+                            <span className="px-2 py-1 rounded-full bg-amber-50 text-amber-700 uppercase">{topic.status}</span>
+                          )}
+                          {topic.priority && (
+                            <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 uppercase">{topic.priority}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-4 text-sm">
+                          <Avatar className="w-8 h-8">
+                            <AvatarFallback>{getInitials(authorName)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Dibuat oleh</div>
+                            <div>{authorName}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right text-sm text-muted-foreground">
+                        <div className="text-xs uppercase tracking-wide">Deadline</div>
+                        <div>{formatDate(topic.deadline_at)}</div>
+                        <div className="mt-4 text-xs">
+                          {topic.stats?.comment_count ?? 0} komentar • {topic.stats?.routing_count ?? 0} routing
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-4">
-                    <div className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">{t.badge.label}</div>
-                    <div className="text-sm text-muted-foreground"><svg xmlns="http://www.w3.org/2000/svg" className="inline-block w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> Jatuh Tempo {t.due}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Link>
-          </Card>
-        ))}
-      </div>
+                  </CardContent>
+                </Link>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </TabsContent>
+  )
+}
+
+function TopicsSkeleton() {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: 3 }).map((_, idx) => (
+        <Card key={idx}>
+          <CardContent className="pt-4 space-y-3">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-4 w-1/3" />
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   )
 }

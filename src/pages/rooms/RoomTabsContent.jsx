@@ -4,13 +4,13 @@ import ParticipantsTab from './ParticipantsTab'
 import TimelineTab from './TimelineTab'
 import SettingsTab from './SettingsTab'
 
-export default function RoomTabsContent() {
+export default function RoomTabsContent({ roomId, room }) {
   return (
     <>
-      <TopicsTab />
-      <ParticipantsTab />
-      <TimelineTab />
-      <SettingsTab />
+      <TopicsTab roomId={roomId} />
+      <ParticipantsTab roomId={roomId} room={room} />
+      <TimelineTab roomId={roomId} />
+      <SettingsTab room={room} />
     </>
   )
 }

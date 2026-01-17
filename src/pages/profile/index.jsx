@@ -1,39 +1,254 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Edit3, User, Briefcase, Shield, FileText } from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Edit3, User, Briefcase, Shield, FileText, Upload, Trash2, RefreshCcw } from 'lucide-react'
 import Overview from './Overview'
 import PersonalData from './PersonalData'
 import Employment from './Employment'
 import Security from './Security'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useDeleteProfilePhoto, useProfile, useUploadProfilePhoto } from '@/services/profileHooks'
+
+const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
+const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?.*$/, '') : ''
+const proxyTarget = (import.meta.env.VITE_PROXY_TARGET || '').trim()
+const explicitStorageBase = (import.meta.env.VITE_STORAGE_BASE_URL || '').trim()
+const runtimeFallback = typeof window !== 'undefined' ? window.location.origin : ''
+
+const STORAGE_BASE = (explicitStorageBase || apiOrigin || proxyTarget || (import.meta.env.DEV ? 'http://localhost:8000' : runtimeFallback)).replace(/\/$/, '')
+
+const resolvePhotoUrl = (path) => {
+  if (!path) return null
+  
+  if (path.startsWith('http')) {
+    // Cache busting untuk mencegah browser menggunakan cached image
+    return `${path}${path.includes('?') ? '&' : '?'}_=${Date.now()}`
+  }
+  
+  const base = STORAGE_BASE
+  if (!base) {
+    return path.startsWith('/') ? `${path}?_=${Date.now()}` : `/${path}?_=${Date.now()}`
+  }
+  
+  // Tambahkan timestamp untuk cache busting
+  const separator = path.includes('?') ? '&' : '?'
+  return `${base}${path.startsWith('/') ? path : `/${path}`}${separator}_=${Date.now()}`
+}
+
+const extractPhotoPath = (payload) => {
+  if (!payload) return null
+  if (payload.photo_url) return payload.photo_url
+  if (payload.profile && payload.profile.photo_url) return payload.profile.photo_url
+  if (payload.data?.photo_url) return payload.data.photo_url
+  if (payload.data?.profile?.photo_url) return payload.data.profile.photo_url
+  return null
+}
+
+const getInitials = (name) => {
+  if (!name) return '??'
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase())
+    .slice(0, 2)
+    .join('') || '??'
+}
 
 export default function ProfilePage() {
   const [tab, setTab] = useState('overview')
   const location = useLocation()
   const navigate = useNavigate()
+  const fileInputRef = useRef(null)
+  const previewUrlRef = useRef(null)
+  const pendingServerPhotoRef = useRef(null)
+  const [photoMessage, setPhotoMessage] = useState(null)
+  const [avatarError, setAvatarError] = useState(false)
+  const [avatarPreview, setAvatarPreview] = useState(null)
+  const [photoOverride, setPhotoOverride] = useState(null)
+  const [isUploading, setIsUploading] = useState(false)
 
-  // Sync tab with ?tab= query param so links can control the active section
+  const { data: profileData, isLoading, isError, refetch } = useProfile()
+  const uploadPhotoMutation = useUploadProfilePhoto({
+    onSuccess: (data) => {
+      setPhotoMessage('Foto profil berhasil diperbarui')
+      // Set timeout untuk memberi waktu server memproses file
+      setTimeout(() => {
+        refetch()
+      }, 1000)
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message || 'Gagal mengunggah foto'
+      setPhotoMessage(message)
+      setIsUploading(false)
+    },
+  })
+  
+  const deletePhotoMutation = useDeleteProfilePhoto({
+    onSuccess: () => {
+      setPhotoMessage('Foto profil dihapus')
+      refetch()
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message || 'Gagal menghapus foto'
+      setPhotoMessage(message)
+    },
+  })
+
+  // Sync tab with ?tab= query param
   useEffect(() => {
     const params = new URLSearchParams(location.search)
     const q = params.get('tab')
     if (q && ['overview', 'personal', 'employment', 'security'].includes(q)) {
       setTab(q)
     } else {
-      // default to overview if none
       setTab('overview')
-      // ensure URL has the tab param for shareable links
       if (!params.get('tab')) {
         params.set('tab', 'overview')
         navigate({ pathname: location.pathname, search: params.toString() }, { replace: true })
       }
     }
-  }, [location.search])
+  }, [location.pathname, location.search, navigate])
+
+  const displayName = useMemo(() => {
+    return (
+      profileData?.profile?.full_name ||
+      profileData?.name ||
+      profileData?.username ||
+      'Pengguna'
+    )
+  }, [profileData])
+
+  const faculty =
+    profileData?.employment?.faculty ||
+    profileData?.employment?.department ||
+    profileData?.profile?.department ||
+    'Unknown unit'
+
+  const currentPhotoPath = extractPhotoPath(profileData)
+  const resolvedPhoto = resolvePhotoUrl(currentPhotoPath)
+  
+  // Urutan prioritas: avatarPreview > photoOverride > resolvedPhoto
+  const avatarSrc = avatarPreview || photoOverride || resolvedPhoto
+
+  // Reset error ketika source berubah
+  useEffect(() => {
+    if (avatarSrc) {
+      setAvatarError(false)
+    }
+  }, [avatarSrc])
+
+  // Cleanup object URL
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current)
+        previewUrlRef.current = null
+      }
+    }
+  }, [])
+
+  const resetPreview = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+      previewUrlRef.current = null
+    }
+    setAvatarPreview(null)
+    setAvatarError(false)
+    setPhotoOverride(null)
+  }
+
+  const handleSelectFile = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    
+    setPhotoMessage(null)
+    setIsUploading(true)
+    
+    // 1. Buat preview dari file lokal
+    const objectUrl = URL.createObjectURL(file)
+    
+    // Cleanup preview sebelumnya
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current)
+    }
+    
+    previewUrlRef.current = objectUrl
+    setAvatarPreview(objectUrl)
+    setAvatarError(false)
+    setPhotoOverride(null)
+    
+    try {
+      // 2. Upload ke server
+      const formData = new FormData()
+      formData.append('photo', file)
+      
+      await uploadPhotoMutation.mutateAsync(formData)
+      
+      // 3. Setelah upload sukses, pertahankan preview lokal
+      // Biarkan user tetap melihat preview sampai mereka navigate
+      
+    } catch (error) {
+      console.error('Upload error:', error)
+      // Jika error, tetap pertahankan preview agar user bisa melihat
+      // Hanya tampilkan pesan error
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleDeletePhoto = async () => {
+    if (!extractPhotoPath(profileData)) return
+    
+    setPhotoMessage(null)
+    
+    try {
+      await deletePhotoMutation.mutateAsync()
+      resetPreview()
+      pendingServerPhotoRef.current = null
+    } catch (error) {
+      console.error('Delete error:', error)
+    }
+  }
 
   const navItemClass = (key) =>
     `flex items-center gap-3 px-3 py-2 rounded-md ${tab === key ? 'bg-blue-50 text-blue-700' : 'text-foreground hover:bg-slate-50'}`
+
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="text-sm text-muted-foreground">Memuat data profil...</div>
+      )
+    }
+
+    if (isError) {
+      return (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-red-600">Gagal memuat profil. Coba muat ulang.</p>
+          <Button variant="outline" onClick={() => refetch()} className="w-fit flex items-center gap-2">
+            <RefreshCcw className="w-4 h-4" /> Muat ulang
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+      <div>
+        {tab === 'overview' && <Overview profileData={profileData} />}
+        {tab === 'personal' && <PersonalData profileData={profileData} />}
+  {tab === 'employment' && <Employment userId={profileData?.id} employment={profileData?.employment} />}
+        {tab === 'security' && <Security preferences={profileData?.preferences} />}
+      </div>
+    )
+  }
 
   return (
     <MainLayout>
@@ -45,12 +260,66 @@ export default function ProfilePage() {
               <CardContent>
                 <div className="flex flex-col items-center text-center gap-2">
                   <Avatar className="w-20 h-20">
-                    <AvatarFallback>BS</AvatarFallback>
+                    {avatarSrc && !avatarError ? (
+                      <AvatarImage
+                        src={avatarSrc}
+                        alt={displayName}
+                        onError={(e) => {
+                          console.log('Image load error:', avatarSrc)
+                          setAvatarError(true)
+                          // Fallback ke initials jika gambar gagal load
+                          e.target.style.display = 'none'
+                        }}
+                        onLoad={() => {
+                          console.log('Image loaded successfully:', avatarSrc)
+                          setAvatarError(false)
+                        }}
+                        className="object-cover"
+                      />
+                    ) : null}
+                    <AvatarFallback className="bg-slate-100">
+                      {getInitials(displayName)}
+                    </AvatarFallback>
                   </Avatar>
-                  <div className="text-lg font-medium">Dr. Budi Santoso, M.Kom.</div>
-                  <div className="text-sm text-muted-foreground">Teknik Informatika</div>
+                  <div className="text-lg font-medium text-center line-clamp-2">{displayName}</div>
+                  <div className="text-sm text-muted-foreground text-center">{faculty}</div>
                   <div className="mt-2">
-                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">owner</span>
+                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full capitalize">{profileData?.status || 'active'}</span>
+                  </div>
+                  <div className="flex flex-col gap-2 mt-4 w-full">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileChange}
+                      disabled={isUploading}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2 justify-center"
+                      onClick={handleSelectFile}
+                      disabled={isUploading}
+                    >
+                      <Upload className="w-4 h-4" />
+                      {isUploading ? 'Mengunggah...' : 'Ganti foto'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex items-center gap-2 justify-center text-red-600"
+                      onClick={handleDeletePhoto}
+                      disabled={!extractPhotoPath(profileData) || deletePhotoMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deletePhotoMutation.isPending ? 'Menghapus...' : 'Hapus foto'}
+                    </Button>
+                    {photoMessage && (
+                      <p className={`text-xs ${photoMessage.includes('berhasil') ? 'text-green-600' : 'text-red-600'}`}>
+                        {photoMessage}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -79,7 +348,7 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-heading-2 font-semibold">Profile</h2>
-                <p className="text-body-md text-muted-foreground">Manage your personal information and settings</p>
+                <p className="text-body-md text-muted-foreground">Kelola informasi pribadi dan preferensi akun</p>
               </div>
               <div>
                 <Button variant="outline" size="sm" className="flex items-center gap-2">
@@ -88,12 +357,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div>
-              {tab === 'overview' && <Overview />}
-              {tab === 'personal' && <PersonalData />}
-              {tab === 'employment' && <Employment />}
-              {tab === 'security' && <Security />}
-            </div>
+            {renderContent()}
           </div>
         </div>
       </div>
