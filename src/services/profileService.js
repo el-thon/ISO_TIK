@@ -82,10 +82,13 @@ export async function changePassword(payload) {
   return res?.data ?? {}
 }
 
-export async function uploadPhoto(file) {
-  if (!file) throw new Error('File is required')
-  const formData = new FormData()
-  formData.append('photo', file)
+export async function uploadPhoto(fileOrFormData) {
+  if (!fileOrFormData) throw new Error('File is required')
+  const formData = fileOrFormData instanceof FormData ? fileOrFormData : new FormData()
+  if (!(fileOrFormData instanceof FormData)) {
+    formData.append('photo', fileOrFormData)
+    formData.append('image', fileOrFormData)
+  }
   const res = await api.post('/profile/photo', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })

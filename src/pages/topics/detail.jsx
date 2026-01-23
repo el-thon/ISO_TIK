@@ -96,6 +96,18 @@ const getInitials = (name) => {
     .join('')
 }
 
+const ensureArray = (value) => {
+  if (Array.isArray(value)) return value
+  if (value == null) return []
+  return [value]
+}
+
+const getReviewCommentId = (review) =>
+  review?.id || review?.comment_id || review?.commentId || review?.comment?.id || null
+
+const getReviewReplies = (review) =>
+  ensureArray(review?.replies ?? review?.children ?? review?.comments ?? review?.responses ?? [])
+
 const statusBadgeClass = (status) => {
   switch ((status || '').toLowerCase()) {
     case 'approved':
@@ -580,14 +592,6 @@ const renderInputItemContent = (item) => {
       const fileSize = formatBytes(metadata.size || metadata.size_bytes || (value && value.size))
       const mimeType = metadata.type || metadata.mime_type || 'application/octet-stream'
       
-      // Debug log untuk melihat URL yang dihasilkan
-      console.log('🔍 [FILE DEBUG]', {
-        fileName,
-        fileUrl,
-        metadata,
-        STORAGE_BASE: getStorageBaseUrl(),
-      })
-      
       // Cek apakah URL valid (harus http/https setelah normalize)
       const isValidUrl = fileUrl && (
         fileUrl.startsWith('http://') || 
@@ -805,6 +809,10 @@ export default function TopicDetail() {
     onSuccess: () => {
       if (activeReplyId) {
         setReplyDrafts((prev) => ({ ...prev, [activeReplyId]: '' }))
+      }
+      setReviewNotice({ type: 'success', text: 'Balasan berhasil dikirim.' })
+      if (typeof refetchReviews === 'function') {
+        refetchReviews()
       }
       setActiveReplyId(null)
     },
@@ -1034,8 +1042,15 @@ export default function TopicDetail() {
   }
 
   const handleReplySubmit = (commentId) => {
+    if (!commentId) {
+      setReviewNotice({ type: 'error', text: 'Komentar tidak ditemukan untuk dibalas.' })
+      return
+    }
     const text = (replyDrafts[commentId] || '').trim()
-    if (!text) return
+    if (!text) {
+      setReviewNotice({ type: 'error', text: 'Balasan tidak boleh kosong.' })
+      return
+    }
     replyCommentMutation.mutate({ commentId, payload: { body: text } })
   }
 
@@ -1224,16 +1239,6 @@ export default function TopicDetail() {
                             
                             {contentNode}
                             
-                            {process.env.NODE_ENV === 'development' && Object.keys(item.metadata).length > 0 && (
-                              <details className="mt-2">
-                                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-slate-700">
-                                  Metadata Debug
-                                </summary>
-                                <pre className="mt-2 text-xs bg-slate-50 p-2 rounded border overflow-auto max-h-32">
-                                  {JSON.stringify(item.metadata, null, 2)}
-                                </pre>
-                              </details>
-                            )}
                           </div>
                         )
                       })}
@@ -1327,7 +1332,9 @@ export default function TopicDetail() {
                       <p className="text-sm text-muted-foreground">Belum ada tinjauan.</p>
                     ) : (
                       <div className="space-y-2">
-                        {reviews.map((review) => {
+                        {reviews.map((review, reviewIndex) => {
+                          const commentId = getReviewCommentId(review)
+                          const canReply = Boolean(commentId)
                           const reviewerName =
                             review.created_by?.profile?.full_name ||
                             review.created_by?.name ||
@@ -1343,8 +1350,9 @@ export default function TopicDetail() {
                             review.body || review.comment || review.text || review.note || review.message || '—'
                           const isHtml = /<[^>]+>/.test(reviewText)
                           const statusEffect = review.status || review.status_effect
+                          const replies = getReviewReplies(review)
                           return (
-                            <div key={review.id} className="rounded-md border p-3 space-y-2">
+                            <div key={commentId || review.id || reviewIndex} className="rounded-md border p-3 space-y-2">
                               <div className="flex items-center justify-between text-xs text-muted-foreground">
                                 <span className="font-medium text-slate-700">{reviewerName}</span>
                                 <span>{formatDate(review.created_at, true)}</span>
@@ -1363,31 +1371,76 @@ export default function TopicDetail() {
                                 </span>
                               )}
 
+                              {replies.length > 0 && (
+                                <div className="space-y-2 pt-2">
+                                  {replies.map((reply, replyIndex) => {
+                                    const replyAuthor =
+                                      reply.created_by?.profile?.full_name ||
+                                      reply.created_by?.name ||
+                                      reply.created_by?.username ||
+                                      reply.user?.profile?.full_name ||
+                                      reply.user?.name ||
+                                      reply.user?.username ||
+                                      reply.created_by_user?.full_name ||
+                                      reply.created_by_user?.name ||
+                                      reply.created_by_user?.username ||
+                                      'Tidak diketahui'
+                                    const replyBody =
+                                      reply.body || reply.comment || reply.text || reply.note || reply.message || '—'
+                                    const replyIsHtml = /<[^>]+>/.test(replyBody)
+                                    return (
+                                      <div
+                                        key={reply.id || reply.comment_id || replyIndex}
+                                        className="rounded-md border bg-slate-50 p-3 text-sm"
+                                      >
+                                        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                                          <span className="font-medium text-slate-700">{replyAuthor}</span>
+                                          <span>{formatDate(reply.created_at, true)}</span>
+                                        </div>
+                                        {replyIsHtml ? (
+                                          <div
+                                            className="prose prose-sm max-w-none text-slate-700"
+                                            dangerouslySetInnerHTML={{ __html: replyBody }}
+                                          />
+                                        ) : (
+                                          <p className="text-sm text-slate-700 whitespace-pre-line">{replyBody}</p>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              )}
+
                               <div className="flex items-center gap-3 pt-2">
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   className="h-8 px-2 text-xs"
-                                  onClick={() =>
-                                    setActiveReplyId((prev) => (prev === review.id ? null : review.id))
-                                  }
+                                  disabled={!canReply}
+                                  onClick={() => {
+                                    if (!canReply) {
+                                      setReviewNotice({ type: 'error', text: 'Komentar tidak ditemukan untuk dibalas.' })
+                                      return
+                                    }
+                                    setActiveReplyId((prev) => (prev === commentId ? null : commentId))
+                                  }}
                                 >
                                   Balas
                                 </Button>
-                                {replyCommentMutation.isLoading && activeReplyId === review.id && (
+                                {replyCommentMutation.isLoading && activeReplyId === commentId && (
                                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                                 )}
                               </div>
 
-                              {activeReplyId === review.id && (
+                              {activeReplyId === commentId && (
                                 <div className="space-y-2 pt-2">
                                   <textarea
                                     className="w-full rounded-md border border-slate-200 p-2 text-sm"
                                     rows={3}
                                     placeholder="Tulis balasan..."
-                                    value={replyDrafts[review.id] || ''}
+                                    value={replyDrafts[commentId] || ''}
                                     onChange={(e) =>
-                                      setReplyDrafts((prev) => ({ ...prev, [review.id]: e.target.value }))
+                                      setReplyDrafts((prev) => ({ ...prev, [commentId]: e.target.value }))
                                     }
                                   />
                                   <div className="flex gap-2 justify-end">
@@ -1402,7 +1455,7 @@ export default function TopicDetail() {
                                     <Button
                                       size="sm"
                                       disabled={replyCommentMutation.isLoading}
-                                      onClick={() => handleReplySubmit(review.id)}
+                                      onClick={() => handleReplySubmit(commentId)}
                                       type="button"
                                     >
                                       {replyCommentMutation.isLoading && (

@@ -169,8 +169,8 @@ export default function Labels() {
       setSuccessMessage(`Label "${labelName}" berhasil ditambahkan!`)
       refetch()
     },
-    onError: (error) => {
-      console.error('Create label error:', error)
+    onError: () => {
+      // ignore create error
     },
   })
 
@@ -189,8 +189,8 @@ export default function Labels() {
       setSuccessMessage(`Label "${labelName}" berhasil diperbarui!`)
       refetch()
     },
-    onError: (error) => {
-      console.error('Update label error:', error)
+    onError: () => {
+      // ignore update error
     },
   })
 
@@ -203,8 +203,8 @@ export default function Labels() {
       setSuccessMessage(`Label "${deletedName}" berhasil dihapus!`)
       refetch()
     },
-    onError: (error) => {
-      console.error('Delete label error:', error)
+    onError: () => {
+      // ignore delete error
     },
   })
 

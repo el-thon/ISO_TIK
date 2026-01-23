@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Users, Archive, RefreshCcw, Plus, AlertCircle, DoorOpen } from 'lucide-react'
+import { Users, Archive, RefreshCcw, Plus, AlertCircle, DoorOpen, LogIn } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
@@ -16,7 +16,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { useCreateGroup, useGroups } from '@/services/groupHooks'
+import { useCreateGroup, useGroups, useJoinGroup } from '@/services/groupHooks'
+const INITIAL_JOIN_FORM = { code: '' }
+
+import { useMe } from '@/services/authHooks'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 const DEFAULT_PAGINATION = {
@@ -41,7 +44,25 @@ const getInitials = (name = '') => {
     .join('') || '??'
 }
 
-const toGroupCard = (group) => ({
+const resolveGroupAccess = (group, currentUserId) => {
+  if (!group) return true
+  if (group.can_access === false) return false
+  if (group.is_accessible === false || group.accessible === false) return false
+  if (group.is_member === false) return false
+  if (group.membership === null) return false
+  if (group.role === null || group.user_role === null) return false
+  if (typeof group.access === 'string' && ['denied', 'forbidden', 'none'].includes(group.access)) return false
+  if (currentUserId) {
+    const isOwner = group.owner_user_id === currentUserId || group?.owner?.id === currentUserId
+    if (isOwner) return true
+    const memberships = Array.isArray(group.memberships) ? group.memberships : []
+    const memberIds = memberships.map((m) => m.user_id || m.user?.id || m.member_id).filter(Boolean)
+    if (memberIds.length && !memberIds.includes(currentUserId)) return false
+  }
+  return true
+}
+
+const toGroupCard = (group, currentUserId) => ({
   id: group.id,
   title: group.name,
   desc: group.description,
@@ -51,6 +72,7 @@ const toGroupCard = (group) => ({
   initials: getInitials(group.owner?.profile?.full_name || group.owner?.username || group.name),
   is_active: group.is_active ?? true,
   created_at: group.created_at_formatted || '—',
+  canAccess: resolveGroupAccess(group, currentUserId),
 })
 
 export default function GroupsPage() {
@@ -59,6 +81,42 @@ export default function GroupsPage() {
   const [form, setForm] = useState(INITIAL_FORM)
   const [formError, setFormError] = useState(null)
   const [activeTab, setActiveTab] = useState('all')
+  const [unauthorizedOpen, setUnauthorizedOpen] = useState(false)
+  const [unauthorizedGroup, setUnauthorizedGroup] = useState(null)
+  const [unauthorizedMessage, setUnauthorizedMessage] = useState(null)
+  const [joinOpen, setJoinOpen] = useState(false)
+  const [joinForm, setJoinForm] = useState(INITIAL_JOIN_FORM)
+  const [joinError, setJoinError] = useState(null)
+  const [joinSuccess, setJoinSuccess] = useState(null)
+  const joinGroupMutation = useJoinGroup({
+    onSuccess: (data) => {
+      setJoinSuccess('Berhasil bergabung ke grup!')
+      setJoinError(null)
+      setJoinForm(INITIAL_JOIN_FORM)
+      setTimeout(() => {
+        setJoinOpen(false)
+        setJoinSuccess(null)
+      }, 1200)
+      refetch()
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.message || 'Gagal join grup. Pastikan kode benar dan Anda belum menjadi anggota.'
+      setJoinError(message)
+      setJoinSuccess(null)
+    },
+  })
+  const handleJoinSubmit = (event) => {
+    event?.preventDefault()
+    setJoinError(null)
+    setJoinSuccess(null)
+    if (!joinForm.code.trim()) {
+      setJoinError('Kode join wajib diisi')
+      return
+    }
+    joinGroupMutation.mutate({ code: joinForm.code.trim() })
+  }
+  const navigate = useNavigate()
+  const { data: meData } = useMe()
 
   const perPage = 9
   const queryParams = useMemo(() => ({ page, per_page: perPage }), [page, perPage])
@@ -66,10 +124,11 @@ export default function GroupsPage() {
   const { data, isLoading, isError, refetch } = useGroups(queryParams)
   
   // Transform groups data
+  const currentUserId = meData?.data?.user?.id || meData?.user?.id || meData?.id
   const groups = useMemo(() => {
     if (!Array.isArray(data?.groups)) return []
-    return data.groups.map(toGroupCard)
-  }, [data])
+    return data.groups.map((group) => toGroupCard(group, currentUserId))
+  }, [data, currentUserId])
 
   // Filter groups berdasarkan tab aktif
   const filteredGroups = useMemo(() => {
@@ -121,6 +180,17 @@ export default function GroupsPage() {
     })
   }
 
+  const handleOpenGroup = (group) => {
+    if (!group?.id) return
+    if (group.canAccess === false) {
+      setUnauthorizedGroup(group)
+      setUnauthorizedMessage('Anda tidak memiliki otorisasi untuk membuka grup ini.')
+      setUnauthorizedOpen(true)
+      return
+    }
+    navigate(`/groups/${group.id}`)
+  }
+
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -165,7 +235,12 @@ export default function GroupsPage() {
     return (
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredGroups.map((g) => (
-          <Link key={g.id} to={`/groups/${g.id}`} className="no-underline">
+          <button
+            key={g.id}
+            type="button"
+            onClick={() => handleOpenGroup(g)}
+            className="text-left no-underline"
+          >
             <Card className="overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-transform duration-150">
               <div className="px-6 pt-6">
                 <div className="flex items-start justify-between w-full">
@@ -215,7 +290,7 @@ export default function GroupsPage() {
                 </div>
               </CardContent>
             </Card>
-          </Link>
+          </button>
         ))}
       </section>
     )
@@ -277,7 +352,7 @@ export default function GroupsPage() {
                     <Label htmlFor="group-desc">Deskripsi (opsional)</Label>
                     <textarea
                       id="group-desc"
-                      className="min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       value={form.description}
                       onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                       placeholder="Jelaskan tujuan grup"
@@ -298,6 +373,50 @@ export default function GroupsPage() {
                     </Button>
                     <Button type="submit" disabled={createGroupMutation.isPending}>
                       {createGroupMutation.isPending ? 'Menyimpan...' : 'Simpan'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            {/* Join Group Button & Dialog */}
+            <Dialog open={joinOpen} onOpenChange={setJoinOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <LogIn className="w-4 h-4" /> Gabung Grup
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Gabung Grup dengan Kode</DialogTitle>
+                  <DialogDescription>
+                    Masukkan kode join yang diberikan oleh owner/manager grup.
+                  </DialogDescription>
+                </DialogHeader>
+                <form className="space-y-4" onSubmit={handleJoinSubmit}>
+                  <div className="grid gap-2">
+                    <Label htmlFor="join-code">Kode Join *</Label>
+                    <Input
+                      id="join-code"
+                      value={joinForm.code}
+                      onChange={(e) => setJoinForm((prev) => ({ ...prev, code: e.target.value }))}
+                      placeholder="Masukkan kode join"
+                      disabled={joinGroupMutation.isPending}
+                    />
+                  </div>
+                  {joinError && <p className="text-sm text-red-600">{joinError}</p>}
+                  {joinSuccess && <p className="text-sm text-green-600">{joinSuccess}</p>}
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setJoinOpen(false)}
+                      disabled={joinGroupMutation.isPending}
+                    >
+                      Batal
+                    </Button>
+                    <Button type="submit" disabled={joinGroupMutation.isPending}>
+                      {joinGroupMutation.isPending ? 'Memproses...' : 'Gabung'}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -384,6 +503,25 @@ export default function GroupsPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={unauthorizedOpen} onOpenChange={setUnauthorizedOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Akses ditolak</DialogTitle>
+            <DialogDescription>
+              {unauthorizedMessage || 'Anda tidak memiliki otorisasi untuk membuka grup ini.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            {unauthorizedGroup?.title ? `Grup: ${unauthorizedGroup.title}` : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnauthorizedOpen(false)}>
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   )
 }

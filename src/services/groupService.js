@@ -34,7 +34,17 @@ export async function joinGroup(code) {
 
 export async function getGroup(groupId) {
   if (!groupId) throw new Error('groupId is required')
-  const res = await api.get(`/groups/${groupId}`)
+  const res = await api.get(`/groups/${groupId}`, {
+    validateStatus: (status) => status < 500,
+  })
+  if (res.status === 403) {
+    return { __forbidden: true, message: res?.data?.message || 'Forbidden' }
+  }
+  if (res.status >= 400) {
+    const error = new Error(res?.data?.message || 'Failed to fetch group')
+    error.response = res
+    throw error
+  }
   return unwrap(res) ?? {}
 }
 

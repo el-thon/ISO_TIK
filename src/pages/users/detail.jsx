@@ -7,12 +7,25 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Loader2 } from 'lucide-react'
 import { useAdminUser, useDeleteAdminUser, useUpdateAdminUser } from '@/services/adminUsersHooks'
+import { useAuditLogs } from '@/services/auditLogsHooks'
 
 export default function UserDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
 
   const { data: user, isLoading, isError, error, refetch } = useAdminUser(id)
+  const auditParams = useMemo(() => ({
+    actor_user_id: id,
+    page: 1,
+    per_page: 10,
+  }), [id])
+  const {
+    data: auditData,
+    isLoading: auditLoading,
+    isError: auditError,
+    error: auditErrorObj,
+    refetch: refetchAudit,
+  } = useAuditLogs(auditParams, { enabled: Boolean(id) })
   const updateMutation = useUpdateAdminUser({
     onSuccess: () => {
       setEditOpen(false)
@@ -29,6 +42,7 @@ export default function UserDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ full_name: '', email: '', status: 'active', username: '' })
+  const auditLogs = auditData?.logs ?? []
 
   useEffect(() => {
     if (user) {
@@ -43,6 +57,28 @@ export default function UserDetail() {
 
   const displayName = useMemo(() => user?.profile?.full_name || user?.username || 'Pengguna', [user])
   const statusVariant = (user?.status || '').toLowerCase() === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+    const formatTimestamp = (value) => {
+      if (!value) return '-'
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return value
+      return date.toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
+
+    const formatActionLabel = (action = '') => {
+      const map = {
+        comment_replied: 'Membalas komentar',
+        comment_created: 'Menambahkan komentar',
+        topic_updated: 'Memperbarui topik',
+        login_success: 'Login berhasil',
+      }
+      return map[action] || action.replace(/_/g, ' ')
+    }
 
   function handleEditSubmit(e) {
     e.preventDefault()
@@ -125,6 +161,122 @@ export default function UserDetail() {
                     <div className="mt-1">{user.updated_at || user.updatedAt || '-'}</div>
                   </div>
                 </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardContent>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-sm font-medium">Aktivitas Pengguna</div>
+                <div className="text-xs text-muted-foreground">Audit log terbaru untuk pengguna ini.</div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => refetchAudit()} disabled={auditLoading}>
+                {auditLoading ? 'Memuat...' : 'Segarkan'}
+              </Button>
+            </div>
+
+            {auditLoading ? (
+              <div className="flex items-center gap-3 py-4 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Memuat aktivitas...
+              </div>
+            ) : auditError ? (
+              <div className="text-sm text-red-600 py-2">
+                Gagal memuat aktivitas: {auditErrorObj?.response?.data?.message || auditErrorObj?.message || 'Terjadi kesalahan'}
+              </div>
+            ) : auditLogs.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-2">Belum ada aktivitas.</div>
+            ) : (
+              <div className="space-y-3">
+                {auditLogs.map((log) => (
+                  <div key={log.id} className="border rounded-md p-3">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="font-medium text-slate-700">{formatActionLabel(log.action)}</span>
+                      <span>{formatTimestamp(log.timestamp || log.created_at)}</span>
+                    </div>
+                    <div className="mt-2 text-sm text-slate-700">
+                      <div className="flex flex-wrap gap-2">
+                        {log.entity_type && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 capitalize">
+                            {log.entity_type}
+                          </span>
+                        )}
+                        {log.category && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">
+                            {log.category}
+                      {/* Role assignment UI for super_admin */}
+                      {isSuperAdmin && (
+                        <div className="mt-6">
+                          <div className="text-sm text-muted-foreground mb-1">Role Pengguna</div>
+                          <div className="mb-2">
+                            {rolesLoading ? (
+                              <span className="text-xs text-muted-foreground">Memuat role...</span>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {userRoles.length === 0 ? (
+                                  <span className="text-xs text-muted-foreground">Tidak ada role</span>
+                                ) : (
+                                  userRoles.map((role) => (
+                                    <span key={role} className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">{role}</span>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <form
+                            className="flex gap-2 items-center"
+                            onSubmit={async (e) => {
+                              e.preventDefault()
+                              if (!roleForm.role) return setRoleError('Pilih role')
+                              setRoleAssignLoading(true)
+                              setRoleError('')
+                              try {
+                                await assignUserRole(id, roleForm.role)
+                                setRoleForm({ role: '' })
+                                refetchUserRoles()
+                              } catch (err) {
+                                setRoleError(err?.message || 'Gagal assign role')
+                              } finally {
+                                setRoleAssignLoading(false)
+                              }
+                            }}
+                          >
+                            <select
+                              className="border rounded p-2 min-w-30"
+                              value={roleForm.role}
+                              onChange={(e) => setRoleForm({ role: e.target.value })}
+                              disabled={availableRolesLoading || roleAssignLoading}
+                            >
+                              <option value="">Pilih role</option>
+                              {availableRoles.map((role) => (
+                                <option key={role} value={role}>{role}</option>
+                              ))}
+                            </select>
+                            <Button type="submit" className="bg-blue-600 text-white" disabled={roleAssignLoading || !roleForm.role}>
+                              {roleAssignLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Assign Role'}
+                            </Button>
+                          </form>
+                          {roleError && <div className="text-xs text-red-600 mt-1">{roleError}</div>}
+                        </div>
+                      )}
+                          </span>
+                        )}
+                        {log.severity && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 capitalize">
+                            {log.severity}
+                          </span>
+                        )}
+                      </div>
+                      {log.details && (
+                        <div className="mt-2 text-xs text-muted-foreground wrap-break-word">
+                          {typeof log.details === 'string' ? log.details : JSON.stringify(log.details)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>

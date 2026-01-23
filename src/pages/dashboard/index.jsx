@@ -98,7 +98,7 @@ export default function Dashboard() {
 
   return (
     <MainLayout>
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-full mx-auto space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-heading-2 font-semibold">Selamat Datang, {user?.name || user?.username || 'Pengguna'}</h1>

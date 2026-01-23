@@ -79,7 +79,8 @@ export async function getStatistics() {
 }
 
 export async function getRoles() {
-  const res = await api.get('/admin/users/roles/reference')
+  // Use global RBAC endpoint for roles reference
+  const res = await api.get('/admin/rbac/roles')
   const payload = unwrap(res.data)
   return payload.roles || []
 }

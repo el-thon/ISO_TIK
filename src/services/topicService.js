@@ -41,20 +41,6 @@ const normalizeStorageUrl = (url) => {
   return `/${trimmed}`
 }
 
-// Debug utility
-const debug = {
-  log: (label, data) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[SERVICE DEBUG] ${label}:`, data);
-    }
-  },
-  warn: (label, data) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.warn(`[SERVICE DEBUG] ${label}:`, data);
-    }
-  }
-};
-
 export async function listTopics(params = {}) {
   const res = await api.get('/topics', { params })
   const payload = unwrap(res) ?? {}
@@ -73,13 +59,9 @@ export async function getTopic(topicId) {
 export async function getTopicInputItems(topicId, params = {}) {
   if (!topicId) throw new Error('topicId is required to list input items')
   
-  debug.log('Fetching input items for topic', { topicId, params });
-  
   const res = await api.get(`/topics/${topicId}/input-items`, { params })
   const payload = unwrap(res) ?? {}
   const items = ensureArray(payload.items ?? payload.input_items ?? [])
-  
-  debug.log('Raw input items from API', items);
   
   const processedItems = items.map((item, index) => {
     // Parse metadata safely (can be object or JSON string)
@@ -90,8 +72,7 @@ export async function getTopicInputItems(topicId, params = {}) {
         try {
           const parsed = JSON.parse(item.metadata)
           return typeof parsed === 'object' && parsed !== null ? parsed : {}
-        } catch (error) {
-          debug.warn('Failed to parse metadata JSON', { metadata: item.metadata, error });
+        } catch {
           return {}
         }
       }
@@ -105,10 +86,8 @@ export async function getTopicInputItems(topicId, params = {}) {
       if (value.trim().startsWith('{') || value.trim().startsWith('[')) {
         try {
           const parsedValue = JSON.parse(value)
-          debug.log('Parsed JSON value', parsedValue);
           value = parsedValue
-        } catch (error) {
-          debug.warn('Failed to parse value as JSON, keeping as string', { value, error });
+        } catch {
           // keep original value if parse fails
         }
       }
@@ -202,15 +181,6 @@ export async function getTopicInputItems(topicId, params = {}) {
     if (fileInfo.size && !metadata.size) metadata.size = fileInfo.size;
     if (fileInfo.type && !metadata.type) metadata.type = fileInfo.type;
 
-    debug.log('Processed input item', {
-      id: item.id,
-      type: item.type,
-      label: item.label,
-      metadata,
-      value,
-      fileInfo
-    });
-
     return {
       ...item,
       metadata,
@@ -225,8 +195,6 @@ export async function getTopicInputItems(topicId, params = {}) {
     }
   })
   
-  debug.log('Total processed items', processedItems.length);
-  
   return {
     items: processedItems,
   }
@@ -236,14 +204,11 @@ export async function createInputItem(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to create an input item')
   if (!payload?.type) throw new Error('type is required to create an input item')
 
-  debug.log('Creating input item', { topicId, payload });
-
   const res = await api.post(`/topics/${topicId}/input-items`, payload)
   const data = unwrap(res) ?? {}
 
   // Some responses wrap the item under `item`, others return the whole payload
   const item = data.item || data
-  debug.log('Created input item response', item)
 
   return item
 }
@@ -274,32 +239,15 @@ export async function detachTopicLabel(topicId, labelId) {
 export async function createTopic(roomId, payload = {}) {
   if (!roomId) throw new Error('roomId is required when creating a topic')
   
-  debug.log('=== CREATE TOPIC DEBUG ===');
-  debug.log('Room ID:', roomId);
-  debug.log('Payload:', JSON.stringify(payload, null, 2));
-  debug.log('Endpoint:', `/rooms/${roomId}/topics`);
-  
   try {
     const res = await api.post(`/rooms/${roomId}/topics`, payload);
-    debug.log('Response success:', res.data);
     
     // Return the full response data including any input_items that might be included
     const responseData = res?.data ?? {};
     
     // Log if input_items are included in response
-    if (responseData.input_items || responseData.data?.input_items) {
-      debug.log('Input items included in response:', 
-        responseData.input_items || responseData.data?.input_items);
-    }
-    
     return responseData;
   } catch (error) {
-    debug.log('=== CREATE TOPIC ERROR ===');
-    debug.log('Status:', error.response?.status);
-    debug.log('Data:', error.response?.data);
-    debug.log('Headers:', error.response?.headers);
-    debug.log('Full error:', error);
-    
     // Rethrow dengan informasi lebih jelas
     const enhancedError = new Error(
       `Failed to create topic: ${error.response?.data?.message || error.message}`
@@ -319,61 +267,39 @@ export async function uploadInputItemAttachment(inputItemId, file, label) {
   if (!inputItemId) throw new Error('inputItemId is required to upload attachment')
   if (!file) throw new Error('file is required to upload attachment')
 
-  debug.log('=== UPLOAD ATTACHMENT ===');
-  debug.log('Input Item ID:', inputItemId);
-  debug.log('File:', {
-    name: file.name,
-    size: file.size,
-    type: file.type
-  });
-  debug.log('Label:', label);
-
   const formData = new FormData()
   formData.append('file', file)
   if (label) formData.append('label', label)
 
-  try {
-    const res = await api.post(`/input-items/${inputItemId}/attachments`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+  const res = await api.post(`/input-items/${inputItemId}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
 
-    const result = unwrap(res) ?? {};
-    debug.log('Upload successful:', result);
+  const result = unwrap(res) ?? {};
 
-    const attachment = result.attachment || result.attachments?.[0] || result;
-    const downloadUrl =
-      attachment?.download_url ||
-      attachment?.url ||
-      attachment?.storage_url ||
-      (attachment?.id ? `/api/v1/attachments/${attachment.id}/download` : undefined);
+  const attachment = result.attachment || result.attachments?.[0] || result;
+  const downloadUrl =
+    attachment?.download_url ||
+    attachment?.url ||
+    attachment?.storage_url ||
+    (attachment?.id ? `/api/v1/attachments/${attachment.id}/download` : undefined);
 
-    return {
-      attachment,
-      url: downloadUrl,
-      filename: attachment?.filename || file.name,
-      size: attachment?.size_bytes || file.size,
-      type: attachment?.mime_type || file.type,
-      raw: result,
-    };
-  } catch (error) {
-    debug.log('=== UPLOAD ATTACHMENT ERROR ===');
-    debug.log('Status:', error.response?.status);
-    debug.log('Data:', error.response?.data);
-    debug.log('Error:', error);
-    
-    throw error;
-  }
+  return {
+    attachment,
+    url: downloadUrl,
+    filename: attachment?.filename || file.name,
+    size: attachment?.size_bytes || file.size,
+    type: attachment?.mime_type || file.type,
+    raw: result,
+  };
 }
 
 export async function updateInputItem(inputItemId, payload = {}) {
   if (!inputItemId) throw new Error('inputItemId is required to update input item')
 
-  debug.log('Updating input item', { inputItemId, payload })
-
   const res = await api.put(`/input-items/${inputItemId}`, payload)
   const data = unwrap(res) ?? {}
   const item = data.item || data
-  debug.log('Updated input item response', item)
   return item
 }
 
@@ -600,9 +526,8 @@ export const refreshTopicInputItems = async (topicId, queryClient) => {
     await queryClient.invalidateQueries({ 
       queryKey: ['topics', topicId, 'input-items'] 
     });
-    debug.log('Manually refreshed input items cache for topic:', topicId);
-  } catch (error) {
-    debug.warn('Failed to refresh input items cache:', error);
+  } catch {
+    // ignore refresh errors
   }
 };
 

@@ -386,8 +386,8 @@ export default function CreateTopic() {
       try {
         const item = await topicService.createInputItem(topicId, payload)
         createdItems.push(item)
-      } catch (error) {
-        console.error('Failed to create input item', payload, error)
+      } catch {
+        // ignore input item creation error
       }
     }
 
@@ -402,8 +402,8 @@ export default function CreateTopic() {
       try {
         const fetched = await topicService.getTopicInputItems(topicId)
         itemsForMatch = fetched?.items || []
-      } catch (error) {
-        console.error('Failed to fetch input items for attachments', error)
+      } catch {
+        // ignore input items fetch error
       }
     }
 
@@ -487,8 +487,8 @@ export default function CreateTopic() {
             value: meta.value,
           })
         }
-      } catch (error) {
-        console.error('Failed to upload attachment for input item', inputItemId, error)
+      } catch {
+        // ignore attachment upload error
       }
     }
 
@@ -525,10 +525,8 @@ export default function CreateTopic() {
         return
       }
 
-      console.warn('Topic created but ID unavailable in response payload. Redirecting to list.', created)
       navigate('/topics', { state: { refetch: true } })
-    } catch (error) {
-      console.error('Failed to create topic', error)
+    } catch {
       setStep(3)
     } finally {
       setSubmitting(false)

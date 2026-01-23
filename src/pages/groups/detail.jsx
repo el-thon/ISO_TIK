@@ -3,6 +3,7 @@ import MainLayout from '@/layout/MainLayout'
 import { Card, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -11,7 +12,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
-import { Users, Home, RefreshCcw, DoorOpen } from 'lucide-react'
+import { Users, Home, RefreshCcw, DoorOpen, Lock } from 'lucide-react'
 import { Tabs, TabsContent } from '@/components/ui/tabs'
 import TabsBar from '@/components/mainComponents/tabsBar'
 import Overview from '@/pages/groups/tabs/Overview'
@@ -36,8 +37,10 @@ const getInitials = (name) => {
 export default function GroupsDetail() {
   const { id: groupId } = useParams()
   const [tab, setTab] = useState('overview')
-  const { data: group, isLoading, isError, refetch } = useGroup(groupId, { enabled: Boolean(groupId) })
-  const { data: groupRoomsData } = useGroupRooms(groupId, { enabled: Boolean(groupId) })
+  const { data: group, isLoading, isError, error, refetch } = useGroup(groupId, { enabled: Boolean(groupId) })
+  const isForbidden = group?.__forbidden || error?.response?.status === 403
+  const { data: groupRoomsData } = useGroupRooms(groupId, { enabled: Boolean(groupId) && !isForbidden })
+  const [unauthorizedOpen, setUnauthorizedOpen] = useState(false)
   const resolveRoomCountFromGroup = (currentGroup, roomsPayload) => {
     const sources = [
       roomsPayload?.total,
@@ -74,6 +77,12 @@ export default function GroupsDetail() {
     setRoomCount(derivedRoomCount)
   }, [derivedRoomCount])
 
+  useEffect(() => {
+    if (isForbidden) {
+      setUnauthorizedOpen(true)
+    }
+  }, [isForbidden])
+
   const stats = group?.stats ?? {}
   
   const tabItems = useMemo(() => {
@@ -104,6 +113,29 @@ export default function GroupsDetail() {
             <Skeleton className="h-6 w-56" />
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-16 w-full" />
+          </div>
+        </Card>
+      )
+    }
+
+    if (isForbidden) {
+      return (
+        <Card className="p-4 mt-6 border-amber-200 bg-amber-50">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 text-amber-700">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <CardTitle className="text-heading-4">Akses ditolak</CardTitle>
+                <CardDescription className="text-sm text-amber-700">
+                  Anda tidak memiliki otorisasi untuk membuka grup ini.
+                </CardDescription>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className="flex items-center gap-2" onClick={() => refetch()}>
+              <RefreshCcw className="w-4 h-4" /> Coba lagi
+            </Button>
           </div>
         </Card>
       )
@@ -207,32 +239,58 @@ export default function GroupsDetail() {
         {renderHeader()}
 
         <div className="mb-4 mt-6">
-          <Tabs value={tab} onValueChange={setTab}>
-            <div className="bg-white">
-              <TabsBar items={tabItems} />
+          {isForbidden ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 flex items-start gap-2">
+              <Lock className="w-4 h-4 mt-0.5" />
+              <span>Grup ini terkunci karena Anda tidak memiliki otorisasi akses.</span>
             </div>
+          ) : (
+            <Tabs value={tab} onValueChange={setTab}>
+              <div className="bg-white">
+                <TabsBar items={tabItems} />
+              </div>
 
-            <TabsContent value="overview">
-              <Overview groupId={groupId} group={group} onRoomCountChange={setRoomCount} />
-            </TabsContent>
-            <TabsContent value="members">
-              <Members groupId={groupId} ownerId={group?.owner_user_id} />
-            </TabsContent>
-            <TabsContent value="rooms" forceMount>
-              <Rooms 
-                groupId={groupId} 
-                onCountChange={setRoomCount}
-              />
-            </TabsContent>
-            <TabsContent value="labels">
-              <Labels groupId={groupId} />
-            </TabsContent>
-            <TabsContent value="settings">
-              <Settings groupId={groupId} group={group} />
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="overview">
+                <Overview groupId={groupId} group={group} onRoomCountChange={setRoomCount} />
+              </TabsContent>
+              <TabsContent value="members">
+                <Members groupId={groupId} ownerId={group?.owner_user_id} />
+              </TabsContent>
+              <TabsContent value="rooms" forceMount>
+                <Rooms 
+                  groupId={groupId} 
+                  onCountChange={setRoomCount}
+                />
+              </TabsContent>
+              <TabsContent value="labels">
+                <Labels groupId={groupId} />
+              </TabsContent>
+              <TabsContent value="settings">
+                <Settings groupId={groupId} group={group} />
+              </TabsContent>
+            </Tabs>
+          )}
         </div>
       </div>
+
+      <Dialog open={unauthorizedOpen} onOpenChange={setUnauthorizedOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Akses ditolak</DialogTitle>
+            <DialogDescription>
+              Anda tidak memiliki otorisasi untuk membuka grup ini. Silakan hubungi admin atau pemilik grup jika perlu akses.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUnauthorizedOpen(false)}>
+              Tutup
+            </Button>
+            <Button onClick={() => refetch()}>
+              Coba lagi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   )
 }

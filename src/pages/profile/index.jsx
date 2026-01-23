@@ -19,6 +19,8 @@ const runtimeFallback = typeof window !== 'undefined' ? window.location.origin :
 
 const STORAGE_BASE = (explicitStorageBase || apiOrigin || proxyTarget || (import.meta.env.DEV ? 'http://localhost:8000' : runtimeFallback)).replace(/\/$/, '')
 
+const PHOTO_OVERRIDE_KEY = 'iso_tik_profile_photo_override'
+
 const resolvePhotoUrl = (path) => {
   if (!path) return null
   
@@ -72,6 +74,15 @@ export default function ProfilePage() {
   const { data: profileData, isLoading, isError, refetch } = useProfile()
   const uploadPhotoMutation = useUploadProfilePhoto({
     onSuccess: (data) => {
+      const uploadedPath = extractPhotoPath(data)
+      if (uploadedPath) {
+        setPhotoOverride(uploadedPath)
+        try {
+          localStorage.setItem(PHOTO_OVERRIDE_KEY, uploadedPath)
+        } catch {
+          // ignore storage errors
+        }
+      }
       setPhotoMessage('Foto profil berhasil diperbarui')
       // Set timeout untuk memberi waktu server memproses file
       setTimeout(() => {
@@ -88,6 +99,12 @@ export default function ProfilePage() {
   const deletePhotoMutation = useDeleteProfilePhoto({
     onSuccess: () => {
       setPhotoMessage('Foto profil dihapus')
+      setPhotoOverride(null)
+      try {
+        localStorage.removeItem(PHOTO_OVERRIDE_KEY)
+      } catch {
+        // ignore storage errors
+      }
       refetch()
     },
     onError: (error) => {
@@ -111,6 +128,34 @@ export default function ProfilePage() {
     }
   }, [location.pathname, location.search, navigate])
 
+  const currentPhotoPath = extractPhotoPath(profileData)
+  const resolvedPhoto = resolvePhotoUrl(currentPhotoPath)
+  const resolvedOverride = resolvePhotoUrl(photoOverride)
+  
+  // Urutan prioritas: avatarPreview > photoOverride (local) > resolvedPhoto (API)
+  const avatarSrc = avatarPreview || resolvedOverride || resolvedPhoto
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PHOTO_OVERRIDE_KEY)
+      if (stored) {
+        setPhotoOverride(stored)
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!currentPhotoPath) return
+    setPhotoOverride(null)
+    try {
+      localStorage.removeItem(PHOTO_OVERRIDE_KEY)
+    } catch {
+      // ignore storage errors
+    }
+  }, [currentPhotoPath])
+
   const displayName = useMemo(() => {
     return (
       profileData?.profile?.full_name ||
@@ -125,12 +170,6 @@ export default function ProfilePage() {
     profileData?.employment?.department ||
     profileData?.profile?.department ||
     'Unknown unit'
-
-  const currentPhotoPath = extractPhotoPath(profileData)
-  const resolvedPhoto = resolvePhotoUrl(currentPhotoPath)
-  
-  // Urutan prioritas: avatarPreview > photoOverride > resolvedPhoto
-  const avatarSrc = avatarPreview || photoOverride || resolvedPhoto
 
   // Reset error ketika source berubah
   useEffect(() => {
@@ -188,16 +227,12 @@ export default function ProfilePage() {
     
     try {
       // 2. Upload ke server
-      const formData = new FormData()
-      formData.append('photo', file)
-      
-      await uploadPhotoMutation.mutateAsync(formData)
+      await uploadPhotoMutation.mutateAsync(file)
       
       // 3. Setelah upload sukses, pertahankan preview lokal
       // Biarkan user tetap melihat preview sampai mereka navigate
       
-    } catch (error) {
-      console.error('Upload error:', error)
+    } catch {
       // Jika error, tetap pertahankan preview agar user bisa melihat
       // Hanya tampilkan pesan error
     } finally {
@@ -214,8 +249,8 @@ export default function ProfilePage() {
       await deletePhotoMutation.mutateAsync()
       resetPreview()
       pendingServerPhotoRef.current = null
-    } catch (error) {
-      console.error('Delete error:', error)
+    } catch {
+      // ignore delete error
     }
   }
 
@@ -265,13 +300,11 @@ export default function ProfilePage() {
                         src={avatarSrc}
                         alt={displayName}
                         onError={(e) => {
-                          console.log('Image load error:', avatarSrc)
                           setAvatarError(true)
                           // Fallback ke initials jika gambar gagal load
                           e.target.style.display = 'none'
                         }}
                         onLoad={() => {
-                          console.log('Image loaded successfully:', avatarSrc)
                           setAvatarError(false)
                         }}
                         className="object-cover"

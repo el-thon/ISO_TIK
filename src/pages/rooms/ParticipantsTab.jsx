@@ -80,7 +80,7 @@ export default function ParticipantsTab({ roomId, room }) {
     isError: participantsError,
     error: participantsErrorObj,
     refetch: refetchParticipants,
-  } = useRoomParticipants(roomId, { per_page: 20 })
+  } = useRoomParticipants(roomId, { per_page: 1000 })
   const participants = data?.participants ?? []
   const groupId = room?.group?.id || room?.group_id
 
