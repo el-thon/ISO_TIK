@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { Home } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
@@ -17,7 +17,8 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useRoom } from '@/services/roomHooks'
+import { useRoom, useRoomParticipants } from '@/services/roomHooks'
+import { useMe } from '@/services/authHooks'
 
 const formatDateTime = (value) => {
   if (!value) return '-'
@@ -54,16 +55,39 @@ const getInitials = (name) => {
     .join('')
 }
 
+const normalizeRoleKey = (role) => {
+  if (!role) return ''
+  const cleaned = String(role).toLowerCase().replace(/[^a-z]/g, '')
+  if (cleaned === 'auditoree') return 'auditor'
+  if (cleaned === 'auditee') return 'auditee'
+  if (cleaned === 'owner' || cleaned === 'groupowner') return 'group_owner'
+  return cleaned
+}
+
 export default function RoomDetail() {
   const { id: roomId } = useParams()
   const location = useLocation()
   const fromGroup = location.state?.fromGroup
   const { data: room, isLoading, isError, error, refetch } = useRoom(roomId)
+  const { data: meData } = useMe({ staleTime: 60_000 })
+  const currentUserId = meData?.id ?? null
+  const {
+    data: participantsData,
+  } = useRoomParticipants(roomId, { per_page: 200 }, { enabled: Boolean(roomId && currentUserId) })
+  const participantRole = useMemo(() => {
+    if (!currentUserId) return null
+    const participants = participantsData?.participants ?? []
+    const match = participants.find((participant) => String(participant.user_id) === String(currentUserId))
+    return match?.role || null
+  }, [currentUserId, participantsData])
 
-  const responsibleName = room?.responsible_user?.profile?.full_name || room?.responsible_user?.username || 'Belum ditetapkan'
   const stats = room?.stats ?? { participant_count: 0, topic_count: 0 }
   const groupCrumbHref = fromGroup ? `/groups/${fromGroup.id}?tab=rooms` : '/rooms'
   const groupCrumbLabel = fromGroup ? `Grup Room (${fromGroup.name || 'Tanpa nama'})` : 'Ruangan'
+  const roleKey = normalizeRoleKey(room?.user_role || room?.role || room?.participant_role || participantRole)
+  const canCreateTopic = roleKey === 'auditor' || roleKey === 'group_owner' || roleKey === 'super_admin'
+  const showTopicsTab = canCreateTopic
+  const defaultTab = showTopicsTab ? 'topics' : 'attachments'
 
   return (
     <MainLayout>
@@ -156,11 +180,13 @@ export default function RoomDetail() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <Link to="/topics/create" state={{ roomId: room.id, roomTitle: room.name }}>
-                      <Button size="sm" className="bg-blue-600 text-white">
-                        + Create Topic
-                      </Button>
-                    </Link>
+                    {canCreateTopic && (
+                      <Link to="/topics/create" state={{ roomId: room.id, roomTitle: room.name }}>
+                        <Button size="sm" className="bg-blue-600 text-white">
+                          + Create Topic
+                        </Button>
+                      </Link>
+                    )}
                     <Link to="#settings">
                       <Button variant="outline" size="sm">
                         Settings
@@ -169,15 +195,6 @@ export default function RoomDetail() {
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <span>Responsible:</span>
-                    <div className="inline-flex items-center gap-2">
-                      <Avatar className="w-8 h-8">
-                        <AvatarFallback>{getInitials(responsibleName)}</AvatarFallback>
-                      </Avatar>
-                      <span>{responsibleName}</span>
-                    </div>
-                  </div>
                   <div className="flex items-center gap-2">
                     <span>Peserta:</span>
                     <span className="font-semibold">{stats.participant_count ?? 0}</span>
@@ -191,18 +208,19 @@ export default function RoomDetail() {
             </div>
 
             <div className="mb-6" id="settings">
-              <Tabs defaultValue="topics">
+              <Tabs defaultValue={defaultTab}>
                 <div className="bg-white">
                   <TabsBar
                     items={[
-                      { label: 'Topics', value: 'topics', count: stats.topic_count ?? 0 },
+                      ...(showTopicsTab ? [{ label: 'Topics', value: 'topics', count: stats.topic_count ?? 0 }] : []),
+                      { label: 'Attachments', value: 'attachments' },
                       { label: 'Participants', value: 'participants', count: stats.participant_count ?? 0 },
                       { label: 'Timeline', value: 'timeline' },
                       { label: 'Settings', value: 'settings' },
                     ]}
                   />
                 </div>
-                <RoomTabsContent roomId={room.id} room={room} />
+                <RoomTabsContent roomId={room.id} room={room} showTopicsTab={showTopicsTab} />
               </Tabs>
             </div>
           </>

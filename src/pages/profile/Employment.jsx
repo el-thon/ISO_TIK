@@ -3,8 +3,7 @@ import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Edit3, Save, X, Info } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { useUpdateEmployment } from '@/services/profileHooks'
 
 const Field = ({ label, children }) => (
@@ -31,15 +30,23 @@ const toDefaultValues = (employment = {}) => ({
   employment_end_date: employment.employment_end_date || '',
   highest_education: employment.highest_education || '',
 })
-
-const cleanPayload = (obj = {}) =>
-  Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== ''))
+const cleanPayload = (obj = {}) => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  )
+}
 
 export default function Employment({ employment, userId }) {
   const [editing, setEditing] = useState(false)
   const [statusMessage, setStatusMessage] = useState(null)
-  const defaults = useMemo(() => toDefaultValues(employment), [employment])
-  const form = useForm({ defaultValues: defaults })
+  const data = useMemo(() => toDefaultValues(employment), [employment])
+  const form = useForm({
+    defaultValues: data,
+  })
+
+  useEffect(() => {
+    form.reset(toDefaultValues(employment))
+  }, [employment, form])
 
   const updateEmployment = useUpdateEmployment({
     onSuccess: () => {
@@ -52,52 +59,48 @@ export default function Employment({ employment, userId }) {
     },
   })
 
-  useEffect(() => {
-    form.reset(toDefaultValues(employment))
-  }, [employment, form])
-
   const onSubmit = async (values) => {
     setStatusMessage(null)
     const payload = cleanPayload(values)
-    if (!userId) {
-      setStatusMessage({ type: 'error', text: 'userId tidak tersedia untuk update employment' })
+    if (!Object.keys(payload).length) {
+      setStatusMessage({ type: 'info', text: 'Tidak ada perubahan untuk disimpan' })
       return
     }
     try {
       await updateEmployment.mutateAsync({ userId, payload })
-    } catch (_) {
+    } catch (error) {
       // handled in onError
     }
   }
-
-  const messageColor = statusMessage?.type === 'success' ? 'text-emerald-600' : 'text-red-600'
-  const statusOptions = [
-    { value: 'permanent', label: 'Tetap' },
-    { value: 'contract', label: 'Kontrak' },
-    { value: 'honorary', label: 'Honorer' },
-  ]
 
   const renderReadValue = (value) => (
     <div className="font-medium text-sm text-foreground wrap-break-word">{value || '-'}</div>
   )
 
-  const renderInput = (name, placeholder = '') => (
-    <Input
-      className="mt-1"
-      placeholder={placeholder}
-      disabled={!editing || updateEmployment.isPending}
-      {...form.register(name)}
-    />
-  )
+  const fields = [
+    { label: 'NIP / Employee ID', value: data.employee_id, name: 'employee_id' },
+    { label: 'NIDN / Lecturer ID', value: data.lecturer_id || data.student_id, name: 'lecturer_id' },
+    { label: 'NIM / Student ID', value: data.student_id, name: 'student_id' },
+    { label: 'Fakultas', value: data.faculty, name: 'faculty' },
+    { label: 'Departemen', value: data.department, name: 'department' },
+    { label: 'Program Studi', value: data.study_program, name: 'study_program' },
+    { label: 'Unit', value: data.unit, name: 'unit' },
+    { label: 'Lokasi Kantor', value: data.office_location, name: 'office_location' },
+    { label: 'Jabatan Fungsional', value: data.functional_position, name: 'functional_position' },
+    { label: 'Jabatan Struktural', value: data.structural_position, name: 'structural_position' },
+    { label: 'Status Kepegawaian', value: data.employment_status, name: 'employment_status' },
+    { label: 'Tanggal Mulai', value: data.employment_start_date, name: 'employment_start_date' },
+    { label: 'Tanggal Selesai', value: data.employment_end_date, name: 'employment_end_date' },
+    { label: 'Pendidikan Tertinggi', value: data.highest_education, name: 'highest_education' },
+    { label: 'Pangkat / Golongan', value: data.rank_grade, name: 'rank_grade' },
+  ]
 
-  const renderDate = (name) => (
-    <Input
-      className="mt-1"
-      type="date"
-      disabled={!editing || updateEmployment.isPending}
-      {...form.register(name)}
-    />
-  )
+  const hasData = employment && Object.values(data).some((v) => v)
+  const messageColor = statusMessage?.type === 'success'
+    ? 'text-emerald-600'
+    : statusMessage?.type === 'error'
+      ? 'text-red-600'
+      : 'text-muted-foreground'
 
   return (
     <div>
@@ -106,122 +109,73 @@ export default function Employment({ employment, userId }) {
           <div className="flex items-start justify-between mb-4">
             <div>
               <h3 className="text-lg font-medium">Informasi Kepegawaian</h3>
-              <p className="text-xs text-muted-foreground">Data ini berasal dari sistem HR / akademik</p>
+              <p className="text-xs text-muted-foreground">Perbarui data kepegawaian kamu</p>
             </div>
-            <div className="flex gap-2">
-              {!editing ? (
+            {!editing ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setStatusMessage(null)
+                  setEditing(true)
+                }}
+              >
+                Edit
+              </Button>
+            ) : (
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex items-center gap-2"
-                  onClick={() => setEditing(true)}
-                  disabled={!userId}
+                  type="button"
+                  onClick={() => {
+                    form.reset(toDefaultValues(employment))
+                    setStatusMessage(null)
+                    setEditing(false)
+                  }}
+                  disabled={updateEmployment.isPending}
                 >
-                  <Edit3 className="w-4 h-4" /> Edit
+                  Batal
                 </Button>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={() => {
-                      form.reset(defaults)
-                      setEditing(false)
-                      setStatusMessage(null)
-                    }}
-                    disabled={updateEmployment.isPending}
-                  >
-                    <X className="w-4 h-4" /> Batal
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={form.handleSubmit(onSubmit)}
-                    disabled={updateEmployment.isPending}
-                  >
-                    {updateEmployment.isPending ? 'Menyimpan...' : (<><Save className="w-4 h-4" /> Simpan</>)}
-                  </Button>
-                </>
-              )}
-            </div>
+                <Button
+                  size="sm"
+                  type="submit"
+                  disabled={updateEmployment.isPending || !form.formState.isDirty || !userId}
+                >
+                  {updateEmployment.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </Button>
+              </div>
+            )}
           </div>
 
-          {!userId && (
+          {!hasData && (
             <div className="mb-4 flex items-center gap-2 text-xs text-amber-600">
-              <Info className="w-4 h-4" /> Tidak ada userId, update employment dinonaktifkan (hanya SA/UM via endpoint admin).
+              <Info className="w-4 h-4" /> Data kepegawaian belum tersedia untuk akun ini.
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Field label="NIP / Employee ID">
-              {editing ? renderInput('employee_id') : renderReadValue(form.watch('employee_id'))}
-            </Field>
-            <Field label="NIDN / Lecturer ID">
-              {editing ? renderInput('lecturer_id') : renderReadValue(form.watch('lecturer_id') || form.watch('student_id'))}
-            </Field>
-            <Field label="NIM / Student ID">
-              {editing ? renderInput('student_id') : renderReadValue(form.watch('student_id'))}
-            </Field>
-            <Field label="Fakultas">
-              {editing ? renderInput('faculty') : renderReadValue(form.watch('faculty'))}
-            </Field>
-            <Field label="Departemen">
-              {editing ? renderInput('department') : renderReadValue(form.watch('department'))}
-            </Field>
-            <Field label="Program Studi">
-              {editing ? renderInput('study_program') : renderReadValue(form.watch('study_program'))}
-            </Field>
-            <Field label="Unit">
-              {editing ? renderInput('unit') : renderReadValue(form.watch('unit'))}
-            </Field>
-            <Field label="Lokasi Kantor">
-              {editing ? renderInput('office_location') : renderReadValue(form.watch('office_location'))}
-            </Field>
-            <Field label="Jabatan Fungsional">
-              {editing ? renderInput('functional_position') : renderReadValue(form.watch('functional_position'))}
-            </Field>
-            <Field label="Jabatan Struktural">
-              {editing ? renderInput('structural_position') : renderReadValue(form.watch('structural_position'))}
-            </Field>
-            <Field label="Status Kepegawaian">
-              {editing ? (
-                <Select
-                  value={form.watch('employment_status') || undefined}
-                  onValueChange={(val) => form.setValue('employment_status', val)}
-                  disabled={updateEmployment.isPending}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Pilih status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                renderReadValue(form.watch('employment_status'))
-              )}
-            </Field>
-            <Field label="Tanggal Mulai">
-              {editing ? renderDate('employment_start_date') : renderReadValue(form.watch('employment_start_date'))}
-            </Field>
-            <Field label="Tanggal Selesai">
-              {editing ? renderDate('employment_end_date') : renderReadValue(form.watch('employment_end_date'))}
-            </Field>
-            <Field label="Pendidikan Tertinggi">
-              {editing ? renderInput('highest_education') : renderReadValue(form.watch('highest_education'))}
-            </Field>
-            <Field label="Pangkat / Golongan">
-              {editing ? renderInput('rank_grade') : renderReadValue(form.watch('rank_grade'))}
-            </Field>
-          </div>
+          {!editing && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {fields.map((field) => (
+                <Field key={field.label} label={field.label}>
+                  {renderReadValue(field.value)}
+                </Field>
+              ))}
+            </div>
+          )}
+
+          {editing && (
+            <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {fields.map((field) => (
+                <Field key={field.label} label={field.label}>
+                  <Input className="mt-1" {...form.register(field.name)} />
+                </Field>
+              ))}
+            </form>
+          )}
 
           {statusMessage && (
-            <p className={`text-xs mt-4 ${messageColor}`}>
-              {statusMessage.text}
-            </p>
+            <p className={`text-sm mt-4 ${messageColor}`}>{statusMessage.text}</p>
           )}
         </CardContent>
       </Card>

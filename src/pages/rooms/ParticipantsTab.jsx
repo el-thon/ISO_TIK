@@ -19,20 +19,25 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, UserPlus, UserMinus, LogOut } from 'lucide-react'
+import { Loader2, UserPlus, LogOut, Check, ChevronsUpDown, Search, X } from 'lucide-react'
 import {
   useRoomParticipants,
   useAddRoomParticipant,
-  useUpdateRoomParticipant,
-  useRemoveRoomParticipant,
   useLeaveRoom,
 } from '@/services/roomHooks'
 import { useGroupMembers } from '@/services/groupHooks'
 import { useMe } from '@/services/authHooks'
+import { cn } from '@/lib/utils'
 
 const getInitials = (name) => {
   if (!name) return '??'
@@ -49,30 +54,56 @@ const formatRole = (role) => {
   return role.replace(/_/g, ' ')
 }
 
+const getMemberId = (member) => member?.user?.id || member?.user_id || member?.id || ''
+
+const getMemberDisplay = (member) => {
+  const profile = member?.profile || member?.user?.profile || {}
+  const name =
+    profile.full_name ||
+    profile.name ||
+    member?.name ||
+    member?.username ||
+    member?.user?.username ||
+    member?.email ||
+    member?.user?.email ||
+    'Pengguna'
+  const username = member?.username || member?.user?.username || ''
+  const email = member?.email || member?.user?.email || ''
+  return { name, username, email }
+}
+
+const DEFAULT_INVITE_ROLE = 'auditee'
 const roleOptions = [
-  { value: 'participant', label: 'Participant' },
-  { value: 'reviewer', label: 'Reviewer' },
-  { value: 'moderator', label: 'Moderator' },
-  { value: 'responsible', label: 'Responsible' },
+  { value: 'auditor', label: 'Auditor' },
+  { value: 'auditee', label: 'Auditee' },
 ]
 
 const inviteSchema = z.object({
   userId: z.string().min(1, 'Pilih anggota yang ingin diundang'),
-  role: z.enum(['participant', 'reviewer', 'moderator', 'responsible'], {
+  role: z.enum(['auditor', 'auditee'], {
     required_error: 'Pilih peran peserta',
     invalid_type_error: 'Peran tidak valid',
   }),
 })
 
-const MANAGER_ROLES = new Set(['responsible', 'moderator'])
+const MANAGER_ROLES = new Set(['auditor', 'group_owner', 'super_admin'])
+
+const normalizeRoleKey = (role) => {
+  if (!role) return ''
+  const cleaned = String(role).toLowerCase().replace(/[^a-z]/g, '')
+  if (cleaned === 'auditoree') return 'auditor'
+  if (cleaned === 'auditee') return 'auditee'
+  if (cleaned === 'owner' || cleaned === 'groupowner') return 'group_owner'
+  return cleaned
+}
 
 export default function ParticipantsTab({ roomId, room }) {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [memberSearch, setMemberSearch] = useState('')
+  const [memberPopoverOpen, setMemberPopoverOpen] = useState(false)
+  
   const { data: me } = useMe({ staleTime: 60_000 })
   const currentUserId = me?.id ?? null
-
-  const userRoleKey = (room?.user_role || '').toLowerCase()
-  const canManageParticipants = MANAGER_ROLES.has(userRoleKey)
 
   const {
     data,
@@ -81,76 +112,151 @@ export default function ParticipantsTab({ roomId, room }) {
     error: participantsErrorObj,
     refetch: refetchParticipants,
   } = useRoomParticipants(roomId, { per_page: 1000 })
+  
   const participants = data?.participants ?? []
   const groupId = room?.group?.id || room?.group_id
+
+  const {
+    data: groupData,
+    isLoading: groupMembersLoading,
+    isError: groupMembersError,
+    error: groupMembersErrorObj,
+    refetch: refetchGroupMembers,
+  } = useGroupMembers(groupId, { 
+    enabled: Boolean(groupId) && dialogOpen,
+    staleTime: 30_000,
+  })
+
+  const allGroupMembers = groupData?.members ?? []
+
+  const availableMembers = useMemo(() => {
+    if (!allGroupMembers?.length) return []
+    
+    const participantUserIds = new Set(participants.map((p) => p.user_id))
+    
+    return allGroupMembers.filter((member) => {
+      const memberId = getMemberId(member)
+      if (!memberId) return false
+      return !participantUserIds.has(memberId)
+    })
+  }, [allGroupMembers, participants])
+
+  const filteredMembers = useMemo(() => {
+    if (!memberSearch.trim()) return availableMembers
+    
+    const search = memberSearch.toLowerCase()
+    return availableMembers.filter((member) => {
+      const { name, username, email } = getMemberDisplay(member)
+      return name.toLowerCase().includes(search) ||
+             username.toLowerCase().includes(search) ||
+             email.toLowerCase().includes(search)
+    })
+  }, [availableMembers, memberSearch])
 
   const myMembership = useMemo(() => {
     if (!currentUserId) return null
     return participants.find((p) => p.user_id === currentUserId) ?? null
   }, [participants, currentUserId])
+  
   const canLeaveRoom = Boolean(myMembership)
-
+  const userRoleKey = normalizeRoleKey(room?.user_role || myMembership?.role || me?.role)
+  const canManageParticipants = MANAGER_ROLES.has(userRoleKey)
   const leaveMutation = useLeaveRoom(roomId)
+  
   const handleLeaveRoom = useCallback(() => {
     if (!roomId || leaveMutation.isPending) return
     leaveMutation.mutate()
   }, [leaveMutation, roomId])
+  
   const leaveErrorMessage = leaveMutation.error?.response?.data?.message || leaveMutation.error?.message || null
-
-  const shouldFetchMembers = dialogOpen && Boolean(groupId) && canManageParticipants
-  const {
-    data: membersData,
-    isLoading: membersLoading,
-    isError: membersError,
-    error: membersErrorObj,
-    refetch: refetchMembers,
-  } = useGroupMembers(groupId, { enabled: shouldFetchMembers })
-
-  const members = membersData?.members ?? []
-  const availableMembers = useMemo(() => {
-    if (!members?.length) return []
-    const participantIds = new Set(participants.map((p) => p.user_id))
-    return members.filter((member) => !participantIds.has(member.id))
-  }, [members, participants])
 
   const {
     control,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(inviteSchema),
-    defaultValues: { userId: '', role: 'participant' },
+    defaultValues: { userId: '', role: DEFAULT_INVITE_ROLE },
   })
+
+  const selectedUserId = watch('userId')
+  const selectedMember = useMemo(() => {
+    if (!selectedUserId || !availableMembers.length) return null
+    return availableMembers.find(m => String(getMemberId(m)) === String(selectedUserId))
+  }, [selectedUserId, availableMembers])
 
   const inviteMutation = useAddRoomParticipant(roomId, {
     onSuccess: () => {
-      reset({ userId: '', role: 'participant' })
+      reset({ userId: '', role: DEFAULT_INVITE_ROLE })
+      setMemberSearch('')
+      setMemberPopoverOpen(false)
       setDialogOpen(false)
+      setTimeout(() => refetchParticipants(), 300)
     },
   })
 
   useEffect(() => {
     if (!dialogOpen) {
-      reset({ userId: '', role: 'participant' })
+      reset({ userId: '', role: DEFAULT_INVITE_ROLE })
+      setMemberSearch('')
+      setMemberPopoverOpen(false)
     }
   }, [dialogOpen, reset])
 
   const onInvite = (values) => {
-    inviteMutation.mutate({ user_id: values.userId, role: values.role })
+    const payload = { user_id: values.userId, role: values.role }
+    console.log('[ParticipantsTab] Invite payload:', payload)
+    inviteMutation.mutate(payload)
   }
 
   const inviteError = inviteMutation.error?.response?.data?.message || inviteMutation.error?.message || null
+  
   const inviteDisabled =
-    !canManageParticipants ||
     !groupId ||
-    membersLoading ||
-    membersError ||
+    groupMembersLoading ||
+    groupMembersError ||
     availableMembers.length === 0 ||
-    inviteMutation.isPending
+    inviteMutation.isPending ||
+    !selectedUserId
 
   const participantsErrorMessage =
     participantsError && (participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta ruangan.')
+
+  const renderSelectedMember = () => {
+    if (!selectedMember) return null
+    
+    const { name, username, email } = getMemberDisplay(selectedMember)
+    
+    return (
+      <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg mb-3">
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="text-xs bg-blue-100 text-blue-700">
+            {getInitials(name)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1">
+          <div className="text-sm font-medium text-blue-900">{name}</div>
+          <div className="text-xs text-blue-700">@{username}</div>
+          {email && <div className="text-xs text-blue-600">{email}</div>}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-blue-700 hover:text-blue-800 hover:bg-blue-100"
+          onClick={() => {
+            setValue('userId', '')
+            setMemberSearch('')
+          }}
+        >
+          Ganti
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <TabsContent value="participants" className="mt-4">
@@ -159,109 +265,266 @@ export default function ParticipantsTab({ roomId, room }) {
           <h3 className="text-lg font-semibold">Daftar Peserta</h3>
           <p className="text-sm text-muted-foreground">Kelola anggota ruangan dan perannya.</p>
           {!canManageParticipants && (
-            <p className="text-xs text-muted-foreground mt-1">Anda tidak memiliki akses untuk mengelola peserta.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Anda tidak memiliki akses untuk mengelola peserta.
+            </p>
           )}
         </div>
+        
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="inline-flex items-center gap-2" disabled={!groupId}>
-              <UserPlus className="w-4 h-4" /> Undang Peserta
+            <Button 
+              size="sm" 
+              className="inline-flex items-center gap-2" 
+              disabled={!groupId}
+            >
+              <UserPlus className="w-4 h-4" /> 
+              Undang Peserta
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Undang anggota ke ruangan</DialogTitle>
-              <DialogDescription>Pilih anggota grup dan tentukan perannya.</DialogDescription>
+              <DialogDescription>
+                Pilih anggota grup dan tentukan perannya.
+              </DialogDescription>
             </DialogHeader>
+            
             {!groupId && (
-              <p className="text-sm text-rose-600">Ruangan belum terhubung dengan grup sehingga tidak dapat mengundang peserta.</p>
+              <p className="text-sm text-rose-600">
+                Ruangan belum terhubung dengan grup sehingga tidak dapat mengundang peserta.
+              </p>
             )}
+            
             {groupId && (
-              <form onSubmit={handleSubmit(onInvite)} className="space-y-4">
-                <div>
+              <form onSubmit={handleSubmit(onInvite)} className="space-y-6">
+                {/* Member Selection with Custom Popover */}
+                <div className="space-y-2">
                   <Label>Anggota Grup</Label>
+                  
+                  {renderSelectedMember()}
+                  
                   <Controller
                     name="userId"
                     control={control}
                     render={({ field }) => (
-                      <Select
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        disabled={
-                          membersLoading || membersError || inviteMutation.isPending || availableMembers.length === 0
-                        }
-                      >
-                        <SelectTrigger className="mt-2">
-                          <SelectValue
-                            placeholder={
-                              membersLoading
-                                ? 'Memuat anggota...'
-                                : availableMembers.length === 0
-                                  ? 'Semua anggota sudah terdaftar'
-                                  : 'Pilih anggota'
+                      <Popover open={memberPopoverOpen} onOpenChange={setMemberPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={memberPopoverOpen}
+                            className={cn(
+                              "w-full justify-between h-auto min-h-10 py-2",
+                              !field.value && "text-muted-foreground",
+                              errors.userId && "border-rose-500"
+                            )}
+                            disabled={
+                              groupMembersLoading || 
+                              groupMembersError || 
+                              inviteMutation.isPending ||
+                              availableMembers.length === 0
                             }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableMembers.map((member) => (
-                            <SelectItem key={member.id} value={member.id}>
-                              {member.profile?.full_name || member.username || member.name || member.email}
-                              {member.username && (
-                                <span className="text-xs text-muted-foreground ml-2">@{member.username}</span>
+                          >
+                            {field.value && selectedMember ? (
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-6 w-6">
+                                  <AvatarFallback className="text-xs">
+                                    {getInitials(getMemberDisplay(selectedMember).name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="truncate">
+                                  {getMemberDisplay(selectedMember).name}
+                                </span>
+                              </div>
+                            ) : (
+                              <span>
+                                {groupMembersLoading
+                                  ? 'Memuat anggota grup...'
+                                  : groupMembersError
+                                  ? 'Error memuat anggota'
+                                  : availableMembers.length === 0
+                                  ? 'Semua anggota sudah menjadi peserta'
+                                  : 'Cari dan pilih anggota...'}
+                              </span>
+                            )}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        
+                        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                          <div className="border-b">
+                            <div className="flex items-center px-3 py-2">
+                              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                              <Input
+                                placeholder="Cari nama atau email..."
+                                value={memberSearch}
+                                onChange={(e) => setMemberSearch(e.target.value)}
+                                className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-0"
+                              />
+                              {memberSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => setMemberSearch('')}
+                                  className="ml-2"
+                                >
+                                  <X className="h-4 w-4 opacity-50 hover:opacity-100" />
+                                </button>
                               )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                            </div>
+                          </div>
+                          
+                          <div className="max-h-64 overflow-y-auto">
+                            {groupMembersLoading ? (
+                              <div className="py-8 text-center">
+                                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                                <p className="text-sm text-muted-foreground">Memuat anggota...</p>
+                              </div>
+                            ) : filteredMembers.length === 0 ? (
+                              <div className="py-8 text-center">
+                                <p className="text-sm text-muted-foreground">
+                                  {memberSearch 
+                                    ? `Tidak ditemukan "${memberSearch}"`
+                                    : 'Tidak ada anggota tersedia'
+                                  }
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="p-1">
+                                {filteredMembers.map((member) => {
+                                  const memberId = getMemberId(member)
+                                  const { name, username, email } = getMemberDisplay(member)
+                                  const isSelected = field.value === memberId
+                                  
+                                  return (
+                                    <button
+                                      key={memberId}
+                                      type="button"
+                                      className={cn(
+                                        "w-full text-left px-3 py-2 rounded-md flex items-center gap-3",
+                                        "hover:bg-gray-100 transition-colors",
+                                        isSelected && "bg-blue-50"
+                                      )}
+                                      onClick={() => {
+                                        field.onChange(memberId)
+                                        setMemberPopoverOpen(false)
+                                        setMemberSearch('')
+                                      }}
+                                    >
+                                      <Avatar className="h-8 w-8">
+                                        <AvatarFallback className="text-xs">
+                                          {getInitials(name)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium truncate">{name}</div>
+                                        <div className="text-xs text-muted-foreground truncate">
+                                          @{username}
+                                        </div>
+                                        {email && (
+                                          <div className="text-xs text-muted-foreground truncate">
+                                            {email}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {isSelected && (
+                                        <Check className="h-4 w-4 text-blue-600 shrink-0" />
+                                      )}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     )}
                   />
-                  {errors.userId && <p className="text-xs text-rose-600 mt-1">{errors.userId.message}</p>}
-                  {membersError && (
+                  
+                  {errors.userId && (
+                    <p className="text-xs text-rose-600 mt-1">{errors.userId.message}</p>
+                  )}
+                  
+                  {groupMembersError && (
                     <p className="text-xs text-rose-600 mt-1">
-                      {membersErrorObj?.response?.data?.message || membersErrorObj?.message || 'Gagal memuat anggota grup.'}
-                      <button type="button" className="ml-2 underline" onClick={() => refetchMembers()}>
+                      {groupMembersErrorObj?.response?.data?.message || 
+                       groupMembersErrorObj?.message || 
+                       'Gagal memuat anggota grup.'}
+                      <button 
+                        type="button" 
+                        className="ml-2 underline hover:text-rose-800" 
+                        onClick={() => refetchGroupMembers()}
+                      >
                         Coba lagi
                       </button>
                     </p>
                   )}
                 </div>
 
-                <div>
+                {/* Role Selection */}
+                <div className="space-y w-full">
                   <Label>Peran Peserta</Label>
                   <Controller
                     name="role"
                     control={control}
                     render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange} disabled={inviteMutation.isPending}>
-                        <SelectTrigger className="mt-2">
-                          <SelectValue />
+                      <Select 
+                        value={field.value} 
+                        onValueChange={field.onChange} 
+                        disabled={inviteMutation.isPending || !selectedUserId}
+                      >
+                        <SelectTrigger className={cn(errors.role && "border-rose-500")}>
+                          <SelectValue placeholder="Pilih peran peserta" />
                         </SelectTrigger>
                         <SelectContent>
                           {roleOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
-                              {option.label}
+                              <div className="flex items-center gap-2">
+                                <span>{option.label}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({option.value})
+                                </span>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     )}
                   />
-                  {errors.role && <p className="text-xs text-rose-600 mt-1">{errors.role.message}</p>}
+                  {errors.role && (
+                    <p className="text-xs text-rose-600 mt-1">{errors.role.message}</p>
+                  )}
                 </div>
 
-                {availableMembers.length === 0 && !membersLoading && !membersError && (
-                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-md p-2">
+                {availableMembers.length === 0 && !groupMembersLoading && !groupMembersError && (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-md p-3">
                     Semua anggota grup sudah menjadi peserta ruangan ini.
                   </p>
                 )}
 
                 {inviteError && (
-                  <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-md p-2">{inviteError}</p>
+                  <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-md p-3">
+                    <span className="font-medium">Error: </span>
+                    {inviteError}
+                  </p>
                 )}
 
-                <DialogFooter className="pt-2">
+                <DialogFooter className="pt-2 gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setDialogOpen(false)} 
+                    disabled={inviteMutation.isPending}
+                  >
+                    Batal
+                  </Button>
                   <Button type="submit" disabled={inviteDisabled}>
-                    {inviteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Undang
+                    {inviteMutation.isPending && (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    )}
+                    {inviteMutation.isPending ? 'Mengundang...' : 'Undang Peserta'}
                   </Button>
                 </DialogFooter>
               </form>
@@ -280,11 +543,13 @@ export default function ParticipantsTab({ roomId, room }) {
       )}
 
       {isLoading && <ParticipantsSkeleton />}
+      
       {!isLoading && participants.length === 0 && (
         <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
           Belum ada peserta yang terdaftar di ruangan ini.
         </div>
       )}
+      
       {!isLoading && participants.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {participants.map((participant) => (
@@ -304,127 +569,61 @@ export default function ParticipantsTab({ roomId, room }) {
   )
 }
 
-function ParticipantCard({ participant, roomId, canManageParticipants, isCurrentUser, onLeave, leaveState }) {
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const updateRoleMutation = useUpdateRoomParticipant(roomId, participant.id, {})
-  const removeParticipantMutation = useRemoveRoomParticipant(roomId, participant.id, {
-    onSuccess: () => setConfirmOpen(false),
-  })
-
+function ParticipantCard({ 
+  participant, 
+  roomId, 
+  canManageParticipants, 
+  isCurrentUser, 
+  onLeave, 
+  leaveState 
+}) {
   const profileName = participant.user?.profile?.full_name || participant.user?.username || 'Pengguna'
-  const roleUpdatePending = updateRoleMutation.isPending
-  const removePending = removeParticipantMutation.isPending
-  const inlineError =
-    updateRoleMutation.error?.response?.data?.message ||
-    removeParticipantMutation.error?.response?.data?.message ||
-    updateRoleMutation.error?.message ||
-    removeParticipantMutation.error?.message ||
-    null
-
   const leaveError = isCurrentUser ? leaveState?.error : null
 
-  const handleRoleChange = (value) => {
-    if (!value || value === participant.role) return
-    updateRoleMutation.mutate({ role: value })
-  }
-
-  const handleRemove = () => {
-    removeParticipantMutation.mutate()
-  }
-
   return (
-    <div className="p-3 border rounded-md bg-white">
+    <div className="p-4 border rounded-lg bg-white hover:shadow-sm transition-shadow">
       <div className="flex items-start gap-3">
-        <Avatar>
+        <Avatar className="h-10 w-10">
           <AvatarFallback>{getInitials(profileName)}</AvatarFallback>
         </Avatar>
-        <div className="flex-1">
-          <div className="font-medium">{profileName}</div>
-          <div className="text-sm text-muted-foreground">{participant.user?.username || participant.user_id}</div>
-          <div className="text-xs text-muted-foreground mt-1">Gabung: {participant.added_at || '—'}</div>
+        
+        <div className="flex-1 min-w-0">
+          <div className="font-medium truncate">{profileName}</div>
+          <div className="text-sm text-muted-foreground truncate">
+            {participant.user?.username || participant.user_id}
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Gabung: {participant.added_at || '—'}
+          </div>
         </div>
+        
         <div className="flex flex-col items-end gap-2">
-          {canManageParticipants ? (
-            <Select
-              value={participant.role}
-              onValueChange={handleRoleChange}
-              disabled={roleUpdatePending || removePending}
-            >
-              <SelectTrigger className="w-40 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {roleOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="text-sm">
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <div className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-muted-foreground capitalize">
-              {formatRole(participant.role)}
-            </div>
-          )}
+          <div className="text-xs px-2 py-1 rounded-full bg-slate-100 text-muted-foreground capitalize">
+            {formatRole(participant.role)}
+          </div>
 
-          {isCurrentUser ? (
+          {isCurrentUser && (
             <Button
               variant="outline"
               size="sm"
               onClick={onLeave}
               disabled={!onLeave || leaveState?.isPending}
+              className="w-full"
             >
               {leaveState?.isPending ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               ) : (
                 <LogOut className="w-4 h-4 mr-2" />
               )}
-              Keluar Ruangan
+              Keluar
             </Button>
-          ) : (
-            canManageParticipants && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={removePending}
-                >
-                  {removePending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <UserMinus className="w-4 h-4 mr-2" />
-                  )}
-                  Hapus
-                </Button>
-                <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Hapus Peserta</DialogTitle>
-                      <DialogDescription>
-                        Peserta <span className="font-semibold">{profileName}</span> akan dihapus dari ruangan ini.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={removePending}>
-                        Batal
-                      </Button>
-                      <Button variant="destructive" onClick={handleRemove} disabled={removePending}>
-                        {removePending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Hapus Peserta
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )
           )}
         </div>
       </div>
-      {roleUpdatePending && (
-        <p className="text-xs text-muted-foreground mt-2">Menyimpan perubahan peran...</p>
+
+      {leaveError && (
+        <p className="text-xs text-rose-600 mt-2">{leaveError}</p>
       )}
-      {inlineError && <p className="text-xs text-rose-600 mt-2">{inlineError}</p>}
-      {leaveError && <p className="text-xs text-rose-600 mt-2">{leaveError}</p>}
     </div>
   )
 }
@@ -433,13 +632,13 @@ function ParticipantsSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {Array.from({ length: 4 }).map((_, idx) => (
-        <div key={idx} className="flex items-center gap-3 p-3 border rounded-md bg-white">
-          <Skeleton className="w-10 h-10 rounded-full" />
+        <div key={idx} className="flex items-center gap-3 p-4 border rounded-lg bg-white">
+          <Skeleton className="h-10 w-10 rounded-full" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-3 w-3/4" />
           </div>
-          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-8 w-20" />
         </div>
       ))}
     </div>

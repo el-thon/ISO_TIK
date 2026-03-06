@@ -79,8 +79,38 @@ export async function listParticipants(roomId, params = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.get(`/rooms/${roomId}/participants`, { params })
 	const payload = unwrap(res) ?? {}
+	const isUuidLike = (value) => {
+		if (!value) return false
+		const raw = String(value).trim()
+		if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw)) {
+			return true
+		}
+		const compact = raw.replace(/-/g, '')
+		return /^[0-9a-f]{16,64}$/i.test(compact)
+	}
+	const resolveParticipantId = (participant) => {
+		if (!participant) return null
+		const candidates = [
+			participant.id,
+			participant.participant_id,
+			participant.room_participant_id,
+			participant.participant_uuid,
+			participant.room_participant?.id,
+			participant.pivot?.id,
+			participant.uuid,
+		].filter(Boolean)
+		const uuidCandidate = candidates.find(isUuidLike)
+		return uuidCandidate || null
+	}
 	return {
-		participants: ensureArray(payload.participants ?? []),
+			participants: ensureArray(payload.participants ?? []).map((participant) => {
+				const resolvedParticipantId = resolveParticipantId(participant)
+				return {
+					...participant,
+					id: resolvedParticipantId ?? participant?.id,
+					participant_id: resolvedParticipantId ?? participant?.participant_id,
+				}
+			}),
 		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
 	}
 }

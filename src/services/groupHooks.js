@@ -51,6 +51,17 @@ export function useGroupRooms(groupId, options = {}) {
   })
 }
 
+export function useGroupUserSearch(groupId, params = {}, options = {}) {
+  const { enabled, ...rest } = options
+  return useQuery({
+    queryKey: ['groups', groupId, 'user-search', params],
+    queryFn: () => groupService.searchGroupUsers(groupId, params),
+    keepPreviousData: true,
+    ...rest,
+    enabled: computeEnabled({ enabled }, Boolean(groupId)),
+  })
+}
+
 export function useGroupJoinCode(groupId, options = {}) {
   const { enabled, ...rest } = options
   return useQuery({

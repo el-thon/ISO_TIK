@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { Users, Shield, Tag, Lock } from 'lucide-react'
+import { Users, Shield, Tag, Lock, FileText } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import RBAC from './RBAC'
 import SecuritySettings from './SecuritySettings'
 import Labels from './Labels'
 import Compliance from './Compliance'
+import Clauses from './Clauses'
 import { Card, CardContent } from '@/components/ui/card'
 
 export default function AdministrationPage() {
@@ -14,6 +15,7 @@ export default function AdministrationPage() {
     { key: 'rbac', label: 'RBAC', Icon: Users },
     { key: 'security', label: 'Pengaturan Keamanan', Icon: Shield },
     { key: 'labels', label: 'Label', Icon: Tag },
+    { key: 'clauses', label: 'Klausul', Icon: FileText },
     { key: 'compliance', label: 'Kepatuhan', Icon: Lock },
   ]
 
@@ -50,8 +52,9 @@ export default function AdministrationPage() {
           {tab === 'rbac' && <RBAC />}
           {tab === 'security' && <SecuritySettings />}
           {tab === 'labels' && <Labels />}
+          {tab === 'clauses' && <Clauses />}
           {tab === 'compliance' && <Compliance />}
-          {tab !== 'rbac' && tab !== 'security' && tab !== 'labels' && (
+          {tab !== 'rbac' && tab !== 'security' && tab !== 'labels' && tab !== 'clauses' && (
             <Card>
               <CardContent>
                 <div className="text-muted-foreground">Fitur ini sedang dalam pengembangan.</div>

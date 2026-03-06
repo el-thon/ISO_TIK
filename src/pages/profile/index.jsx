@@ -383,11 +383,6 @@ export default function ProfilePage() {
                 <h2 className="text-heading-2 font-semibold">Profile</h2>
                 <p className="text-body-md text-muted-foreground">Kelola informasi pribadi dan preferensi akun</p>
               </div>
-              <div>
-                <Button variant="outline" size="sm" className="flex items-center gap-2">
-                  <Edit3 className="w-4 h-4" /> Edit
-                </Button>
-              </div>
             </div>
 
             {renderContent()}

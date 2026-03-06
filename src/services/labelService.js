@@ -25,6 +25,7 @@ export async function createLabel(payload = {}) {
     scope: payload.scope || DEFAULT_SCOPE,
     name: payload.name,
     color: payload.color,
+    scope_id: payload.scope_id,
   })
   return unwrap(res)
 }
@@ -35,6 +36,7 @@ export async function updateLabel(labelId, payload = {}) {
     scope: payload.scope || DEFAULT_SCOPE,
     name: payload.name,
     color: payload.color,
+    scope_id: payload.scope_id,
   })
   return unwrap(res)
 }

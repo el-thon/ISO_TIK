@@ -14,4 +14,4 @@ function AuthLayout({ children, title, subtitle }) {
   )
 }
 
-export default AuthLayout
+export default AuthLayout;

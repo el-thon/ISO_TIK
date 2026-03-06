@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Loader2, Trash2, Edit2, KeyRound, UserPlus, ShieldCheck, Users, RefreshCcw } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
+import { useMe } from '@/services/authHooks'
 import {
   useAdminUsersList,
   useAdminUserStatistics,
@@ -34,6 +35,7 @@ const DEFAULT_BULK = { status: 'inactive', reason: '' }
 
 export default function UsersPage() {
   const queryClient = useQueryClient()
+  const { data: meData } = useMe({ staleTime: 60_000 })
   const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
   const [createOpen, setCreateOpen] = useState(false)

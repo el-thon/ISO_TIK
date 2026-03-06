@@ -1,22 +1,31 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { GripVertical, Trash2, PlusSquare, UploadCloud, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Loader2, ChevronsUpDown, FileText, Calendar, User, Building2, Lock, Save, X } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
-import { Card, CardContent, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useRooms } from '@/services/roomHooks'
-import { useLabels } from '@/services/labelHooks'
 import { useCreateTopic } from '@/services/topicHooks'
 import * as topicService from '@/services/topicService'
-import { useQuill } from 'react-quilljs'
-import 'quill/dist/quill.snow.css'
+import * as documentService from '@/services/documentService'
+import { cn } from '@/lib/utils'
+import { useAdminClauses } from '@/services/adminClauseHooks'
 
+// PERBAIKAN 1: Sesuaikan securityOptions dengan yang diharapkan backend (L0, L1, L2, L3)
 const securityOptions = [
-  { value: 'public', label: 'Public' },
-  { value: 'internal', label: 'Internal' },
-  { value: 'restricted', label: 'Restricted' },
+  { value: 'L0', label: 'L0 - Publik', description: 'Dapat diakses semua orang' },
+  { value: 'L1', label: 'L1 - Internal', description: 'Hanya internal organisasi' },
+  { value: 'L2', label: 'L2 - Rahasia', description: 'Akses terbatas' },
+  { value: 'L3', label: 'L3 - Sangat Rahasia', description: 'Akses sangat terbatas' },
 ]
 
 const normalizeId = (value) => {
@@ -25,35 +34,17 @@ const normalizeId = (value) => {
   return Number.isNaN(numeric) ? value : numeric
 }
 
-const blockTitle = {
-  text: 'Text block',
-  richtext: 'Rich text block',
-  link: 'Link block',
-  image: 'Image block',
-  file: 'File block',
-  form: 'Form block',
+const buildClauseLabel = (clause) => {
+  if (!clause) return ''
+  if (clause.code && clause.name) return `${clause.code} - ${clause.name}`
+  return clause.name || clause.code || ''
 }
 
-const mapBlockTypeToApi = (type) => {
-  switch (type) {
-    case 'richtext':
-      return 'rich_text'
-    case 'form':
-      return 'form_data'
-    case 'text':
-    case 'image':
-    case 'file':
-    case 'link':
-      return type
-    default:
-      return 'text'
-  }
-}
-
-const mapVisibilityToApi = (block) => {
-  if (typeof block.visibility === 'string') return block.visibility
-  return block.visible === false ? 'restricted' : 'visible'
-}
+const FINDING_TYPES = [
+  { value: 'minor', label: 'Minor', color: 'bg-yellow-100 text-yellow-800', description: 'Ketidaksesuaian ringan' },
+  { value: 'major', label: 'Mayor', color: 'bg-orange-100 text-orange-800', description: 'Ketidaksesuaian signifikan' },
+  { value: 'observation', label: 'Observasi', color: 'bg-blue-100 text-blue-800', description: 'Catatan untuk perbaikan' },
+]
 
 const stringifyId = (value) => {
   if (value == null) return null
@@ -84,7 +75,6 @@ const findUuidInValue = (value) => {
 const isLikelyTopicId = (value) => {
   if (typeof value !== 'string') return false
   const trimmed = value.trim()
-  // Accept UUID-like or numeric IDs
   if (/^[0-9a-fA-F-]{32,40}$/.test(trimmed)) return true
   if (/^\d{1,20}$/.test(trimmed)) return true
   return false
@@ -129,7 +119,6 @@ const resolveCreatedTopicId = (payload) => {
     if (normalized && isLikelyTopicId(normalized)) return normalized
   }
 
-  // Fallback: attempt to find UUID inside message/strings
   const messageUuid = findUuidInValue(payload.message)
   if (messageUuid) return messageUuid
 
@@ -139,31 +128,168 @@ const resolveCreatedTopicId = (payload) => {
   return null
 }
 
-function RichTextEditor({ value, onChange, placeholder = 'Enter rich text content...' }) {
-  const { quill, quillRef } = useQuill({ theme: 'snow', placeholder })
-  const lastHtml = useRef('')
-
-  useEffect(() => {
-    if (quill && typeof value === 'string' && value !== lastHtml.current) {
-      lastHtml.current = value
-      quill.clipboard.dangerouslyPasteHTML(value || '')
+function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...', loading = false }) {
+  const selected = new Set(value)
+  const toggle = (val) => {
+    if (selected.has(val)) {
+      onChange(value.filter((item) => item !== val))
+    } else {
+      onChange([...value, val])
     }
-  }, [quill, value])
+  }
 
-  useEffect(() => {
-    if (!quill) return
-    const handler = () => {
-      const html = quill.root.innerHTML
-      lastHtml.current = html
-      onChange?.(html)
-    }
-    quill.on('text-change', handler)
-    return () => {
-      quill.off('text-change', handler)
-    }
-  }, [quill, onChange])
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full justify-between h-10">
+          <span className="truncate flex items-center gap-2">
+            {value.length > 0 ? (
+              <>
+                <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                  {value.length}
+                </Badge>
+                <span>{value.length} klausul dipilih</span>
+              </>
+            ) : (
+              placeholder
+            )}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+        <div className="max-h-[300px] overflow-y-auto p-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : options.length === 0 ? (
+            <div className="text-center py-6 text-sm text-muted-foreground">
+              Tidak ada klausul tersedia
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {options.map((option) => (
+                <label
+                  key={option.value}
+                  className={cn(
+                    "flex items-start gap-2 p-2 rounded-md text-sm cursor-pointer hover:bg-accent",
+                    selected.has(option.value) && "bg-accent"
+                  )}
+                >
+                  <Checkbox
+                    checked={selected.has(option.value)}
+                    onCheckedChange={() => toggle(option.value)}
+                    className="mt-0.5"
+                  />
+                  <span className="leading-tight flex-1">{option.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
-  return <div ref={quillRef} />
+function FindingItem({ index, finding, onUpdate, onRemove, showRemove, clauseOptions, clausesLoading, documents, documentsLoading }) {
+  return (
+    <Card className="border-l-4 border-l-blue-500">
+      <CardHeader className="py-3 px-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="h-6 w-6 rounded-full p-0 flex items-center justify-center">
+              {index + 1}
+            </Badge>
+            <span className="text-sm font-medium">Temuan #{index + 1}</span>
+          </div>
+          {showRemove && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onRemove(index)}
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 px-4 pb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Jenis Temuan</Label>
+            <Select
+              value={finding.findingType}
+              onValueChange={(value) => onUpdate(index, { findingType: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih jenis temuan" />
+              </SelectTrigger>
+              <SelectContent>
+                {FINDING_TYPES.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <div className="flex items-center gap-2">
+                      <Badge className={cn("px-1.5 py-0", option.color)}>
+                        {option.label}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{option.description}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Klausul / Acuan</Label>
+            <MultiSelect
+              options={clauseOptions}
+              value={finding.clauseReferences}
+              onChange={(value) => onUpdate(index, { clauseReferences: value })}
+              placeholder={clausesLoading ? 'Memuat klausul...' : 'Pilih klausul'}
+              loading={clausesLoading}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Uraian Temuan</Label>
+          <textarea
+            rows={3}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            value={finding.findingDescription}
+            onChange={(e) => onUpdate(index, { findingDescription: e.target.value })}
+            placeholder="Jelaskan temuan secara detail..."
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Bukti Objektif</Label>
+          <Select
+            value={finding.objectiveEvidence}
+            onValueChange={(value) => onUpdate(index, { objectiveEvidence: value })}
+            disabled={documentsLoading}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={documentsLoading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'} />
+            </SelectTrigger>
+            <SelectContent>
+              {documents.map((document) => (
+                <SelectItem key={document.id} value={String(document.id)}>
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span>{document.filename || document.name || document.original_name || `Dokumen ${document.id}`}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function CreateTopic() {
@@ -172,26 +298,39 @@ export default function CreateTopic() {
   const roomFromState = location?.state?.roomId ? String(location.state.roomId) : ''
   const roomTitleFromState = location?.state?.roomTitle || null
 
-  const [step, setStep] = useState(1)
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
   const [selectedRoom, setSelectedRoom] = useState(roomFromState)
-  const [selectedLabels, setSelectedLabels] = useState([])
-  const [securityLevel, setSecurityLevel] = useState('internal')
-  const [deadline, setDeadline] = useState('')
-  const [blocks, setBlocks] = useState([])
+  // PERBAIKAN 2: Set default security level ke 'L1' (Internal) sesuai dengan backend
+  const [securityLevel, setSecurityLevel] = useState('L1')
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  const [activeTab, setActiveTab] = useState('audit-info')
 
-  // Initialize default values
+  const [auditCode, setAuditCode] = useState('')
+  const [auditedUnit, setAuditedUnit] = useState('')
+  const [auditDate, setAuditDate] = useState('')
+  const [auditorName, setAuditorName] = useState('')
+  const [auditorNip, setAuditorNip] = useState('')
+  const [auditeeName, setAuditeeName] = useState('')
+  const [auditeeNip, setAuditeeNip] = useState('')
+
+  const [findings, setFindings] = useState([
+    {
+      findingType: 'minor',
+      findingDescription: '',
+      clauseReferences: [],
+      objectiveEvidence: '',
+    },
+  ])
+  const [documents, setDocuments] = useState([])
+  const [documentsLoading, setDocumentsLoading] = useState(false)
+  const [documentsError, setDocumentsError] = useState(null)
+
   useEffect(() => {
     if (!selectedRoom && roomFromState) {
       setSelectedRoom(roomFromState)
     }
-    if (!securityLevel) {
-      setSecurityLevel('internal')
-    }
-  }, [roomFromState, securityLevel])
+    // PERBAIKAN 3: Hapus setSecurityLevel di sini karena sudah di-set di state awal
+  }, [roomFromState, selectedRoom])
 
   const {
     data: roomsData,
@@ -202,17 +341,36 @@ export default function CreateTopic() {
   } = useRooms({ per_page: 100 })
   const rooms = roomsData?.rooms ?? []
   const {
-    data: labelsData,
-    isLoading: labelsLoading,
-    isError: labelsError,
-    error: labelsErrorObj,
-    refetch: refetchLabels,
-  } = useLabels()
-  const labels = labelsData?.labels ?? []
-  const labelsMeta = labelsData?.meta ?? {}
-  const labelsSupported = labelsMeta.supported ?? true
+    data: clausesData,
+    isLoading: clausesLoading,
+    isError: clausesError,
+    error: clausesErrorObj,
+    refetch: refetchClauses,
+  } = useAdminClauses({ is_active: true, per_page: 100 })
+  const clauses = clausesData?.clauses ?? []
+  const clauseOptions = useMemo(
+    () => clauses.map((clause) => ({ value: String(clause.id), label: buildClauseLabel(clause) })),
+    [clauses]
+  )
   const createTopic = useCreateTopic()
   const isBusy = createTopic.isPending || submitting
+
+  useEffect(() => {
+    const loadDocuments = async () => {
+      setDocumentsLoading(true)
+      setDocumentsError(null)
+      try {
+        const res = await documentService.listDocuments({ per_page: 100 })
+        setDocuments(res?.documents ?? [])
+      } catch (err) {
+        setDocumentsError(err?.response?.data?.message || err?.message || 'Gagal memuat dokumen.')
+      } finally {
+        setDocumentsLoading(false)
+      }
+    }
+
+    loadDocuments()
+  }, [])
 
   const currentRoomName = useMemo(() => {
     if (selectedRoom) {
@@ -222,283 +380,96 @@ export default function CreateTopic() {
     return roomTitleFromState || '-'
   }, [rooms, selectedRoom, roomTitleFromState])
 
-  const selectedLabelObjects = useMemo(() => {
-    if (!selectedLabels.length) return []
-    const selection = new Set(selectedLabels.map((value) => String(value)))
-    return labels.filter((label) => selection.has(String(label.id)))
-  }, [labels, selectedLabels])
-
-  const stepTitles = {
-    1: 'Basic Information',
-    2: 'Content Blocks',
-    3: 'Review & Publish',
+  const addFinding = () => {
+    setFindings((prev) => [
+      ...prev,
+      {
+        findingType: 'minor',
+        findingDescription: '',
+        clauseReferences: [],
+        objectiveEvidence: '',
+      },
+    ])
+    setActiveTab('findings')
   }
 
-  const stepCircleClass = (i) => {
-    if (i < step) return 'w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center'
-    if (i === step) return 'w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center'
-    return 'w-8 h-8 rounded-full bg-slate-100 text-muted-foreground flex items-center justify-center'
+  const removeFinding = (index) => {
+    setFindings((prev) => prev.filter((_, idx) => idx !== index))
   }
 
-  const connectorClass = (i) => (i < step ? 'w-24 h-1 bg-emerald-500 rounded-full' : 'w-24 h-1 bg-slate-200 rounded-full')
-
-  const isLabelSelected = (labelId) => selectedLabels.some((value) => String(value) === String(labelId))
-
-  const toggleLabel = (labelId) => {
-    if (!labelsSupported) return
-    setSelectedLabels((prev) => {
-      const key = String(labelId)
-      if (prev.some((value) => String(value) === key)) {
-        return prev.filter((value) => String(value) !== key)
-      }
-      return [...prev, key]
-    })
+  const updateFinding = (index, patch) => {
+    setFindings((prev) => prev.map((row, idx) => (idx === index ? { ...row, ...patch } : row)))
   }
-
-  const addBlock = (type) => {
-    const id = Date.now().toString()
-    const base = {
-      id,
-      type,
-      title: blockTitle[type] || 'New block',
-      visible: true,
-    }
-    switch (type) {
-      case 'link':
-        setBlocks((prev) => [...prev, { ...base, url: '' }])
-        break
-      case 'form':
-        setBlocks((prev) => [...prev, { ...base, fields: [{ id: `${id}-f-1`, name: '', value: '' }] }])
-        break
-      case 'image':
-      case 'file':
-        setBlocks((prev) => [...prev, { ...base, file: null, fileName: '' }])
-        break
-      default:
-        setBlocks((prev) => [...prev, { ...base, content: '' }])
-    }
-  }
-
-  const removeBlock = (id) => {
-    setBlocks((prev) => prev.filter((block) => block.id !== id))
-  }
-
-  const updateBlock = (id, patch) => {
-    setBlocks((prev) => prev.map((block) => (block.id === id ? { ...block, ...patch } : block)))
-  }
-
-  const serializeBlocks = () =>
-    blocks.map((block, index) => {
-      const payload = {
-        label: block.title?.trim() || `Konten ${index + 1}`,
-        type: mapBlockTypeToApi(block.type),
-        order_index: index + 1,
-        visibility: mapVisibilityToApi(block),
-        value: '',
-      }
-
-      if (payload.type === 'link') {
-        payload.value = (block.url || '').trim()
-      } else if (payload.type === 'form_data') {
-        const fields = (block.fields || []).map((field, fieldIdx) => ({
-          id: field.id || `${block.id}-field-${fieldIdx + 1}`,
-          name: field.name?.trim() || `Field ${fieldIdx + 1}`,
-          value: field.value ?? '',
-        }))
-        payload.metadata = { fields }
-        payload.value = ''
-      } else if (payload.type === 'image' || payload.type === 'file') {
-        payload.value = (block.fileName || '').trim()
-        if (block.file) {
-          payload.metadata = {
-            name: block.file.name,
-            size: block.file.size,
-            type: block.file.type,
-            url: block.fileName || block.file.name,
-          }
-        }
-      } else {
-        payload.value = block.content ?? ''
-      }
-
-      if (!payload.metadata || Object.keys(payload.metadata).length === 0) delete payload.metadata
-      return payload
-    })
 
   const validatePhase1 = () => {
     const validationErrors = {}
     const chosenRoom = selectedRoom || roomFromState || ''
-    if (!title.trim()) validationErrors.title = 'Title is required.'
-    if (!description.trim()) validationErrors.description = 'Description is required.'
-    if (!chosenRoom) validationErrors.room = 'Please select a room.'
+    if (!chosenRoom) validationErrors.room = 'Pilih ruangan terlebih dahulu.'
+    if (!auditCode.trim()) validationErrors.auditCode = 'Kode/nomor audit wajib diisi.'
+    if (!auditedUnit.trim()) validationErrors.auditedUnit = 'Proses/layanan/unit wajib diisi.'
+    if (!auditDate.trim()) validationErrors.auditDate = 'Tanggal audit wajib diisi.'
+    if (!auditorName.trim()) validationErrors.auditorName = 'Nama auditor wajib diisi.'
+    if (!findings.length || !findings.some((row) => row.findingDescription.trim())) {
+      validationErrors.findings = 'Minimal satu temuan harus diisi.'
+    }
     setErrors(validationErrors)
     return { ok: Object.keys(validationErrors).length === 0, chosenRoom }
   }
 
-  const handleNext = () => {
-    if (step === 1) {
-      const { ok, chosenRoom } = validatePhase1()
-      if (!ok) return
-      if (chosenRoom) setSelectedRoom(String(chosenRoom))
-      setStep(2)
-      return
-    }
-    if (step === 2) {
-      setStep(3)
-      return
-    }
-    handleSubmit('publish')
-  }
-
-  const handleBack = () => {
-    if (step > 1) setStep((prev) => prev - 1)
-    else navigate(-1)
-  }
-
   const buildPayload = (mode, roomId) => {
     const payload = {
-      title: title.trim(),
-      description: description.trim(),
-      security_level: securityLevel || undefined,
-      deadline_at: deadline ? new Date(deadline).toISOString() : undefined,
+      title: auditCode.trim() || 'Daftar Temuan Ketidaksesuaian',
+      description: auditedUnit.trim(),
+      // PERBAIKAN 4: Kirim security_level sesuai format backend (L0, L1, L2, L3)
+      security_level: securityLevel,
       status: mode === 'publish' ? 'in_review' : 'draft',
     }
     Object.keys(payload).forEach((key) => {
       if (payload[key] === undefined || payload[key] === '') delete payload[key]
     })
     payload.room_id = normalizeId(roomId)
-    if (labelsSupported && selectedLabels.length) {
-      const labelIds = selectedLabels
-        .map((value) => normalizeId(value))
-        .filter((value) => value !== undefined && value !== null && value !== '')
-      if (labelIds.length) payload.labels = labelIds
-    }
     return payload
   }
 
   const createInputItemsForTopic = async (topicId) => {
-    const serialized = serializeBlocks()
-    if (!serialized.length) return []
-
-    const createdItems = []
-
-    for (const payload of serialized) {
-      try {
-        const item = await topicService.createInputItem(topicId, payload)
-        createdItems.push(item)
-      } catch {
-        // ignore input item creation error
-      }
+    const payload = {
+      label: 'Form Daftar Temuan Ketidaksesuaian',
+      type: 'form_data',
+      order_index: 1,
+      visibility: 'visible',
+      value: '',
+      metadata: {
+        audit_code: auditCode.trim(),
+        audited_unit: auditedUnit.trim(),
+        audit_date: auditDate,
+        auditor: { name: auditorName.trim(), nip: auditorNip.trim() },
+        auditee: { name: auditeeName.trim(), nip: auditeeNip.trim() },
+        findings: findings.map((row, index) => ({
+          no: index + 1,
+          finding_type: row.findingType,
+          finding_description: row.findingDescription.trim(),
+          clause_references: row.clauseReferences,
+          objective_evidence: row.objectiveEvidence,
+        })),
+      },
     }
 
-    // Upload attachments for file/image blocks after items exist
-    const uploadableBlocks = blocks
-      .map((block, index) => ({ ...block, order_index: index + 1 }))
-      .filter((block) => (block.type === 'image' || block.type === 'file') && block.file)
-
-    // Fallback: if no items were returned (API silent), fetch current items
-    let itemsForMatch = createdItems
-    if (!itemsForMatch.length) {
-      try {
-        const fetched = await topicService.getTopicInputItems(topicId)
-        itemsForMatch = fetched?.items || []
-      } catch {
-        // ignore input items fetch error
-      }
+    try {
+      const item = await topicService.createInputItem(topicId, payload)
+      return [item]
+    } catch {
+      return []
     }
-
-    const buildAttachmentMetadata = (uploadResult, file) => {
-      const att = uploadResult?.attachment || {}
-
-      // Resolve best available URL/path from backend (handles renamed files)
-      const resolveUrl = () => {
-        const candidates = [
-          uploadResult?.url,
-          att.download_url,
-          att.url,
-          att.storage_url,
-          att.file_url,
-          att.file_path,
-          att.filepath,
-          att.path,
-          att.location,
-          att.full_path,
-          att.relative_path,
-          att.uri,
-        ].filter(Boolean)
-
-        for (const raw of candidates) {
-          if (typeof raw !== 'string') continue
-          const trimmed = raw.trim()
-          if (!trimmed) continue
-          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
-          if (trimmed.startsWith('/')) return trimmed
-          return `/${trimmed}`
-        }
-
-        if (att.id) return `/api/v1/attachments/${att.id}/download`
-        return null
-      }
-
-      const bestUrl = resolveUrl()
-      const storageUrl = bestUrl && !bestUrl.startsWith('http') ? bestUrl : att.storage_url || (att.path ? `/${att.path}` : undefined)
-      const downloadUrl = bestUrl
-      const mime = uploadResult?.type || att.mime_type || file?.type
-      const filename = uploadResult?.filename || att.filename || att.original_name || file?.name
-      const size = uploadResult?.size || att.size_bytes || att.size || file?.size
-
-      return {
-        metadata: {
-          attachment_id: att.id,
-          name: filename,
-          filename,
-          size,
-          size_bytes: size,
-          type: mime,
-          mime_type: mime,
-          storage_url: storageUrl || undefined,
-          download_url: downloadUrl || undefined,
-          url: downloadUrl || storageUrl || undefined,
-          preview_url: downloadUrl || storageUrl || undefined,
-        },
-        value: downloadUrl || storageUrl || filename || '',
-      }
-    }
-
-    for (const block of uploadableBlocks) {
-      const matchedItem =
-        itemsForMatch.find((item) => {
-          const order = item.order_index ?? item.order
-          const labelMatches = item.label && block.title && String(item.label).trim() === String(block.title).trim()
-          const orderMatches = order && Number(order) === Number(block.order_index)
-          return orderMatches || labelMatches
-        }) || itemsForMatch[block.order_index - 1]
-
-      const inputItemId = matchedItem?.id || matchedItem?.input_item_id || matchedItem?.uuid
-      if (!inputItemId) continue
-
-      try {
-        const uploadResult = await topicService.uploadInputItemAttachment(inputItemId, block.file, block.fileName || block.title)
-
-        const meta = buildAttachmentMetadata(uploadResult, block.file)
-        if (meta?.metadata) {
-          await topicService.updateInputItem(inputItemId, {
-            metadata: meta.metadata,
-            value: meta.value,
-          })
-        }
-      } catch {
-        // ignore attachment upload error
-      }
-    }
-
-    return createdItems
   }
 
   const handleSubmit = async (mode) => {
     const { ok, chosenRoom } = validatePhase1()
     if (!ok) {
-      setStep(1)
+      if (errors.auditCode || errors.auditedUnit || errors.auditDate || errors.auditorName || errors.room) {
+        setActiveTab('audit-info')
+      } else if (errors.findings) {
+        setActiveTab('findings')
+      }
       return
     }
     const payload = buildPayload(mode, chosenRoom)
@@ -526,8 +497,8 @@ export default function CreateTopic() {
       }
 
       navigate('/topics', { state: { refetch: true } })
-    } catch {
-      setStep(3)
+    } catch (err) {
+      console.error('Error creating topic:', err)
     } finally {
       setSubmitting(false)
     }
@@ -535,487 +506,290 @@ export default function CreateTopic() {
 
   const mutationMessage = createTopic.error?.response?.data?.message || createTopic.error?.message || ''
   const roomsErrorMessage = roomsErrorObj?.response?.data?.message || roomsErrorObj?.message || ''
-  const labelsErrorMessage = useMemo(() => {
-    return labelsErrorObj?.response?.data?.message || labelsErrorObj?.message || ''
-  }, [labelsErrorObj])
 
   return (
     <MainLayout>
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="text-center mb-6">
-          <h1 className="text-heading-2 font-semibold">Create New Topic</h1>
-          <p className="text-body-md text-muted-foreground mt-2">Build a flexible submission with custom content blocks</p>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+            <Building2 className="h-4 w-4" />
+            <span>Ruangan: {currentRoomName}</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Form Daftar Temuan Ketidaksesuaian</h1>
+          <p className="text-muted-foreground mt-1">Isi data temuan audit sesuai dengan format yang ditentukan</p>
         </div>
 
-        <div className="flex items-center justify-center gap-8 mb-6">
-          <div className="flex items-center gap-4">
-            <div className={stepCircleClass(1)}>1</div>
-            <div className={`w-20 text-center text-sm ${step === 1 ? 'text-blue-600' : step > 1 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-              {stepTitles[1]}
+        {/* Main Card */}
+        <Card className="shadow-lg">
+          <CardHeader className="border-b bg-muted/5">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl">Buat Temuan Baru</CardTitle>
+                <CardDescription>Lengkapi semua informasi yang diperlukan</CardDescription>
+              </div>
+              <Badge variant="outline" className="px-3 py-1">
+                {securityOptions.find(opt => opt.value === securityLevel)?.label || 'Internal'}
+              </Badge>
             </div>
-          </div>
-          <div className={connectorClass(1)} />
-          <div className="flex items-center gap-4">
-            <div className={stepCircleClass(2)}>2</div>
-            <div className={`w-24 text-center text-sm ${step === 2 ? 'text-blue-600' : step > 2 ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-              {stepTitles[2]}
-            </div>
-          </div>
-          <div className={connectorClass(2)} />
-          <div className="flex items-center gap-4">
-            <div className={stepCircleClass(3)}>3</div>
-            <div className={`w-28 text-center text-sm ${step === 3 ? 'text-blue-600' : 'text-muted-foreground'}`}>{stepTitles[3]}</div>
-          </div>
-        </div>
+          </CardHeader>
 
-        <Card>
-          <CardContent>
-            <CardTitle className="text-heading-3">{stepTitles[step]}</CardTitle>
+          <CardContent className="p-6">
+            {/* Tabs Navigation */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="audit-info" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Informasi Audit</span>
+                </TabsTrigger>
+                <TabsTrigger value="findings" className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  <span className="hidden sm:inline">Daftar Temuan</span>
+                </TabsTrigger>
+                <TabsTrigger value="parties" className="flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  <span className="hidden sm:inline">Pihak Terkait</span>
+                </TabsTrigger>
+              </TabsList>
 
-            {step === 1 && (
-              <div className="mt-4 space-y-4">
-                <div>
-                  <label className="text-sm block mb-1">Title</label>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Enter topic title..." />
-                  {errors.title && <p className="text-xs text-red-600 mt-1">{errors.title}</p>}
+              {/* Tab 1: Informasi Audit */}
+              <TabsContent value="audit-info" className="space-y-4 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Kode / Nomor Audit <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      value={auditCode}
+                      onChange={(e) => setAuditCode(e.target.value)}
+                      placeholder="Contoh: AUD-2024-001"
+                      className={cn(errors.auditCode && "border-destructive")}
+                    />
+                    {errors.auditCode && (
+                      <p className="text-xs text-destructive">{errors.auditCode}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Proses / Layanan / Unit <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      value={auditedUnit}
+                      onChange={(e) => setAuditedUnit(e.target.value)}
+                      placeholder="Contoh: Unit Keuangan"
+                      className={cn(errors.auditedUnit && "border-destructive")}
+                    />
+                    {errors.auditedUnit && (
+                      <p className="text-xs text-destructive">{errors.auditedUnit}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Tanggal Audit <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="date"
+                        value={auditDate}
+                        onChange={(e) => setAuditDate(e.target.value)}
+                        className={cn("pl-9", errors.auditDate && "border-destructive")}
+                      />
+                    </div>
+                    {errors.auditDate && (
+                      <p className="text-xs text-destructive">{errors.auditDate}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">
+                      Ruangan <span className="text-destructive">*</span>
+                    </Label>
+                    <Select
+                      value={selectedRoom}
+                      onValueChange={(value) => setSelectedRoom(value)}
+                      disabled={roomsLoading}
+                    >
+                      <SelectTrigger className={cn(errors.room && "border-destructive")}>
+                        <SelectValue placeholder={roomsLoading ? 'Memuat ruangan...' : 'Pilih ruangan'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rooms.map((room) => (
+                          <SelectItem key={room.id} value={String(room.id)}>
+                            {room.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.room && (
+                      <p className="text-xs text-destructive">{errors.room}</p>
+                    )}
+                    {roomsError && (
+                      <Alert variant="destructive" className="py-2">
+                        <AlertDescription className="text-xs flex items-center justify-between">
+                          <span>{roomsErrorMessage}</span>
+                          <Button variant="ghost" size="sm" onClick={() => refetchRooms()} className="h-6 px-2">
+                            Coba lagi
+                          </Button>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Tab 2: Daftar Temuan */}
+              <TabsContent value="findings" className="space-y-4 mt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium">Daftar Temuan</h3>
+                    <p className="text-xs text-muted-foreground">Tambahkan minimal satu temuan</p>
+                  </div>
+                  <Button type="button" onClick={addFinding} size="sm">
+                    <Plus className="h-4 w-4 mr-2" /> Tambah Temuan
+                  </Button>
                 </div>
 
-                <div>
-                  <label className="text-sm block mb-1">Description</label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full border border-slate-200 rounded-md p-3 min-h-30 text-sm"
-                    placeholder="Describe the purpose and context of this topic..."
-                  />
-                  {errors.description && <p className="text-xs text-red-600 mt-1">{errors.description}</p>}
-                </div>
+                {errors.findings && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertDescription className="text-xs">{errors.findings}</AlertDescription>
+                  </Alert>
+                )}
 
-                <div>
-                  <label className="text-sm block mb-1">Room</label>
-                  {/* PERBAIKAN: value tidak boleh undefined */}
-                  <Select 
-                    value={selectedRoom} 
-                    onValueChange={(value) => setSelectedRoom(value)} 
-                    disabled={roomsLoading}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder={roomsLoading ? 'Memuat data ruangan...' : 'Select a room...'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {rooms.map((room) => (
-                        <SelectItem key={room.id} value={String(room.id)}>
-                          {room.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.room && <p className="text-xs text-red-600 mt-1">{errors.room}</p>}
-                  {roomsError && (
-                    <p className="text-xs text-rose-600 mt-1">
-                      {roomsErrorMessage}
-                      <button type="button" className="ml-2 underline" onClick={() => refetchRooms()}>
+                {clausesError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertDescription className="text-xs flex items-center justify-between">
+                      <span>{clausesErrorObj?.response?.data?.message || clausesErrorObj?.message || 'Gagal memuat klausul.'}</span>
+                      <Button variant="ghost" size="sm" onClick={() => refetchClauses()} className="h-6 px-2">
                         Coba lagi
-                      </button>
-                    </p>
-                  )}
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="space-y-4">
+                  {findings.map((finding, index) => (
+                    <FindingItem
+                      key={index}
+                      index={index}
+                      finding={finding}
+                      onUpdate={updateFinding}
+                      onRemove={removeFinding}
+                      showRemove={findings.length > 1}
+                      clauseOptions={clauseOptions}
+                      clausesLoading={clausesLoading}
+                      documents={documents}
+                      documentsLoading={documentsLoading}
+                    />
+                  ))}
+                </div>
+              </TabsContent>
+
+              {/* Tab 3: Pihak Terkait */}
+              <TabsContent value="parties" className="space-y-4 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Auditor - Nama</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={auditorName}
+                        onChange={(e) => setAuditorName(e.target.value)}
+                        className="pl-9"
+                        placeholder="Nama lengkap auditor"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Auditor - NIP</Label>
+                    <Input
+                      value={auditorNip}
+                      onChange={(e) => setAuditorNip(e.target.value)}
+                      placeholder="Nomor induk pegawai"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Auditee - Nama</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={auditeeName}
+                        onChange={(e) => setAuditeeName(e.target.value)}
+                        className="pl-9"
+                        placeholder="Nama lengkap auditee"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Auditee - NIP</Label>
+                    <Input
+                      value={auditeeNip}
+                      onChange={(e) => setAuditeeNip(e.target.value)}
+                      placeholder="Nomor induk pegawai"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-sm block mb-1">Security Level</label>
-                  {/* PERBAIKAN: value harus selalu ada */}
-                  <Select 
-                    value={securityLevel} 
-                    onValueChange={setSecurityLevel}
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Pilih level keamanan" />
+                <Separator className="my-4" />
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Tingkat Keamanan</Label>
+                  <Select value={securityLevel} onValueChange={setSecurityLevel}>
+                    <SelectTrigger>
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {securityOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                          <div className="flex flex-col">
+                            <span>{option.label}</span>
+                            <span className="text-xs text-muted-foreground">{option.description}</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm block mb-1">Labels</label>
-                  {!labelsSupported ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                      Dukungan API label belum aktif di lingkungan ini. Hubungi admin untuk mengaktifkan fitur label.
-                    </div>
-                  ) : labelsLoading ? (
-                    <p className="text-xs text-muted-foreground">Memuat data label...</p>
-                  ) : labels.length === 0 ? (
-                    <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                      Belum ada label terdaftar. Silakan tambah label melalui halaman Administrasi &gt; Label.
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap gap-2">
-                        {labels.map((label) => {
-                          const active = isLabelSelected(label.id)
-                          return (
-                            <button
-                              type="button"
-                              key={label.id}
-                              onClick={() => toggleLabel(label.id)}
-                              className={`px-3 py-1 rounded-full border text-xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${
-                                active ? 'shadow-sm' : ''
-                              }`}
-                              style={{
-                                borderColor: label.color || '#cbd5f5',
-                                backgroundColor: active ? `${label.color || '#64748b'}24` : 'transparent',
-                                color: label.color || '#0f172a',
-                              }}
-                            >
-                              {label.name}
-                            </button>
-                          )
-                        })}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {selectedLabels.length ? `${selectedLabels.length} label dipilih.` : 'Pilih label untuk membantu tim menemukan topik lebih cepat.'}
-                      </p>
-                    </>
-                  )}
-                  {labelsError && (
-                    <p className="text-xs text-rose-600 mt-1">
-                      {labelsErrorMessage}
-                      <button type="button" className="ml-2 underline" onClick={() => refetchLabels()}>
-                        Coba lagi
-                      </button>
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="text-sm block mb-1">Deadline (Optional)</label>
-                  <Input 
-                    type="datetime-local" 
-                    value={deadline} 
-                    onChange={(e) => setDeadline(e.target.value)} 
-                  />
-                </div>
-
-                <div className="mt-6 flex justify-end">
-                  <Button variant="outline" className="mr-3" onClick={handleBack}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleNext}>Next: Add Content</Button>
-                </div>
-              </div>
-            )}
-
-            {step === 2 && (
-              <div className="mt-4">
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium mb-2">Add Content Blocks</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Build your submission by adding different types of content blocks. Drag to reorder.
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pilih tingkat keamanan sesuai klasifikasi data
                   </p>
-
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <button type="button" onClick={() => addBlock('text')} className="px-3 py-1 border rounded-md">
-                      Text
-                    </button>
-                    <button type="button" onClick={() => addBlock('richtext')} className="px-3 py-1 border rounded-md">
-                      Rich Text
-                    </button>
-                    <button type="button" onClick={() => addBlock('file')} className="px-3 py-1 border rounded-md">
-                      File Upload
-                    </button>
-                    <button type="button" onClick={() => addBlock('image')} className="px-3 py-1 border rounded-md">
-                      Image
-                    </button>
-                    <button type="button" onClick={() => addBlock('link')} className="px-3 py-1 border rounded-md">
-                      Link
-                    </button>
-                    <button type="button" onClick={() => addBlock('form')} className="px-3 py-1 border rounded-md">
-                      Form Data
-                    </button>
-                  </div>
                 </div>
+              </TabsContent>
+            </Tabs>
 
-                <div className="border rounded-md p-6 min-h-40 bg-white">
-                  {blocks.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-12">
-                      <div className="mb-4">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="mx-auto text-slate-300">
-                          <path d="M8 7h8M8 12h8M8 17h8" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      <h4 className="text-sm font-medium">No content blocks yet</h4>
-                      <p className="text-sm text-muted-foreground mt-2">Add blocks above to build your submission</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {blocks.map((block) => (
-                        <div key={block.id}>
-                          <div className="border rounded-md p-3">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-3">
-                                <div className="text-slate-400">
-                                  <GripVertical className="w-4 h-4 text-muted-foreground" />
-                                </div>
-                                <input
-                                  className="text-sm font-medium border-b pb-1"
-                                  value={block.title}
-                                  onChange={(e) => updateBlock(block.id, { title: e.target.value })}
-                                />
-                                <span className="text-xs text-muted-foreground ml-2">{block.type}</span>
-                              </div>
-
-                              <div className="flex items-center gap-3">
-                                <button
-                                  type="button"
-                                  className="p-1 text-red-600"
-                                  onClick={() => removeBlock(block.id)}
-                                  title="Remove block"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {block.type === 'form' && (
-                              <div className="space-y-2">
-                                {block.fields.map((field) => (
-                                  <div key={field.id} className="grid grid-cols-2 gap-3 items-start">
-                                    <input
-                                      placeholder="Field name"
-                                      className="w-full border rounded p-2 text-sm"
-                                      value={field.name}
-                                      onChange={(e) =>
-                                        updateBlock(block.id, {
-                                          fields: block.fields.map((item) => (item.id === field.id ? { ...item, name: e.target.value } : item)),
-                                        })
-                                      }
-                                    />
-                                    <div className="flex gap-2">
-                                      <input
-                                        placeholder="Field value"
-                                        className="w-full border rounded p-2 text-sm"
-                                        value={field.value}
-                                        onChange={(e) =>
-                                          updateBlock(block.id, {
-                                            fields: block.fields.map((item) => (item.id === field.id ? { ...item, value: e.target.value } : item)),
-                                          })
-                                        }
-                                      />
-                                      <button
-                                        type="button"
-                                        className="text-red-600"
-                                        onClick={() =>
-                                          updateBlock(block.id, {
-                                            fields: block.fields.filter((item) => item.id !== field.id),
-                                          })
-                                        }
-                                      >
-                                        ✖
-                                      </button>
-                                    </div>
-                                  </div>
-                                ))}
-                                <div>
-                                  <button
-                                    type="button"
-                                    className="px-3 py-1 border rounded-md text-sm inline-flex items-center gap-2"
-                                    onClick={() =>
-                                      updateBlock(block.id, {
-                                        fields: [
-                                          ...block.fields,
-                                          { id: `${block.id}-f-${block.fields.length + 1}`, name: '', value: '' },
-                                        ],
-                                      })
-                                    }
-                                  >
-                                    <PlusSquare className="w-4 h-4" /> Add field
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {(block.type === 'image' || block.type === 'file') && (
-                              <div>
-                                <div className="border border-dashed rounded p-6 text-center">
-                                  <div className="mb-2">
-                                    <UploadCloud className="w-6 h-6 mx-auto text-muted-foreground" />
-                                  </div>
-                                  <input
-                                    type="file"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0] || null
-                                      updateBlock(block.id, { file, fileName: file ? file.name : '' })
-                                    }}
-                                  />
-                                  {block.fileName && <div className="text-sm mt-2">{block.fileName}</div>}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {(block.type === 'text' || block.type === 'richtext' || block.type === 'link') && (
-                            <div className="border rounded-md p-3 mt-2">
-                              {block.type === 'link' && (
-                                <input
-                                  placeholder="Enter link..."
-                                  className="w-full border rounded p-2 text-sm"
-                                  value={block.url}
-                                  onChange={(e) => updateBlock(block.id, { url: e.target.value })}
-                                />
-                              )}
-
-                              {block.type === 'richtext' && (
-                                <div className="border rounded">
-                                  <RichTextEditor
-                                    value={block.content || ''}
-                                    onChange={(html) => updateBlock(block.id, { content: html })}
-                                  />
-                                </div>
-                              )}
-
-                              {block.type === 'text' && (
-                                <input
-                                  placeholder="Enter text..."
-                                  className="w-full border rounded p-2 text-sm"
-                                  value={block.content}
-                                  onChange={(e) => updateBlock(block.id, { content: e.target.value })}
-                                />
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-6 flex justify-between">
-                  <Button variant="outline" onClick={handleBack}>
-                    Back
-                  </Button>
-                  <Button onClick={handleNext}>Next: Review</Button>
-                </div>
-              </div>
-            )}
-
-            {step === 3 && (
-              <div className="mt-4 space-y-4">
-                <Card>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="text-sm text-muted-foreground">Title</div>
-                        <div className="mt-1 text-sm">{title || <span className="text-muted-foreground">(No title)</span>}</div>
-                      </div>
-
-                      <div>
-                        <div className="text-sm text-muted-foreground">Description</div>
-                        <div className="mt-1 text-sm">{description || <span className="text-muted-foreground">(No description)</span>}</div>
-                      </div>
-
-                      <div>
-                        <div className="text-sm text-muted-foreground">Room</div>
-                        <div className="mt-2">
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{currentRoomName}</span>
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="text-sm text-muted-foreground">Security Level</div>
-                        <div className="mt-1 text-sm capitalize">{securityLevel}</div>
-                      </div>
-
-                      <div>
-                        <div className="text-sm text-muted-foreground">Labels</div>
-                        {!labelsSupported ? (
-                          <div className="mt-2 text-xs text-muted-foreground">Label belum tersedia di lingkungan ini.</div>
-                        ) : (
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {selectedLabelObjects.length ? (
-                              selectedLabelObjects.map((label) => (
-                                <span
-                                  key={label.id}
-                                  className="text-xs px-2 py-0.5 rounded-full border"
-                                  style={{
-                                    borderColor: label.color || '#cbd5f5',
-                                    backgroundColor: `${label.color || '#64748b'}24`,
-                                    color: label.color || '#0f172a',
-                                  }}
-                                >
-                                  {label.name}
-                                </span>
-                              ))
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Tidak ada label dipilih.</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      <div>
-                        <div className="text-sm text-muted-foreground">Deadline</div>
-                        <div className="mt-1 text-sm">{deadline || '-'} </div>
-                      </div>
-
-                      <div>
-                        <div className="text-sm text-muted-foreground">Content Blocks ({blocks.length})</div>
-                        <div className="mt-2 space-y-2">
-                          {blocks.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">Belum ada konten.</div>
-                          ) : (
-                            blocks.map((block) => (
-                              <div key={block.id} className="flex items-center gap-3 border rounded-md p-2 bg-slate-50">
-                                <div className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 lowercase">
-                                  {block.type}
-                                </div>
-                                <div className="text-sm">{block.title}</div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {mutationMessage && (
-                  <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">{mutationMessage}</div>
-                )}
-
-                <div className="border rounded-md p-4 bg-white">
-                  <div className="flex items-start justify-between gap-6">
-                    <div>
-                      <h4 className="text-sm font-medium">Ready to Publish?</h4>
-                      <p className="text-sm text-muted-foreground mt-2">
-                        Once published, this topic will move to "In Review" status and assigned reviewers will be notified.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <Button variant="outline" disabled={isBusy} onClick={() => handleSubmit('draft')}>
-                        {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save as Draft
-                      </Button>
-                      <Button className="bg-blue-600 text-white" disabled={isBusy} onClick={() => handleSubmit('publish')}>
-                        {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Publish for Review
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex justify-between">
-                  <Button variant="outline" onClick={handleBack}>
-                    Back
-                  </Button>
-                  <div />
-                </div>
-              </div>
+            {/* Error Message */}
+            {mutationMessage && (
+              <Alert variant="destructive" className="mt-6">
+                <AlertDescription>{mutationMessage}</AlertDescription>
+              </Alert>
             )}
           </CardContent>
+
+          <CardFooter className="border-t bg-muted/5 px-6 py-4 flex justify-end gap-3">
+            <Button
+              variant="outline"
+              disabled={isBusy}
+              onClick={() => navigate(-1)}
+              className="min-w-[100px]"
+            >
+              <X className="h-4 w-4 mr-2" /> Batal
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={isBusy}
+              onClick={() => handleSubmit('draft')}
+              className="min-w-[100px]"
+            >
+              {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Save className="h-4 w-4 mr-2" /> Draft
+            </Button>
+            <Button
+              disabled={isBusy}
+              onClick={() => handleSubmit('publish')}
+              className="min-w-[100px] bg-blue-600 hover:bg-blue-700"
+            >
+              {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Simpan Temuan
+            </Button>
+          </CardFooter>
         </Card>
       </div>
     </MainLayout>

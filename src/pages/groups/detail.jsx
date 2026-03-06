@@ -39,6 +39,16 @@ export default function GroupsDetail() {
   const [tab, setTab] = useState('overview')
   const { data: group, isLoading, isError, error, refetch } = useGroup(groupId, { enabled: Boolean(groupId) })
   const isForbidden = group?.__forbidden || error?.response?.status === 403
+  const memberRole = useMemo(() => {
+    const roleValue =
+      group?.membership?.role ||
+      group?.member?.role ||
+      group?.user_role ||
+      group?.role ||
+      null
+    return roleValue ? String(roleValue).toLowerCase() : null
+  }, [group])
+  const isMemberOnly = memberRole === 'member'
   const { data: groupRoomsData } = useGroupRooms(groupId, { enabled: Boolean(groupId) && !isForbidden })
   const [unauthorizedOpen, setUnauthorizedOpen] = useState(false)
   const resolveRoomCountFromGroup = (currentGroup, roomsPayload) => {
@@ -88,7 +98,7 @@ export default function GroupsDetail() {
   const tabItems = useMemo(() => {
     const memberCount = stats.member_count ?? group?.members_count ?? group?.memberships?.length ?? 0
     
-    return [
+    const baseTabs = [
       { label: 'Overview', value: 'overview' },
       { 
         label: 'Members', 
@@ -100,10 +110,15 @@ export default function GroupsDetail() {
         value: 'rooms', 
         count: roomCount 
       },
+    ]
+    if (isMemberOnly) return baseTabs
+
+    return [
+      ...baseTabs,
       { label: 'Labels', value: 'labels' },
       { label: 'Settings', value: 'settings' },
     ]
-  }, [stats.member_count, group?.members_count, group?.memberships, roomCount])
+  }, [stats.member_count, group?.members_count, group?.memberships, roomCount, isMemberOnly])
 
   const renderHeader = () => {
     if (isLoading) {
@@ -198,9 +213,11 @@ export default function GroupsDetail() {
             <Button className="bg-blue-600 text-white" onClick={() => setTab('rooms')}>
               + Buat Ruangan
             </Button>
-            <Button variant="outline" onClick={() => setTab('settings')}>
-              Pengaturan
-            </Button>
+            {!isMemberOnly && (
+              <Button variant="outline" onClick={() => setTab('settings')}>
+                Pengaturan
+              </Button>
+            )}
           </div>
         </div>
       </Card>
@@ -254,7 +271,7 @@ export default function GroupsDetail() {
                 <Overview groupId={groupId} group={group} onRoomCountChange={setRoomCount} />
               </TabsContent>
               <TabsContent value="members">
-                <Members groupId={groupId} ownerId={group?.owner_user_id} />
+                <Members groupId={groupId} ownerId={group?.owner_user_id} readOnly={isMemberOnly} />
               </TabsContent>
               <TabsContent value="rooms" forceMount>
                 <Rooms 
@@ -262,12 +279,16 @@ export default function GroupsDetail() {
                   onCountChange={setRoomCount}
                 />
               </TabsContent>
-              <TabsContent value="labels">
-                <Labels groupId={groupId} />
-              </TabsContent>
-              <TabsContent value="settings">
-                <Settings groupId={groupId} group={group} />
-              </TabsContent>
+              {!isMemberOnly && (
+                <TabsContent value="labels">
+                  <Labels groupId={groupId} />
+                </TabsContent>
+              )}
+              {!isMemberOnly && (
+                <TabsContent value="settings">
+                  <Settings groupId={groupId} group={group} />
+                </TabsContent>
+              )}
             </Tabs>
           )}
         </div>

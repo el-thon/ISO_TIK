@@ -108,26 +108,108 @@ export async function getSecuritySettings() {
 }
 
 export async function getSessions(params = {}) {
-  const res = await api.get('/profile/security/sessions', { params })
-  const payload = unwrap(res) ?? {}
-  return toPaginator(payload)
+  // Primary endpoint per spec: /profile/sessions
+  // Keep compatibility with security-prefixed alias if backend still uses it
+  try {
+    const res = await api.get('/profile/sessions', { params })
+    const payload = unwrap(res) ?? {}
+    return toPaginator(payload)
+  } catch (err) {
+    const res = await api.get('/profile/security/sessions', { params })
+    const payload = unwrap(res) ?? {}
+    return toPaginator(payload)
+  }
 }
 
 export async function getLoginHistory(params = {}) {
-  const res = await api.get('/profile/security/login-history', { params })
-  const payload = unwrap(res) ?? {}
-  return toPaginator(payload)
+  try {
+    const res = await api.get('/profile/login-history', { params })
+    const payload = unwrap(res) ?? {}
+    return toPaginator(payload)
+  } catch (err) {
+    const res = await api.get('/profile/security/login-history', { params })
+    const payload = unwrap(res) ?? {}
+    return toPaginator(payload)
+  }
 }
 
 export async function revokeSession(sessionId, payload = {}) {
   if (!sessionId) throw new Error('Session ID is required')
-  const res = await api.delete(`/profile/security/sessions/${sessionId}`, { data: payload })
-  return res?.data ?? {}
+  try {
+    const res = await api.delete(`/profile/sessions/${sessionId}`, { data: payload })
+    return res?.data ?? {}
+  } catch (err) {
+    const res = await api.delete(`/profile/security/sessions/${sessionId}`, { data: payload })
+    return res?.data ?? {}
+  }
 }
 
 export async function revokeAllSessions(payload) {
-  const res = await api.delete('/profile/security/sessions', { data: payload })
+  try {
+    const res = await api.delete('/profile/sessions/all', { data: payload })
+    return res?.data ?? {}
+  } catch (err) {
+    const res = await api.delete('/profile/security/sessions', { data: payload })
+    return res?.data ?? {}
+  }
+}
+
+// Signature endpoints
+export async function getSignature() {
+  // Self-service per backend spec; treat 404 as "belum ada" tanpa melempar error
+  try {
+    const res = await api.get('/profile/signature', {
+      validateStatus: (status) => [200, 201, 204, 404].includes(status),
+    })
+
+    if (res.status === 404) return {}
+    return unwrap(res) ?? {}
+  } catch (err) {
+    if (err?.response?.status === 404) return {}
+    throw err
+  }
+}
+
+export async function uploadSignature(fileOrFormData) {
+  if (!fileOrFormData) throw new Error('Signature file is required')
+  const formData = fileOrFormData instanceof FormData ? fileOrFormData : new FormData()
+
+  if (!(fileOrFormData instanceof FormData)) {
+    // Backend expects field name `file` (png/jpg/jpeg, max 2MB); keep `signature` for compatibility
+    formData.append('file', fileOrFormData)
+    formData.append('signature', fileOrFormData)
+  } else {
+    const keys = Array.from(formData.keys())
+    const hasFile = keys.includes('file')
+    const hasSignature = keys.includes('signature')
+    if (!hasFile) {
+      const existing = formData.get('signature') || formData.get('image')
+      if (existing) formData.append('file', existing)
+    }
+    if (!hasSignature) {
+      const existing = formData.get('file') || formData.get('image')
+      if (existing) formData.append('signature', existing)
+    }
+  }
+  const res = await api.post('/profile/signature', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return unwrap(res) ?? {}
+}
+
+export async function deleteSignature() {
+  const res = await api.delete('/profile/signature')
   return res?.data ?? {}
+}
+
+export async function downloadSignature() {
+  try {
+    const res = await api.get('/profile/signature/download', { responseType: 'blob' })
+    return res?.data
+  } catch (err) {
+    if (err?.response?.status === 404) return null
+    throw err
+  }
 }
 
 export default {

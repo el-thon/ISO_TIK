@@ -366,10 +366,10 @@ export async function getTopicTimeline(topicId, params = {}) {
 
 export async function getTopicReviews(topicId, params = {}) {
   if (!topicId) throw new Error('topicId is required to get reviews')
-  const res = await api.get(`/topics/${topicId}/comments`, { params })
+  const res = await api.get(`/topics/${topicId}/reviews`, { params })
   const payload = unwrap(res) ?? {}
   return {
-    reviews: ensureArray(payload.reviews ?? payload.items ?? payload.comments ?? []),
+    reviews: ensureArray(payload.reviews ?? payload.items ?? payload.data ?? []),
     pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
   }
 }
@@ -419,9 +419,22 @@ export async function getCommentById(topicId, commentId, options = {}) {
 
 export async function createTopicReview(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to create review')
-  const body = payload?.comment ?? payload?.body
-  if (!body) throw new Error('comment is required to create review')
-  const res = await api.post(`/topics/${topicId}/comments`, { body })
+  if (!payload?.finding_type || !payload?.finding_description) {
+    throw new Error('finding_type and finding_description are required to create review')
+  }
+  const res = await api.post(`/topics/${topicId}/reviews`, payload)
+  return unwrap(res) ?? {}
+}
+
+export async function updateTopicReview(topicId, reviewId, payload = {}) {
+  if (!topicId || !reviewId) throw new Error('topicId and reviewId are required to update review')
+  const res = await api.put(`/topics/${topicId}/reviews/${reviewId}`, payload)
+  return unwrap(res) ?? {}
+}
+
+export async function deleteTopicReview(topicId, reviewId, payload = {}) {
+  if (!topicId || !reviewId) throw new Error('topicId and reviewId are required to delete review')
+  const res = await api.delete(`/topics/${topicId}/reviews/${reviewId}`, { data: payload })
   return unwrap(res) ?? {}
 }
 
@@ -548,6 +561,24 @@ export async function listAttachments(params = {}) {
   }
 }
 
+export async function uploadAttachment(file, payload = {}) {
+  if (!file) throw new Error('file is required to upload attachment')
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    formData.append(key, String(value))
+  })
+
+  const res = await api.post('/attachments', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+  return unwrap(res) ?? {}
+}
+
 export default {
   listTopics,
   getTopic,
@@ -570,6 +601,8 @@ export default {
   getTopicTimeline,
   getTopicReviews,
   createTopicReview,
+  updateTopicReview,
+  deleteTopicReview,
   replyToComment,
   uploadCommentAttachment,
   getAttachment,
@@ -581,4 +614,5 @@ export default {
   refreshTopicInputItems,
   createAttachment,
   listAttachments,
+  uploadAttachment,
 }

@@ -4,9 +4,9 @@ import axios from 'axios'
 const apiBaseEnv = (import.meta.env.VITE_API_BASE_URL || '').trim()
 const API_BASE = apiBaseEnv || '/api/v1'
 
-// Token storage helpers
-const ACCESS_KEY = 'iso_tik_access_token'
-const REFRESH_KEY = 'iso_tik_refresh_token'
+// Token storage helpers (configurable via env)
+const ACCESS_KEY = (import.meta.env.VITE_ACCESS_TOKEN_KEY || 'iso_tik_access_token').trim()
+const REFRESH_KEY = (import.meta.env.VITE_REFRESH_TOKEN_KEY || 'iso_tik_refresh_token').trim()
 
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY)
@@ -24,6 +24,15 @@ export function setTokens({ access_token, refresh_token }) {
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+}
+
+// Hard redirect ke halaman login ketika sesi kadaluarsa
+const redirectToLogin = () => {
+  if (typeof window === 'undefined') return
+  const loginPath = '/login'
+  // Hindari loop jika sudah di halaman login
+  if (window.location.pathname === loginPath) return
+  window.location.replace(loginPath)
 }
 
 // Primary axios instance used throughout app. It automatically attaches
@@ -98,6 +107,7 @@ api.interceptors.response.use(
     if (!refreshToken) {
       // No refresh token - clear and reject
       clearTokens()
+      redirectToLogin()
       return Promise.reject(err)
     }
 
@@ -139,10 +149,12 @@ api.interceptors.response.use(
       // If refresh didn't provide token, clear and reject
       clearTokens()
       processQueue(new Error('Unable to refresh token'), null)
+      redirectToLogin()
       return Promise.reject(err)
     } catch (refreshErr) {
       clearTokens()
       processQueue(refreshErr, null)
+      redirectToLogin()
       return Promise.reject(refreshErr)
     } finally {
       isRefreshing = false

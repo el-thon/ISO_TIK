@@ -11,7 +11,6 @@ import Rooms from './pages/rooms'
 import RoomDetail from './pages/rooms/detail'
 import Users from './pages/users'
 import UserDetail from './pages/users/detail'
-import Topics from './pages/topics'
 import CreateTopic from './pages/topics/CreateTopic'
 import TopicDetail from './pages/topics/detail'
 import Assignments from './pages/assignments'
@@ -33,7 +32,6 @@ export const router = createBrowserRouter(
   { path: '/rooms/:id', element: (<ProtectedRoute><RoomDetail /></ProtectedRoute>) },
   { path: '/assignments', element: (<ProtectedRoute><Assignments /></ProtectedRoute>) },
   { path: '/administration', element: (<ProtectedRoute><Administration /></ProtectedRoute>) },
-  { path: '/topics', element: (<ProtectedRoute><Topics /></ProtectedRoute>) },
   { path: '/topics/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
   { path: '/topics/create', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },
   { path: '/profile', element: (<ProtectedRoute><Profile /></ProtectedRoute>) },

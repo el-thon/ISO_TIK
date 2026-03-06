@@ -82,10 +82,23 @@ export async function listMembers(groupId) {
   if (!groupId) throw new Error('groupId is required')
   const res = await api.get(`/groups/${groupId}/members`)
   const payload = unwrap(res) ?? {}
+
+  // Backend bisa mengembalikan array langsung (data.data) + meta
+  if (Array.isArray(payload)) {
+    return {
+      group: null,
+      members: ensureArray(payload),
+      total: payload.length,
+    }
+  }
+
+  const members =
+    ensureArray(payload.members ?? payload.data ?? payload.items ?? [])
+
   return {
     group: payload.group ?? null,
-    members: ensureArray(payload.members ?? []),
-    total: payload.total ?? (payload.members?.length ?? 0) ?? 0,
+    members,
+    total: payload.total ?? payload.meta?.total ?? members.length ?? 0,
   }
 }
 
@@ -116,6 +129,19 @@ export async function listRooms(groupId) {
     rooms: ensureArray(payload.rooms ?? []),
     total: payload.total ?? (payload.rooms?.length ?? 0) ?? 0,
   }
+}
+
+export async function searchGroupUsers(groupId, params = {}) {
+  if (!groupId) throw new Error('groupId is required')
+  const res = await api.get(`/groups/${groupId}/user-search`, { params })
+  const payload = unwrap(res) ?? {}
+
+  if (Array.isArray(payload)) {
+    return { users: ensureArray(payload) }
+  }
+
+  const users = ensureArray(payload.users ?? payload.data ?? payload.items ?? [])
+  return { users }
 }
 
 export async function createRoom(groupId, payload) {
@@ -157,6 +183,7 @@ export default {
   updateMemberRole,
   removeMember,
   listRooms,
+  searchGroupUsers,
   createRoom,
   getJoinCode,
   generateJoinCode,

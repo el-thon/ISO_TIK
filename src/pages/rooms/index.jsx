@@ -30,10 +30,12 @@ import { Plus, Loader2 } from 'lucide-react'
 import { useRooms, useCreateRoom } from '@/services/roomHooks'
 import { useGroups } from '@/services/groupHooks'
 
-const visibilityOptions = [
-  { value: 'group-wide', label: 'Group-Wide (default)' },
-  { value: 'private', label: 'Private' },
-  { value: 'org-wide', label: 'Organization Wide' },
+const DEFAULT_ROOM_VISIBILITY = 'group_only'
+const ROOM_VISIBILITY_OPTIONS = [
+  { label: 'Group-only', value: 'group_only' },
+  { label: 'Private', value: 'private' },
+  { label: 'Org-wide', value: 'org-wide' },
+  { label: 'Group-wide', value: 'group-wide' },
 ]
 
 const GROUP_FILTER_ALL = '__all'
@@ -54,11 +56,11 @@ const createRoomSchema = z.object({
   name: z.string().min(3, 'Nama minimal 3 karakter'),
   description: z.string().max(1000, 'Deskripsi maksimal 1000 karakter').optional().or(z.literal('')),
   groupId: z.string().min(1, 'Pilih grup tujuan'),
-  visibility: z.enum(['group-wide', 'private', 'org-wide']),
   securityLevel: z.enum(SECURITY_LEVEL_VALUES, {
     required_error: 'Pilih level keamanan',
     invalid_type_error: 'Level keamanan tidak valid',
   }),
+  visibility: z.enum(['group_only', 'private', 'org-wide', 'group-wide']).optional(),
 })
 
 const toSecurityOption = (entry) => {
@@ -132,6 +134,8 @@ const formatDate = (value) => {
 
 const formatVisibility = (value) => {
   switch (value) {
+    case 'group_only':
+      return 'Group-only'
     case 'private':
       return 'Private'
     case 'org-wide':
@@ -281,11 +285,8 @@ export default function RoomsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {rooms.map((room) => {
-              const responsibleName = room?.responsible_user?.profile?.full_name || room?.responsible_user?.username || 'Belum ditetapkan'
-              const initials = getInitials(responsibleName)
-              return (
-                <Card key={room.id} className={room.is_archived ? 'opacity-80' : ''}>
+            {rooms.map((room) => (
+              <Card key={room.id} className={room.is_archived ? 'opacity-80' : ''}>
                   <Link to={`/rooms/${room.id}`} className="block no-underline text-inherit">
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between gap-3">
@@ -313,16 +314,6 @@ export default function RoomsPage() {
 
                           <div className="border-t my-4" />
 
-                          <div className="flex items-center gap-3">
-                            <Avatar>
-                              <AvatarFallback>{initials}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <div className="text-xs text-muted-foreground">Responsible</div>
-                              <div className="text-sm">{responsibleName}</div>
-                            </div>
-                          </div>
-
                           <div className="text-xs text-muted-foreground mt-3">
                             Dibuat {formatDate(room.created_at)}
                           </div>
@@ -330,9 +321,8 @@ export default function RoomsPage() {
                       </div>
                     </CardContent>
                   </Link>
-                </Card>
-              )
-            })}
+              </Card>
+            ))}
           </div>
         )}
 
@@ -412,8 +402,8 @@ function CreateRoomForm({ groups, groupsLoading, securityOptions, onSuccess }) {
       name: '',
       description: '',
       groupId: '',
-      visibility: 'group-wide',
       securityLevel: resolvedDefaultSecurityValue,
+      visibility: DEFAULT_ROOM_VISIBILITY,
     },
   })
 
@@ -437,8 +427,8 @@ function CreateRoomForm({ groups, groupsLoading, securityOptions, onSuccess }) {
       name: '',
       description: '',
       groupId: '',
-      visibility: 'group-wide',
       securityLevel: resolvedDefaultSecurityValue,
+      visibility: DEFAULT_ROOM_VISIBILITY,
     })
   }, [reset, resolvedDefaultSecurityValue])
 
@@ -455,7 +445,7 @@ function CreateRoomForm({ groups, groupsLoading, securityOptions, onSuccess }) {
       payload: {
         name: values.name,
         description: values.description || null,
-        visibility: values.visibility,
+        visibility: values.visibility || DEFAULT_ROOM_VISIBILITY,
         security_level: values.securityLevel,
       },
     })
@@ -490,7 +480,7 @@ function CreateRoomForm({ groups, groupsLoading, securityOptions, onSuccess }) {
           control={control}
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange} disabled={groupsLoading}>
-              <SelectTrigger className="mt-2">
+              <SelectTrigger className="mt-2 w-full">
                 <SelectValue placeholder={groupsLoading ? 'Memuat grup…' : 'Pilih grup'} />
               </SelectTrigger>
               <SelectContent>
@@ -508,28 +498,6 @@ function CreateRoomForm({ groups, groupsLoading, securityOptions, onSuccess }) {
           )}
         />
         {errors.groupId && <p className="text-xs text-rose-600 mt-1">{errors.groupId.message}</p>}
-      </div>
-
-      <div>
-        <Label>Visibilitas</Label>
-        <Controller
-          name="visibility"
-          control={control}
-          render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger className="mt-2">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {visibilityOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        />
       </div>
 
       <div>
@@ -553,6 +521,28 @@ function CreateRoomForm({ groups, groupsLoading, securityOptions, onSuccess }) {
           )}
         />
         {errors.securityLevel && <p className="text-xs text-rose-600 mt-1">{errors.securityLevel.message}</p>}
+      </div>
+
+      <div>
+        <Label>Visibilitas</Label>
+        <Controller
+          name="visibility"
+          control={control}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger className="mt-2 w-full">
+                <SelectValue placeholder="Pilih visibilitas" />
+              </SelectTrigger>
+              <SelectContent>
+                {ROOM_VISIBILITY_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        />
       </div>
 
       {mutationError && (

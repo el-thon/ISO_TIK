@@ -129,6 +129,54 @@ export function useLoginHistory(params = {}, options = {}) {
   })
 }
 
+export function useSignature(options = {}) {
+  return useQuery({
+    queryKey: ['profile', 'signature'],
+    queryFn: () => profileService.getSignature(),
+    staleTime: 1000 * 30,
+    retry: false,
+    ...options,
+    enabled: authEnabled(options),
+  })
+}
+
+export function useUploadSignature(options = {}) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file) => profileService.uploadSignature(file),
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'signature'] })
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
+      // Segarkan cache segera dengan respons baru jika ada ID
+      if (data && (data.id || data.signature_url || data.stored_path)) {
+        queryClient.setQueryData(['profile', 'signature'], data)
+      }
+      if (options.onSuccess) options.onSuccess(data, variables, context)
+    },
+    ...options,
+  })
+}
+
+export function useDeleteSignature(options = {}) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => profileService.deleteSignature(),
+    onSuccess: (data, variables, context) => {
+      queryClient.invalidateQueries({ queryKey: ['profile', 'signature'] })
+      queryClient.invalidateQueries({ queryKey: ['profile'] })
+      if (options.onSuccess) options.onSuccess(data, variables, context)
+    },
+    ...options,
+  })
+}
+
+export function useDownloadSignature(options = {}) {
+  return useMutation({
+    mutationFn: () => profileService.downloadSignature(),
+    ...options,
+  })
+}
+
 export function useRevokeSession(options = {}) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -167,4 +215,8 @@ export default {
   useLoginHistory,
   useRevokeSession,
   useRevokeAllSessions,
+  useSignature,
+  useUploadSignature,
+  useDeleteSignature,
+  useDownloadSignature,
 }

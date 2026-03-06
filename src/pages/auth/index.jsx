@@ -10,18 +10,20 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import AuthLayout from './AuthLayout'
-import { useLogin, useSsoLogin } from '@/services/authHooks'
+import { useLogin } from '@/services/authHooks'
 
 function Login() {
-  const [activeMode, setActiveMode] = useState(null) // 'sso' | 'credentials' | null
-  const [username, setUsername] = useState('')
+  const REMEMBER_KEY = import.meta.env.VITE_REMEMBER_KEY || 'iso_tik_remember_me'
+  const REMEMBER_USERNAME_KEY = import.meta.env.VITE_REMEMBER_USERNAME_KEY || 'iso_tik_remember_username'
+
+  const [remember, setRemember] = useState(() => localStorage.getItem(REMEMBER_KEY) === 'true')
+  const [username, setUsername] = useState(() => localStorage.getItem(REMEMBER_USERNAME_KEY) || '')
   const [password, setPassword] = useState('')
-  const [authCode, setAuthCode] = useState('')
-  const [state, setState] = useState('')
-  const [codeVerifier, setCodeVerifier] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
 
   const { mutate: loginMutate, isLoading: isLoginLoading, error: loginError } = useLogin({
@@ -30,22 +32,25 @@ function Login() {
     },
   })
 
-  const { mutate: ssoMutate, isLoading: isSsoLoading, error: ssoError } = useSsoLogin({
-    onSuccess: () => {
-      navigate('/dashboard')
-    },
-  })
-
-  const isBusy = useMemo(() => isLoginLoading || isSsoLoading, [isLoginLoading, isSsoLoading])
+  useEffect(() => {
+    if (!remember) {
+      localStorage.removeItem(REMEMBER_USERNAME_KEY)
+      localStorage.setItem(REMEMBER_KEY, 'false')
+    }
+  }, [remember])
 
   const onSubmitCredentials = (e) => {
     e.preventDefault()
-    loginMutate({ username, password })
-  }
 
-  const onSubmitSso = (e) => {
-    e.preventDefault()
-    ssoMutate({ auth_code: authCode, state, code_verifier: codeVerifier || undefined, provider: 'campus_sso' })
+    if (remember) {
+      localStorage.setItem(REMEMBER_KEY, 'true')
+      localStorage.setItem(REMEMBER_USERNAME_KEY, username)
+    } else {
+      localStorage.setItem(REMEMBER_KEY, 'false')
+      localStorage.removeItem(REMEMBER_USERNAME_KEY)
+    }
+
+    loginMutate({ username, password })
   }
 
   return (
@@ -53,10 +58,11 @@ function Login() {
       <Card className="w-full">
         <CardHeader className="text-center space-y-2">
           <CardTitle className="text-heading-3 font-semibold">Sign In</CardTitle>
-          <CardDescription className="text-body-md text-muted-foreground">Pilih metode autentikasi Anda</CardDescription>
+          <CardDescription className="text-body-md text-muted-foreground">Masuk menggunakan username dan kata sandi Anda</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5">
+          {/*
           <div className="flex flex-col gap-3">
             <Button
               variant="default"
@@ -138,59 +144,71 @@ function Login() {
               </Button>
             </form>
           )}
+          */}
 
-          {activeMode === 'credentials' && (
-            <form onSubmit={onSubmitCredentials} className="flex flex-col gap-4 border border-border rounded-lg p-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="username" className="text-small text-foreground">Username</Label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  placeholder="mis. alice"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="text-body-md"
-                  required
-                />
-              </div>
+          <form onSubmit={onSubmitCredentials} className="flex flex-col gap-4 border border-border rounded-lg p-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="username" className="text-small text-foreground">Username</Label>
+              <Input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="mis. alice"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="text-body-md"
+                required
+              />
+            </div>
 
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="password" className="text-small text-foreground">Kata Sandi</Label>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="password" className="text-small text-foreground">Kata Sandi</Label>
+              <div className="relative">
                 <Input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   placeholder="masukkan kata sandi"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="text-body-md"
+                  className="text-body-md pr-10"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
+            </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Checkbox id="remember" disabled />
-                  <Label htmlFor="remember" className="text-small text-muted-foreground">Ingat Saya</Label>
-                </div>
-                <Link to="/auth/forgot" className="text-sm text-primary hover:underline">Lupa kata sandi?</Link>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="remember"
+                  checked={remember}
+                  onCheckedChange={(value) => setRemember(Boolean(value))}
+                />
+                <Label htmlFor="remember" className="text-small text-muted-foreground">Ingat Saya</Label>
               </div>
+              <Link to="/auth/forgot" className="text-sm text-primary hover:underline">Lupa kata sandi?</Link>
+            </div>
 
-              {loginError && (
-                <div className="text-sm text-destructive">{loginError?.response?.data?.message || loginError?.message || 'Gagal masuk'}</div>
-              )}
+            {loginError && (
+              <div className="text-sm text-destructive">{loginError?.response?.data?.message || loginError?.message || 'Gagal masuk'}</div>
+            )}
 
-              <Button type="submit" disabled={isLoginLoading} className="w-full text-body-md bg-black hover:opacity-80 text-white hover:bg-navy-hover">
-                {isLoginLoading ? 'Memproses...' : 'Masuk'}
-              </Button>
-            </form>
-          )}
+            <Button type="submit" disabled={isLoginLoading} className="w-full text-body-md bg-black hover:opacity-80 text-white hover:bg-navy-hover">
+              {isLoginLoading ? 'Memproses...' : 'Masuk'}
+            </Button>
+          </form>
         </CardContent>
 
         <CardFooter className="flex flex-col gap-2 text-center text-xs text-muted-foreground">
-          <div>Protected by enterprise-grade security</div>
-          <div>© 2024 Universitas. All rights reserved.</div>
+          <div>UPA TIK Universitas Lampung</div>
         </CardFooter>
       </Card>
     </AuthLayout>

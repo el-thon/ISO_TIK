@@ -44,24 +44,6 @@ const getInitials = (name = '') => {
     .join('') || '??'
 }
 
-const resolveGroupAccess = (group, currentUserId) => {
-  if (!group) return true
-  if (group.can_access === false) return false
-  if (group.is_accessible === false || group.accessible === false) return false
-  if (group.is_member === false) return false
-  if (group.membership === null) return false
-  if (group.role === null || group.user_role === null) return false
-  if (typeof group.access === 'string' && ['denied', 'forbidden', 'none'].includes(group.access)) return false
-  if (currentUserId) {
-    const isOwner = group.owner_user_id === currentUserId || group?.owner?.id === currentUserId
-    if (isOwner) return true
-    const memberships = Array.isArray(group.memberships) ? group.memberships : []
-    const memberIds = memberships.map((m) => m.user_id || m.user?.id || m.member_id).filter(Boolean)
-    if (memberIds.length && !memberIds.includes(currentUserId)) return false
-  }
-  return true
-}
-
 const toGroupCard = (group, currentUserId) => ({
   id: group.id,
   title: group.name,
@@ -72,7 +54,6 @@ const toGroupCard = (group, currentUserId) => ({
   initials: getInitials(group.owner?.profile?.full_name || group.owner?.username || group.name),
   is_active: group.is_active ?? true,
   created_at: group.created_at_formatted || '—',
-  canAccess: resolveGroupAccess(group, currentUserId),
 })
 
 export default function GroupsPage() {
@@ -123,14 +104,12 @@ export default function GroupsPage() {
   
   const { data, isLoading, isError, refetch } = useGroups(queryParams)
   
-  // Transform groups data
   const currentUserId = meData?.data?.user?.id || meData?.user?.id || meData?.id
   const groups = useMemo(() => {
     if (!Array.isArray(data?.groups)) return []
     return data.groups.map((group) => toGroupCard(group, currentUserId))
   }, [data, currentUserId])
 
-  // Filter groups berdasarkan tab aktif
   const filteredGroups = useMemo(() => {
     if (activeTab === 'all') return groups
     if (activeTab === 'active') return groups.filter(g => g.is_active)
@@ -138,12 +117,10 @@ export default function GroupsPage() {
     return groups
   }, [groups, activeTab])
 
-  // Hitung total rooms dari semua grup
   const totalRooms = useMemo(() => {
     return groups.reduce((sum, group) => sum + group.rooms, 0)
   }, [groups])
 
-  // Hitung total members dari semua grup
   const totalMembers = useMemo(() => {
     return groups.reduce((sum, group) => sum + group.members, 0)
   }, [groups])
@@ -182,12 +159,6 @@ export default function GroupsPage() {
 
   const handleOpenGroup = (group) => {
     if (!group?.id) return
-    if (group.canAccess === false) {
-      setUnauthorizedGroup(group)
-      setUnauthorizedMessage('Anda tidak memiliki otorisasi untuk membuka grup ini.')
-      setUnauthorizedOpen(true)
-      return
-    }
     navigate(`/groups/${group.id}`)
   }
 
@@ -308,7 +279,6 @@ export default function GroupsPage() {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Stats Summary */}
             <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1" title="Total Grup">
                 <Users className="w-4 h-4" />
@@ -379,7 +349,6 @@ export default function GroupsPage() {
               </DialogContent>
             </Dialog>
 
-            {/* Join Group Button & Dialog */}
             <Dialog open={joinOpen} onOpenChange={setJoinOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="flex items-center gap-2">
@@ -425,7 +394,6 @@ export default function GroupsPage() {
           </div>
         </div>
 
-        {/* Tabs Navigation */}
         <div className="mb-6">
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full md:w-auto grid-cols-3">
@@ -449,7 +417,6 @@ export default function GroupsPage() {
               </TabsTrigger>
             </TabsList>
             
-            {/* Tab-specific stats */}
             <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
                 <DoorOpen className="w-4 h-4" />

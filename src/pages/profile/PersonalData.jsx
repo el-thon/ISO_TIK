@@ -68,6 +68,7 @@ const buildPayload = (values) => {
 }
 
 export default function PersonalData({ profileData }) {
+  const [editing, setEditing] = useState(false)
   const [statusMessage, setStatusMessage] = useState(null)
   const defaultValues = useMemo(() => toDefaultValues(profileData), [profileData])
   const form = useForm({
@@ -104,6 +105,86 @@ export default function PersonalData({ profileData }) {
 
   const messageColor = statusMessage?.type === 'success' ? 'text-emerald-600' : statusMessage?.type === 'error' ? 'text-red-600' : 'text-muted-foreground'
 
+  const renderValue = (value) => (
+    <div className="mt-1 text-sm text-foreground font-medium">{value || '-'}</div>
+  )
+
+  const readView = (
+    <div className="space-y-6">
+      <div>
+        <h4 className="font-medium mb-2">Profil</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Nama Lengkap</div>
+            {renderValue(defaultValues.full_name)}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="font-medium mb-2">Kontak</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Nomor Telepon</div>
+            {renderValue(defaultValues.phone_number)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Email Pribadi</div>
+            {renderValue(defaultValues.email_personal)}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="font-medium mb-2">Alamat</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Alamat Baris 1</div>
+            {renderValue(defaultValues.address_line1)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Alamat Baris 2</div>
+            {renderValue(defaultValues.address_line2)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Kota</div>
+            {renderValue(defaultValues.city)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Provinsi</div>
+            {renderValue(defaultValues.province)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Kode Pos</div>
+            {renderValue(defaultValues.postal_code)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Negara</div>
+            {renderValue(defaultValues.country)}
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h4 className="font-medium mb-2">Kontak Darurat</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Nama</div>
+            {renderValue(defaultValues.emergency_name)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Hubungan</div>
+            {renderValue(defaultValues.emergency_relationship)}
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Nomor Telepon</div>
+            {renderValue(defaultValues.emergency_phone)}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div>
       <Card>
@@ -113,18 +194,44 @@ export default function PersonalData({ profileData }) {
               <h3 className="text-lg font-medium">Data Pribadi</h3>
               <p className="text-xs text-muted-foreground">Perbarui identitas, kontak, dan alamat kamu</p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => form.reset(toDefaultValues(profileData))}
-              disabled={updateProfile.isPending}
-            >
-              Reset
-            </Button>
+            {!editing ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setStatusMessage(null)
+                  setEditing(true)
+                }}
+              >
+                Edit
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    form.reset(toDefaultValues(profileData))
+                    setStatusMessage(null)
+                    setEditing(false)
+                  }}
+                  disabled={updateProfile.isPending}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" size="sm" disabled={updateProfile.isPending || !form.formState.isDirty}>
+                  {updateProfile.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </Button>
+              </div>
+            )}
           </div>
 
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {!editing && readView}
+
+          {editing && (
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div>
               <h4 className="font-medium mb-2">Profil</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -197,16 +304,15 @@ export default function PersonalData({ profileData }) {
               </div>
             </div>
 
-            {statusMessage && (
-              <p className={`text-sm ${messageColor}`}>{statusMessage.text}</p>
-            )}
+              {statusMessage && (
+                <p className={`text-sm ${messageColor}`}>{statusMessage.text}</p>
+              )}
+            </form>
+          )}
 
-            <div className="flex justify-end">
-              <Button type="submit" disabled={updateProfile.isPending || !form.formState.isDirty}>
-                {updateProfile.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
-              </Button>
-            </div>
-          </form>
+          {!editing && statusMessage && (
+            <p className={`text-sm ${messageColor} mt-4`}>{statusMessage.text}</p>
+          )}
         </CardContent>
       </Card>
     </div>

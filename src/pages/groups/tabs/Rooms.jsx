@@ -16,12 +16,7 @@ import { useForm } from 'react-hook-form'
 import { useCreateGroupRoom, useGroupRooms } from '@/services/groupHooks'
 import { Link } from 'react-router-dom'
 
-const visibilityOptions = [
-  { label: 'Private', value: 'private' },
-  { label: 'Group-wide', value: 'group-wide' },
-  { label: 'Org-wide', value: 'org-wide' },
-]
-
+const DEFAULT_ROOM_VISIBILITY = 'group_only'
 const DEFAULT_SECURITY_LEVEL = 'L1'
 
 export default function Rooms({ groupId, onCountChange }) {
@@ -42,14 +37,13 @@ export default function Rooms({ groupId, onCountChange }) {
     defaultValues: {
       name: '',
       description: '',
-      visibility: 'group-wide',
-      responsible_user_id: '',
+      creator_role: 'auditor',
     },
   })
 
   const createRoomMutation = useCreateGroupRoom(groupId, {
     onSuccess: async () => {
-      roomForm.reset({ name: '', description: '', visibility: 'group-wide', responsible_user_id: '' })
+      roomForm.reset({ name: '', description: '', creator_role: 'auditor' })
       setOpen(false)
       // Pastikan daftar rooms langsung diperbarui tanpa reload manual
       await refetch()
@@ -57,7 +51,11 @@ export default function Rooms({ groupId, onCountChange }) {
   })
 
   const submitRoom = (values) => {
-    createRoomMutation.mutate({ ...values, security_level: DEFAULT_SECURITY_LEVEL })
+    createRoomMutation.mutate({
+      ...values,
+      visibility: DEFAULT_ROOM_VISIBILITY,
+      security_level: DEFAULT_SECURITY_LEVEL,
+    })
   }
 
   return (
@@ -91,21 +89,14 @@ export default function Rooms({ groupId, onCountChange }) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Visibilitas</label>
+                  <label className="text-sm font-medium">Peran pembuat</label>
                   <select
                     className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
-                    {...roomForm.register('visibility', { required: true })}
+                    {...roomForm.register('creator_role', { required: true })}
                   >
-                    {visibilityOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
+                    <option value="auditor">Auditor</option>
+                    <option value="auditee">Auditee</option>
                   </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Penanggung jawab (opsional)</label>
-                  <Input placeholder="User ID" {...roomForm.register('responsible_user_id')} />
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => setOpen(false)}>

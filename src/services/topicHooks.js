@@ -247,6 +247,34 @@ export function useCreateTopicReview(options = {}) {
   })
 }
 
+export function useUpdateTopicReview(options = {}) {
+  const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options
+  return useMutation({
+    mutationFn: ({ topicId, reviewId, payload }) => topicService.updateTopicReview(topicId, reviewId, payload),
+    onSuccess: (data, variables, context) => {
+      const topicId = variables?.topicId
+      invalidateTopicQueries(queryClient, topicId)
+      if (onSuccess) onSuccess(data, variables, context)
+    },
+    ...rest,
+  })
+}
+
+export function useDeleteTopicReview(options = {}) {
+  const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options
+  return useMutation({
+    mutationFn: ({ topicId, reviewId, payload }) => topicService.deleteTopicReview(topicId, reviewId, payload),
+    onSuccess: (data, variables, context) => {
+      const topicId = variables?.topicId
+      invalidateTopicQueries(queryClient, topicId)
+      if (onSuccess) onSuccess(data, variables, context)
+    },
+    ...rest,
+  })
+}
+
 export function useReplyComment(options = {}) {
   const queryClient = useQueryClient()
   const { onSuccess, ...rest } = options
@@ -339,7 +367,45 @@ export default {
   useDownloadAttachment,
   useComment,
   useCreateTopicReview,
+  useUpdateTopicReview,
+  useDeleteTopicReview,
   useTopicVersions,
   useTopicVersion,
   useRevertTopicVersion,
+}
+
+
+// services/topicHooks.js
+
+// Tambahkan hook ini di file yang sudah ada
+export const useCreateTopicInputItem = (options = {}) => {
+  return useMutation({
+    mutationFn: async ({ topicId, data }) => {
+      const response = await api.post(`/topics/${topicId}/input-items`, data)
+      return response.data
+    },
+    ...options
+  })
+}
+
+// Optional: hook untuk update input item
+export const useUpdateTopicInputItem = (options = {}) => {
+  return useMutation({
+    mutationFn: async ({ topicId, inputItemId, data }) => {
+      const response = await api.put(`/topics/${topicId}/input-items/${inputItemId}`, data)
+      return response.data
+    },
+    ...options
+  })
+}
+
+// Optional: hook untuk delete input item
+export const useDeleteTopicInputItem = (options = {}) => {
+  return useMutation({
+    mutationFn: async ({ topicId, inputItemId }) => {
+      const response = await api.delete(`/topics/${topicId}/input-items/${inputItemId}`)
+      return response.data
+    },
+    ...options
+  })
 }
