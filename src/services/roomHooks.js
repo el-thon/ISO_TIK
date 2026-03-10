@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAccessToken } from './api'
 import * as roomService from './roomService'
-import * as groupService from './groupService'
 
 const hasToken = () => Boolean(getAccessToken())
 
@@ -189,16 +188,26 @@ export function useRemoveRoomParticipant(roomId, participantId, options = {}) {
 export function useCreateRoom(options = {}) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ groupId, payload }) => {
-      if (!groupId) throw new Error('groupId is required to create a room')
-      return groupService.createRoom(groupId, payload)
+    mutationFn: (payload) => {
+      return roomService.createRoom(payload)
     },
     onSuccess: (data, variables, context) => {
       queryClient.invalidateQueries({ queryKey: ['rooms'] })
-      queryClient.invalidateQueries({ queryKey: ['groups', variables?.groupId, 'rooms'] })
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
     ...options,
+  })
+}
+
+export function useAvailableUsers(params = {}, options = {}) {
+  const { enabled, ...rest } = options
+  return useQuery({
+    queryKey: ['users', 'available', params],
+    queryFn: () => roomService.listAvailableUsers(params),
+    keepPreviousData: true,
+    staleTime: 30_000,
+    ...rest,
+    enabled: Boolean(enabled !== false && hasToken()),
   })
 }
 
@@ -218,4 +227,5 @@ export default {
   useUpdateRoomParticipant,
   useRemoveRoomParticipant,
   useCreateRoom,
+  useAvailableUsers,
 }

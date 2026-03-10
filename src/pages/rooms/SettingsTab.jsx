@@ -50,7 +50,6 @@ export default function SettingsTab({ room }) {
 
   const infoItems = [
     { label: 'ID Ruangan', value: room?.id || '-' },
-    { label: 'Grup', value: room?.group?.name || '—' },
     { label: 'Visibility', value: formatVisibility(room?.visibility) },
     { label: 'Status', value: room?.is_locked ? 'Locked' : 'Unlocked' },
     { label: 'Arsip', value: room?.is_archived ? 'Archived' : 'Active' },

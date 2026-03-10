@@ -34,8 +34,9 @@ import {
   useRoomParticipants,
   useAddRoomParticipant,
   useLeaveRoom,
+  useAvailableUsers,
+  useUpdateRoomParticipant,
 } from '@/services/roomHooks'
-import { useGroupMembers } from '@/services/groupHooks'
 import { useMe } from '@/services/authHooks'
 import { cn } from '@/lib/utils'
 
@@ -103,7 +104,7 @@ export default function ParticipantsTab({ roomId, room }) {
   const [memberPopoverOpen, setMemberPopoverOpen] = useState(false)
   
   const { data: me } = useMe({ staleTime: 60_000 })
-  const currentUserId = me?.id ?? null
+  let currentUserId = me?.id ?? me?.data?.user?.id ?? null
 
   const {
     data,
@@ -111,35 +112,83 @@ export default function ParticipantsTab({ roomId, room }) {
     isError: participantsError,
     error: participantsErrorObj,
     refetch: refetchParticipants,
-  } = useRoomParticipants(roomId, { per_page: 1000 })
+  } = useRoomParticipants(roomId, { per_page: 200 })
   
   const participants = data?.participants ?? []
+  
+  // Try to extract currentUserId from JWT token if me data is null
+  if (!currentUserId && typeof window !== 'undefined') {
+    try {
+      const token = localStorage.getItem('iso_tik_access_token')
+      if (token) {
+        // Decode JWT payload without verification (safe for frontend)
+        const parts = token.split('.')
+        if (parts.length === 3) {
+          try {
+            const payload = JSON.parse(atob(parts[1]))
+            currentUserId = payload.sub || payload.user_id || payload.id || payload.jti || null
+          } catch (parseError) {
+            // silent fail
+          }
+        }
+      }
+    } catch (e) {
+      // silent fail
+    }
+  }
+
+  // If still no currentUserId, try to get from first participant that matches logged-in profile
+  const myMembership = useMemo(() => {
+    if (!currentUserId) return null
+    return participants.find((p) => p.user_id === currentUserId) ?? null
+  }, [participants, currentUserId])
+  
+  const canLeaveRoom = Boolean(myMembership)
+  
+  // Find the owner participant by matching room.responsible_user_id
+  const ownerParticipant = useMemo(() => {
+    if (!room?.responsible_user_id) return null
+    return participants.find((p) => String(p.user_id) === String(room.responsible_user_id)) || null
+  }, [room?.responsible_user_id, participants])
+  
+  // Check if current user is room owner
+  // If currentUserId exists, check direct match
+  // Otherwise, check if current participant is the owner based on responsible_user_id match
+  const isRoomOwner = Boolean(
+    (currentUserId && room?.responsible_user_id && String(currentUserId) === String(room.responsible_user_id)) ||
+    (myMembership?.is_responsible_user === true) ||
+    (ownerParticipant && !currentUserId) // If we found owner participant and no currentUserId, assume current user is owner
+  )
+  
+  // Owner can manage participants, plus those with MANAGER_ROLES
+  const userRoleKey = normalizeRoleKey(room?.user_role || myMembership?.role || me?.role)
+  const canManageParticipants = isRoomOwner || MANAGER_ROLES.has(userRoleKey)
+  
   const groupId = room?.group?.id || room?.group_id
 
+  // Fetch available users (global, tidak perlu group)
   const {
-    data: groupData,
-    isLoading: groupMembersLoading,
-    isError: groupMembersError,
-    error: groupMembersErrorObj,
-    refetch: refetchGroupMembers,
-  } = useGroupMembers(groupId, { 
-    enabled: Boolean(groupId) && dialogOpen,
-    staleTime: 30_000,
-  })
+    data: usersData,
+    isLoading: usersLoading,
+    isError: usersError,
+  } = useAvailableUsers(
+    { per_page: 200 },
+    { enabled: dialogOpen && canManageParticipants }
+  )
 
-  const allGroupMembers = groupData?.members ?? []
+  const availableUsers = usersData?.users ?? []
 
   const availableMembers = useMemo(() => {
-    if (!allGroupMembers?.length) return []
+    if (!availableUsers?.length) return []
     
     const participantUserIds = new Set(participants.map((p) => p.user_id))
     
-    return allGroupMembers.filter((member) => {
+    return availableUsers.filter((member) => {
       const memberId = getMemberId(member)
       if (!memberId) return false
       return !participantUserIds.has(memberId)
     })
-  }, [allGroupMembers, participants])
+  }, [availableUsers, participants])
 
   const filteredMembers = useMemo(() => {
     if (!memberSearch.trim()) return availableMembers
@@ -153,14 +202,6 @@ export default function ParticipantsTab({ roomId, room }) {
     })
   }, [availableMembers, memberSearch])
 
-  const myMembership = useMemo(() => {
-    if (!currentUserId) return null
-    return participants.find((p) => p.user_id === currentUserId) ?? null
-  }, [participants, currentUserId])
-  
-  const canLeaveRoom = Boolean(myMembership)
-  const userRoleKey = normalizeRoleKey(room?.user_role || myMembership?.role || me?.role)
-  const canManageParticipants = MANAGER_ROLES.has(userRoleKey)
   const leaveMutation = useLeaveRoom(roomId)
   
   const handleLeaveRoom = useCallback(() => {
@@ -208,16 +249,14 @@ export default function ParticipantsTab({ roomId, room }) {
 
   const onInvite = (values) => {
     const payload = { user_id: values.userId, role: values.role }
-    console.log('[ParticipantsTab] Invite payload:', payload)
     inviteMutation.mutate(payload)
   }
 
   const inviteError = inviteMutation.error?.response?.data?.message || inviteMutation.error?.message || null
   
   const inviteDisabled =
-    !groupId ||
-    groupMembersLoading ||
-    groupMembersError ||
+    usersLoading ||
+    usersError ||
     availableMembers.length === 0 ||
     inviteMutation.isPending ||
     !selectedUserId
@@ -276,7 +315,7 @@ export default function ParticipantsTab({ roomId, room }) {
             <Button 
               size="sm" 
               className="inline-flex items-center gap-2" 
-              disabled={!groupId}
+              disabled={!canManageParticipants}
             >
               <UserPlus className="w-4 h-4" /> 
               Undang Peserta
@@ -285,23 +324,29 @@ export default function ParticipantsTab({ roomId, room }) {
           
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle>Undang anggota ke ruangan</DialogTitle>
+              <DialogTitle>Undang peserta ke forum</DialogTitle>
               <DialogDescription>
-                Pilih anggota grup dan tentukan perannya.
+                Pilih peserta dan tentukan perannya.
               </DialogDescription>
             </DialogHeader>
             
-            {!groupId && (
+            {availableUsers.length === 0 && !usersLoading && usersError && (
               <p className="text-sm text-rose-600">
-                Ruangan belum terhubung dengan grup sehingga tidak dapat mengundang peserta.
+                Gagal memuat daftar pengguna. Coba lagi nanti.
               </p>
             )}
             
-            {groupId && (
+            {availableMembers.length === 0 && !usersLoading && !usersError && availableUsers.length > 0 && (
+              <p className="text-sm text-amber-600">
+                Semua pengguna sudah menjadi peserta forum ini.
+              </p>
+            )}
+            
+            {availableUsers.length > 0 && (
               <form onSubmit={handleSubmit(onInvite)} className="space-y-6">
                 {/* Member Selection with Custom Popover */}
                 <div className="space-y-2">
-                  <Label>Anggota Grup</Label>
+                  <Label>Pilih Peserta</Label>
                   
                   {renderSelectedMember()}
                   
@@ -322,8 +367,8 @@ export default function ParticipantsTab({ roomId, room }) {
                               errors.userId && "border-rose-500"
                             )}
                             disabled={
-                              groupMembersLoading || 
-                              groupMembersError || 
+                              usersLoading || 
+                              usersError || 
                               inviteMutation.isPending ||
                               availableMembers.length === 0
                             }
@@ -341,13 +386,13 @@ export default function ParticipantsTab({ roomId, room }) {
                               </div>
                             ) : (
                               <span>
-                                {groupMembersLoading
-                                  ? 'Memuat anggota grup...'
-                                  : groupMembersError
-                                  ? 'Error memuat anggota'
+                                {usersLoading
+                                  ? 'Memuat pengguna...'
+                                  : usersError
+                                  ? 'Error memuat pengguna'
                                   : availableMembers.length === 0
-                                  ? 'Semua anggota sudah menjadi peserta'
-                                  : 'Cari dan pilih anggota...'}
+                                  ? 'Semua pengguna sudah menjadi peserta'
+                                  : 'Cari dan pilih pengguna...'}
                               </span>
                             )}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -377,10 +422,10 @@ export default function ParticipantsTab({ roomId, room }) {
                           </div>
                           
                           <div className="max-h-64 overflow-y-auto">
-                            {groupMembersLoading ? (
+                            {usersLoading ? (
                               <div className="py-8 text-center">
                                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                                <p className="text-sm text-muted-foreground">Memuat anggota...</p>
+                                <p className="text-sm text-muted-foreground">Memuat pengguna...</p>
                               </div>
                             ) : filteredMembers.length === 0 ? (
                               <div className="py-8 text-center">
@@ -447,18 +492,9 @@ export default function ParticipantsTab({ roomId, room }) {
                     <p className="text-xs text-rose-600 mt-1">{errors.userId.message}</p>
                   )}
                   
-                  {groupMembersError && (
+                  {usersError && (
                     <p className="text-xs text-rose-600 mt-1">
-                      {groupMembersErrorObj?.response?.data?.message || 
-                       groupMembersErrorObj?.message || 
-                       'Gagal memuat anggota grup.'}
-                      <button 
-                        type="button" 
-                        className="ml-2 underline hover:text-rose-800" 
-                        onClick={() => refetchGroupMembers()}
-                      >
-                        Coba lagi
-                      </button>
+                      Gagal memuat daftar pengguna.
                     </p>
                   )}
                 </div>
@@ -498,9 +534,9 @@ export default function ParticipantsTab({ roomId, room }) {
                   )}
                 </div>
 
-                {availableMembers.length === 0 && !groupMembersLoading && !groupMembersError && (
+                {availableMembers.length === 0 && !usersLoading && !usersError && (
                   <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-md p-3">
-                    Semua anggota grup sudah menjadi peserta ruangan ini.
+                    Semua pengguna sudah menjadi peserta ruangan ini.
                   </p>
                 )}
 
@@ -557,10 +593,13 @@ export default function ParticipantsTab({ roomId, room }) {
               key={participant.id}
               participant={participant}
               roomId={roomId}
+              room={room}
               canManageParticipants={canManageParticipants}
+              isRoomOwner={isRoomOwner}
               isCurrentUser={participant.user_id === currentUserId}
               onLeave={participant.user_id === currentUserId && canLeaveRoom ? handleLeaveRoom : null}
               leaveState={{ isPending: leaveMutation.isPending, error: leaveErrorMessage }}
+              onRefetch={refetchParticipants}
             />
           ))}
         </div>
@@ -572,13 +611,35 @@ export default function ParticipantsTab({ roomId, room }) {
 function ParticipantCard({ 
   participant, 
   roomId, 
+  room,
   canManageParticipants, 
+  isRoomOwner,
   isCurrentUser, 
   onLeave, 
-  leaveState 
+  leaveState,
+  onRefetch
 }) {
+  const [selectedRole, setSelectedRole] = useState(participant.role)
+  const [isEditing, setIsEditing] = useState(false)
+  
   const profileName = participant.user?.profile?.full_name || participant.user?.username || 'Pengguna'
   const leaveError = isCurrentUser ? leaveState?.error : null
+  
+  const updateMutation = useUpdateRoomParticipant(roomId, participant.id, {
+    onSuccess: () => {
+      setIsEditing(false)
+      setTimeout(() => onRefetch(), 300)
+    },
+  })
+  
+  const handleRoleChange = (newRole) => {
+    if (newRole === participant.role) {
+      setIsEditing(false)
+      return
+    }
+    setSelectedRole(newRole)
+    updateMutation.mutate({ role: newRole })
+  }
 
   return (
     <div className="p-4 border rounded-lg bg-white hover:shadow-sm transition-shadow">
@@ -598,9 +659,27 @@ function ParticipantCard({
         </div>
         
         <div className="flex flex-col items-end gap-2">
-          <div className="text-xs px-2 py-1 rounded-full bg-slate-100 text-muted-foreground capitalize">
-            {formatRole(participant.role)}
-          </div>
+          {isRoomOwner ? (
+            <Select value={selectedRole} onValueChange={handleRoleChange} disabled={updateMutation.isPending}>
+              <SelectTrigger className="w-24 h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {roleOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="text-xs px-2 py-1 rounded-full bg-slate-100 text-muted-foreground capitalize flex items-center gap-1">
+              {formatRole(participant.role)}
+              {participant.user_id === room?.responsible_user_id && (
+                <span className="text-xs text-amber-600 font-medium">👑</span>
+              )}
+            </div>
+          )}
 
           {isCurrentUser && (
             <Button
@@ -623,6 +702,12 @@ function ParticipantCard({
 
       {leaveError && (
         <p className="text-xs text-rose-600 mt-2">{leaveError}</p>
+      )}
+      
+      {updateMutation.error && (
+        <p className="text-xs text-rose-600 mt-2">
+          Gagal mengubah role: {updateMutation.error?.response?.data?.message || updateMutation.error?.message}
+        </p>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
 import { Home } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
@@ -19,6 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRoom, useRoomParticipants } from '@/services/roomHooks'
 import { useMe } from '@/services/authHooks'
+import { getCurrentUserId, getUserData } from '@/utils/auth'
 
 const formatDateTime = (value) => {
   if (!value) return '-'
@@ -35,13 +36,12 @@ const formatDateTime = (value) => {
 
 const formatVisibility = (value) => {
   switch (value) {
-    case 'private':
-      return 'Private'
-    case 'org-wide':
-      return 'Org-wide'
-    case 'group-wide':
+    case 'restricted':
+      return 'Terbatas'
+    case 'public':
+      return 'Publik'
     default:
-      return 'Group-wide'
+      return value
   }
 }
 
@@ -69,25 +69,65 @@ export default function RoomDetail() {
   const location = useLocation()
   const fromGroup = location.state?.fromGroup
   const { data: room, isLoading, isError, error, refetch } = useRoom(roomId)
-  const { data: meData } = useMe({ staleTime: 60_000 })
-  const currentUserId = meData?.id ?? null
+  const { data: meData } = useMe({ 
+    staleTime: 60_000,
+    enabled: false // DISABLED: Gunakan localStorage cache only
+  })
+
+  // Enhanced currentUserId detection with multiple fallbacks
+  const cachedUser = getUserData()
+  const currentUserId =
+    cachedUser?.id ||
+    cachedUser?.user_id ||
+    meData?.data?.user?.id ||
+    getCurrentUserId()
+
+  // Ensure we have string for comparison
+  const normalizedCurrentUserId = currentUserId ? String(currentUserId) : null
+  const normalizedResponsibleUserId = room?.responsible_user_id ? String(room.responsible_user_id) : null
+
   const {
     data: participantsData,
-  } = useRoomParticipants(roomId, { per_page: 200 }, { enabled: Boolean(roomId && currentUserId) })
+    isLoading: participantsLoading
+  } = useRoomParticipants(
+    roomId, 
+    { per_page: 200 }, 
+    { 
+      enabled: Boolean(roomId && normalizedCurrentUserId) // Only fetch if we have user ID
+    }
+  )
+
   const participantRole = useMemo(() => {
-    if (!currentUserId) return null
+    if (!normalizedCurrentUserId) return null
     const participants = participantsData?.participants ?? []
-    const match = participants.find((participant) => String(participant.user_id) === String(currentUserId))
+    const match = participants.find((participant) => String(participant.user_id) === normalizedCurrentUserId)
     return match?.role || null
-  }, [currentUserId, participantsData])
+  }, [normalizedCurrentUserId, participantsData])
+
+  const currentParticipant = useMemo(() => {
+    if (!normalizedCurrentUserId) return null
+    const participants = participantsData?.participants ?? []
+    return participants.find((participant) => String(participant.user_id) === normalizedCurrentUserId) || null
+  }, [normalizedCurrentUserId, participantsData])
+
+  // Find the owner participant by matching room.responsible_user_id (sama seperti ParticipantsTab)
+  const ownerParticipant = useMemo(() => {
+    if (!room?.responsible_user_id) return null
+    const participants = participantsData?.participants ?? []
+    return participants.find((p) => String(p.user_id) === String(room.responsible_user_id)) || null
+  }, [room?.responsible_user_id, participantsData])
 
   const stats = room?.stats ?? { participant_count: 0, topic_count: 0 }
-  const groupCrumbHref = fromGroup ? `/groups/${fromGroup.id}?tab=rooms` : '/rooms'
-  const groupCrumbLabel = fromGroup ? `Grup Room (${fromGroup.name || 'Tanpa nama'})` : 'Ruangan'
   const roleKey = normalizeRoleKey(room?.user_role || room?.role || room?.participant_role || participantRole)
-  const canCreateTopic = roleKey === 'auditor' || roleKey === 'group_owner' || roleKey === 'super_admin'
-  const showTopicsTab = canCreateTopic
-  const defaultTab = showTopicsTab ? 'topics' : 'attachments'
+  const canCreateTopic = Boolean(currentParticipant)
+  const defaultTab = 'topics' // Default to topics tab
+  
+  // Check if current user is the responsible user (owner) of this room
+  const isRoomOwner = Boolean(
+    normalizedCurrentUserId && 
+    normalizedResponsibleUserId && 
+    normalizedCurrentUserId === normalizedResponsibleUserId
+  )
 
   return (
     <MainLayout>
@@ -107,7 +147,7 @@ export default function RoomDetail() {
 
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                  <Link to={groupCrumbHref}>{groupCrumbLabel}</Link>
+                  <Link to="/forum">Forum</Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
 
@@ -129,7 +169,7 @@ export default function RoomDetail() {
         {isError && (
           <div className="p-4 mb-4 border border-rose-200 bg-rose-50 rounded-md flex items-center justify-between">
             <div>
-              <p className="font-medium text-rose-700">Gagal memuat ruangan</p>
+              <p className="font-medium text-rose-700">Gagal memuat forum</p>
               <p className="text-sm text-rose-600">{error?.response?.data?.message || error?.message || 'Coba beberapa saat lagi.'}</p>
             </div>
             <Button variant="outline" onClick={() => refetch()}>
@@ -147,10 +187,10 @@ export default function RoomDetail() {
                     <CardTitle className="text-heading-3 font-semibold flex flex-wrap items-center gap-2">
                       {room.name}
                       {room.is_locked && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Locked</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Terkunci</span>
                       )}
                       {room.is_archived && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Archived</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Diarsipkan</span>
                       )}
                     </CardTitle>
                     <CardDescription className="text-sm text-muted-foreground">
@@ -160,12 +200,6 @@ export default function RoomDetail() {
                       <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">
                         {formatVisibility(room.visibility)}
                       </span>
-                      <Link
-                        to={room.group?.id ? `/groups/${room.group.id}` : '/groups'}
-                        className="text-blue-600 font-medium"
-                      >
-                        {room.group?.name || 'Lihat grup'}
-                      </Link>
                     </div>
                     <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
                       <div>
@@ -181,17 +215,12 @@ export default function RoomDetail() {
 
                   <div className="flex flex-col sm:flex-row gap-3">
                     {canCreateTopic && (
-                      <Link to="/topics/create" state={{ roomId: room.id, roomTitle: room.name }}>
+                      <Link to="/formulir/buat" state={{ roomId: room.id, roomTitle: room.name }}>
                         <Button size="sm" className="bg-blue-600 text-white">
-                          + Create Topic
+                          + Buat Formulir
                         </Button>
                       </Link>
                     )}
-                    <Link to="#settings">
-                      <Button variant="outline" size="sm">
-                        Settings
-                      </Button>
-                    </Link>
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
@@ -200,7 +229,7 @@ export default function RoomDetail() {
                     <span className="font-semibold">{stats.participant_count ?? 0}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span>Topik aktif:</span>
+                    <span>Formulir aktif:</span>
                     <span className="font-semibold">{stats.topic_count ?? 0}</span>
                   </div>
                 </div>
@@ -212,15 +241,19 @@ export default function RoomDetail() {
                 <div className="bg-white">
                   <TabsBar
                     items={[
-                      ...(showTopicsTab ? [{ label: 'Topics', value: 'topics', count: stats.topic_count ?? 0 }] : []),
-                      { label: 'Attachments', value: 'attachments' },
-                      { label: 'Participants', value: 'participants', count: stats.participant_count ?? 0 },
-                      { label: 'Timeline', value: 'timeline' },
-                      { label: 'Settings', value: 'settings' },
+                      { label: 'Formulir', value: 'topics', count: stats.topic_count ?? 0 },
+                      { label: 'Lampiran', value: 'attachments' },
+                      { label: 'Peserta', value: 'participants', count: stats.participant_count ?? 0 },
+                      ...(isRoomOwner ? [{ label: 'Pengaturan', value: 'settings' }] : []),
                     ]}
                   />
                 </div>
-                <RoomTabsContent roomId={room.id} room={room} showTopicsTab={showTopicsTab} />
+                <RoomTabsContent 
+                  roomId={room.id} 
+                  room={room} 
+                  isRoomOwner={isRoomOwner}
+                  currentUserId={normalizedCurrentUserId}
+                />
               </Tabs>
             </div>
           </>

@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Paperclip, Download, Search, UploadCloud, RefreshCw, X } from 'lucide-react';
+import { Paperclip, Download, Search, UploadCloud, RefreshCw, X, FileText, Image, File } from 'lucide-react';
 import * as documentService from '@/services/documentService';
-import { getAccessToken } from '@/services/api'; // Import getAccessToken
-import { useBootstrapSession } from '../../services/authHooks'; // Import hook untuk cek session
+import { getAccessToken } from '@/services/api';
+import { useBootstrapSession } from '../../services/authHooks';
 
 // Constants
 const ITEMS_PER_PAGE = 20;
@@ -43,12 +43,36 @@ const formatFileSize = (bytes) => {
   return `${size.toFixed(1)} ${units[unitIndex]}`;
 };
 
+// Fungsi untuk mendapatkan icon berdasarkan tipe file
+const getFileIcon = (filename) => {
+  const extension = filename?.split('.').pop()?.toLowerCase();
+  
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(extension)) {
+    return <Image className="h-4 w-4 text-blue-500" />;
+  } else if (extension === 'pdf') {
+    return <FileText className="h-4 w-4 text-red-500" />;
+  } else if (['doc', 'docx'].includes(extension)) {
+    return <FileText className="h-4 w-4 text-blue-700" />;
+  } else if (['xls', 'xlsx'].includes(extension)) {
+    return <FileText className="h-4 w-4 text-green-600" />;
+  }
+  return <File className="h-4 w-4 text-gray-500" />;
+};
+
+// Fungsi untuk mendapatkan nama file yang benar
 const resolveFilename = (document) => {
-  return document?.filename || 
-         document?.name || 
-         document?.original_name || 
-         document?.file_name || 
-         'Lampiran';
+  // Coba semua kemungkinan field yang mungkin berisi nama file
+  const filename = document?.original_filename || 
+                   document?.display_name ||
+                   document?.filename || 
+                   document?.original_name ||
+                   document?.name || 
+                   document?.file_name || 
+                   document?.originalFile ||
+                   document?.originalName ||
+                   'Lampiran';
+  
+  return filename;
 };
 
 // Skeleton Component
@@ -56,8 +80,13 @@ const DocumentSkeleton = () => (
   <div className="space-y-2">
     {Array.from({ length: 4 }).map((_, idx) => (
       <div key={idx} className="border rounded-md p-4">
-        <Skeleton className="h-5 w-3/4 mb-2" />
-        <Skeleton className="h-4 w-1/4" />
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-8 w-8 rounded" />
+          <div className="flex-1">
+            <Skeleton className="h-5 w-3/4 mb-2" />
+            <Skeleton className="h-4 w-1/4" />
+          </div>
+        </div>
       </div>
     ))}
   </div>
@@ -213,75 +242,56 @@ export default function AttachmentsTab() {
     }
   };
 
-  // HANDLE DOWNLOAD - Menggunakan service yang sudah diperbaiki
-const handleDownload = async (documentId, filename) => {
-  // Cek token dulu
-  const token = getAccessToken();
-  if (!token) {
-    alert('Sesi Anda telah berakhir. Silakan login kembali.');
-    return;
-  }
+  const handleDownload = async (documentId, filename) => {
+    // Cek token dulu
+    const token = getAccessToken();
+    if (!token) {
+      alert('Sesi Anda telah berakhir. Silakan login kembali.');
+      return;
+    }
 
-  setDownloadLoading(prev => ({ ...prev, [documentId]: true }));
-  setDownloadProgress(prev => ({ ...prev, [documentId]: 0 }));
-  
-  try {
-    // Gunakan fungsi download dari documentService
-    const { blob, filename: serverFilename } = await documentService.downloadDocument(
-      documentId, 
-      filename,
-      (progress) => {
-        setDownloadProgress(prev => ({ ...prev, [documentId]: progress }));
-      }
-    );
+    setDownloadLoading(prev => ({ ...prev, [documentId]: true }));
+    setDownloadProgress(prev => ({ ...prev, [documentId]: 0 }));
     
-    // Final filename
-    const finalFilename = serverFilename || filename;
-    
-    // Debug: cek tipe blob
-    console.log('Blob type:', blob.type);
-    console.log('File size:', blob.size);
-    console.log('Final filename:', finalFilename);
-    
-    // Buat URL object untuk blob
-    const url = window.URL.createObjectURL(blob);
-    
-    // Buat link temporary
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = finalFilename;
-    
-    // Untuk PDF, bisa juga dibuka di tab baru
-    if (finalFilename.endsWith('.pdf')) {
-      // Opsi 1: Download langsung
+    try {
+      // Gunakan fungsi download dari documentService
+      const { blob, filename: serverFilename } = await documentService.downloadDocument(
+        documentId, 
+        filename,
+        (progress) => {
+          setDownloadProgress(prev => ({ ...prev, [documentId]: progress }));
+        }
+      );
+      
+      // Final filename
+      const finalFilename = serverFilename || filename;
+      
+      // Buat URL object untuk blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Buat link temporary
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = finalFilename;
+      
+      // Download file
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
-      // Opsi 2: Buka di tab baru (uncomment jika ingin preview dulu)
-      // window.open(url, '_blank');
-    } else {
-      // Untuk non-PDF, download langsung
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Cleanup URL object setelah delay
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      
+    } catch (error) {
+      alert(error.message || 'Gagal mengunduh dokumen.');
+    } finally {
+      setDownloadLoading(prev => ({ ...prev, [documentId]: false }));
+      setDownloadProgress(prev => ({ ...prev, [documentId]: 0 }));
     }
-    
-    // Cleanup URL object setelah delay
-    setTimeout(() => {
-      window.URL.revokeObjectURL(url);
-    }, 100);
-    
-    console.log(`Download sukses: ${finalFilename}`);
-    
-  } catch (error) {
-    console.error('Download error:', error);
-    alert(error.message || 'Gagal mengunduh dokumen.');
-  } finally {
-    setDownloadLoading(prev => ({ ...prev, [documentId]: false }));
-    setDownloadProgress(prev => ({ ...prev, [documentId]: 0 }));
-  }
-};
+  };
 
   // Jika session sedang refresh, tampilkan loading
   if (isRefreshing) {
@@ -312,20 +322,24 @@ const handleDownload = async (documentId, filename) => {
           const documentId = document.id;
           const isDownloading = downloadLoading[documentId];
           const progress = downloadProgress[documentId];
+          const fileIcon = getFileIcon(filename);
           
           return (
             <div 
               key={document.id} 
               className="flex items-center justify-between text-sm border rounded-md px-4 py-3 hover:bg-gray-50 transition-colors group"
             >
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-slate-800 truncate pr-4">
-                  {filename}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                  <span>{formatDate(document.created_at)}</span>
-                  <span>•</span>
-                  <span>{formatFileSize(document.size_bytes || document.size)}</span>
+              <div className="flex-1 min-w-0 flex items-center gap-3">
+                {fileIcon}
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-800 truncate pr-4" title={filename}>
+                    {filename}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                    <span>{formatDate(document.created_at)}</span>
+                    <span>•</span>
+                    <span>{formatFileSize(document.size_bytes || document.size)}</span>
+                  </div>
                 </div>
               </div>
               
@@ -425,7 +439,7 @@ const handleDownload = async (documentId, filename) => {
             </Button>
 
             <p className="text-xs text-muted-foreground text-center">
-              Format: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG
+              Format: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max. 10MB)
             </p>
           </CardContent>
         </Card>

@@ -32,7 +32,7 @@ export default function TopicsTab({ roomId }) {
       {isLoading && <TopicsSkeleton />}
       {!isLoading && topics.length === 0 && (
         <div className="text-sm text-muted-foreground border border-dashed rounded-lg p-6 text-center">
-          Belum ada topik di ruangan ini.
+          Belum ada formulir di forum ini.
         </div>
       )}
       {!isLoading && topics.length > 0 && (
@@ -41,7 +41,7 @@ export default function TopicsTab({ roomId }) {
             const authorName = topic.created_by?.username || 'Anonim'
             return (
               <Card key={topic.id}>
-                <Link to={`/topics/${topic.id}`} className="block no-underline text-inherit">
+                <Link to={`/formulir/${topic.id}`} className="block no-underline text-inherit">
                   <CardContent className="pt-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">

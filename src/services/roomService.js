@@ -51,6 +51,11 @@ export async function deleteRoom(roomId) {
 	return res?.data ?? {}
 }
 
+export async function createRoom(payload) {
+	const res = await api.post('/rooms', payload)
+	return unwrap(res) ?? {}
+}
+
 export async function lockRoom(roomId, payload = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/rooms/${roomId}/lock`, payload)
@@ -149,9 +154,33 @@ export async function listTopics(roomId, params = {}) {
 	}
 }
 
+export async function listAvailableUsers(params = {}) {
+	const res = await api.get(`/users`, { params })
+	const payload = unwrap(res) ?? {}
+	
+	// Handle user data with proper field extraction
+	const users = ensureArray(payload.users ?? payload.items ?? []).map((user) => {
+		const profile = user?.profile || user?.user?.profile || {}
+		return {
+			id: user?.id || user?.user_id,
+			user_id: user?.user_id || user?.id,
+			username: user?.username || user?.user?.username || '',
+			name: profile?.full_name || user?.user?.profile?.full_name || user?.username || 'User',
+			profile,
+			user: user?.user || user, // Fallback untuk struktur nested
+		}
+	})
+	
+	return {
+		users,
+		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+	}
+}
+
 export default {
 	listRooms,
 	getRoom,
+	createRoom,
 	updateRoom,
 	deleteRoom,
 	lockRoom,
@@ -164,4 +193,5 @@ export default {
 	removeParticipant,
 	leaveRoom,
 	listTopics,
+	listAvailableUsers,
 }
