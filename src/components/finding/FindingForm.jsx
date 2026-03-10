@@ -1,9 +1,17 @@
 // components/finding/FindingForm.jsx
-import React, { useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
+import { ChevronsUpDown, FileText, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useAdminClauses } from '@/services/adminClauseHooks'
+import { cn } from '@/lib/utils'
+import * as documentService from '@/services/documentService'
 
 const createEmptyFinding = () => ({
   no: 1,
@@ -13,15 +21,252 @@ const createEmptyFinding = () => ({
   objective_evidence: ''
 })
 
+const normalizeClauseReferences = (refs) => {
+  if (!Array.isArray(refs)) return []
+  return refs
+    .map((ref) => {
+      if (!ref) return null
+      if (typeof ref === 'object') {
+        return ref?.id ?? ref?.clause_id ?? ref?.uuid ?? null
+      }
+      return ref
+    })
+    .filter(Boolean)
+    .map((ref) => String(ref))
+}
+
+const normalizeObjectiveEvidence = (value) => {
+  if (!value) return ''
+  if (typeof value === 'object') {
+    return String(value?.id ?? value?.document_id ?? value?.uuid ?? '')
+  }
+  return String(value)
+}
+
+const createNormalizedFinding = (finding) => ({
+  ...finding,
+  clause_references: normalizeClauseReferences(finding?.clause_references),
+  objective_evidence: normalizeObjectiveEvidence(finding?.objective_evidence),
+})
+
+const formatFileSize = (bytes) => {
+  if (!bytes && bytes !== 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = bytes
+  let unitIndex = 0
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex++
+  }
+
+  return `${size.toFixed(1)} ${units[unitIndex]}`
+}
+
+function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...', loading = false }) {
+  const selected = new Set(value)
+  const toggle = (val) => {
+    if (selected.has(val)) {
+      onChange(value.filter((item) => item !== val))
+    } else {
+      onChange([...value, val])
+    }
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full justify-between h-10">
+          <span className="truncate flex items-center gap-2">
+            {value.length > 0 ? (
+              <>
+                <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                  {value.length}
+                </Badge>
+                <span>{value.length} klausul dipilih</span>
+              </>
+            ) : (
+              placeholder
+            )}
+          </span>
+          <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+  <div className="max-h-75 overflow-y-auto p-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : options.length === 0 ? (
+            <div className="text-center py-6 text-sm text-muted-foreground">
+              Tidak ada klausul tersedia
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {options.map((option) => (
+                <label
+                  key={option.value}
+                  className={cn(
+                    "flex items-start gap-2 p-2 rounded-md text-sm cursor-pointer hover:bg-accent",
+                    selected.has(option.value) && "bg-accent"
+                  )}
+                >
+                  <Checkbox
+                    checked={selected.has(option.value)}
+                    onCheckedChange={() => toggle(option.value)}
+                    className="mt-0.5"
+                  />
+                  <span className="leading-tight flex-1">{option.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function DocumentSelect({ value, onChange, disabled, documents, loading }) {
+  const [documentNames, setDocumentNames] = useState({})
+  const [loadingNames, setLoadingNames] = useState({})
+
+  useEffect(() => {
+    const fetchOriginalNames = async () => {
+      const names = {}
+      const loadingState = {}
+
+      for (const doc of documents) {
+        if (!doc.original_filename && !doc.display_name) {
+          loadingState[doc.id] = true
+          try {
+            const info = await documentService.getDocumentDownloadInfo(doc.id, { suppressNotFound: true })
+            if (info?.document?.original_filename) {
+              names[doc.id] = info.document.original_filename
+            }
+          } catch (error) {
+            console.error(`Failed to fetch name for doc ${doc.id}:`, error)
+          } finally {
+            loadingState[doc.id] = false
+          }
+        }
+      }
+
+      setDocumentNames(names)
+      setLoadingNames(loadingState)
+    }
+
+    if (documents.length > 0) {
+      fetchOriginalNames()
+    }
+  }, [documents])
+
+  const getDisplayName = (doc) => {
+    if (documentNames[doc.id]) return documentNames[doc.id]
+    if (doc.display_name) return doc.display_name
+    if (doc.original_filename) return doc.original_filename
+    if (doc.filename) return doc.filename
+    if (doc.name) return doc.name
+    return `Dokumen-${doc.id.substring(0, 8)}`
+  }
+
+  const isLoading = (docId) => loadingNames[docId]
+
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder={loading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'} />
+      </SelectTrigger>
+  <SelectContent className="w-full min-w-75 max-h-75">
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-6 text-sm text-muted-foreground">
+            Tidak ada dokumen tersedia
+          </div>
+        ) : (
+          documents.map((document) => (
+            <SelectItem key={document.id} value={String(document.id)} className="py-2">
+              <div className="flex items-start gap-3">
+                <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate" title={getDisplayName(document)}>
+                      {getDisplayName(document)}
+                    </span>
+                    {isLoading(document.id) && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                    )}
+                  </div>
+                  {document.size && (
+                    <span className="text-xs text-muted-foreground">
+                      {formatFileSize(document.size)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  )
+}
+
 const FindingForm = ({ onSubmit, initialData }) => {
+  const { data: clauseData, isLoading: clausesLoading } = useAdminClauses({ per_page: 100, is_active: true })
+  const [documents, setDocuments] = useState([])
+  const [documentsLoading, setDocumentsLoading] = useState(false)
+  const [documentsError, setDocumentsError] = useState(null)
   const [formData, setFormData] = useState({
     audit_code: initialData?.audit_code || '',
     audited_unit: initialData?.audited_unit || '',
     audit_date: initialData?.audit_date || new Date().toISOString().split('T')[0],
     auditor: initialData?.auditor || { name: '', nip: '' },
     auditee: initialData?.auditee || { name: '', nip: '' },
-    findings: initialData?.findings || []
+    findings: (initialData?.findings || []).map((finding) => createNormalizedFinding(finding))
   })
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadDocuments = async () => {
+      setDocumentsLoading(true)
+      setDocumentsError(null)
+      try {
+        const res = await documentService.listDocuments({ per_page: 200 })
+        const docs = res?.documents ?? []
+        if (isMounted) setDocuments(docs)
+      } catch (error) {
+        if (isMounted) setDocumentsError(error)
+      } finally {
+        if (isMounted) setDocumentsLoading(false)
+      }
+    }
+
+    loadDocuments()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const clauseOptions = useMemo(() => {
+    const clauses = clauseData?.clauses ?? clauseData?.items ?? clauseData?.data ?? []
+    return clauses
+      .map((clause) => {
+        const id = clause?.id ?? clause?.clause_id ?? clause?.uuid
+        if (!id) return null
+        const label = clause?.name && clause?.code ? `${clause.code} - ${clause.name}` : clause?.name || clause?.code
+        return {
+          value: String(id),
+          label: label || String(id),
+        }
+      })
+      .filter(Boolean)
+  }, [clauseData])
 
   const addFinding = () => {
     const newFinding = createEmptyFinding()
@@ -34,10 +279,14 @@ const FindingForm = ({ onSubmit, initialData }) => {
 
   const updateFinding = (index, field, value) => {
     const updatedFindings = [...formData.findings]
-    
+
     if (field === 'clause_references') {
-      // Convert comma-separated string to array
-      updatedFindings[index][field] = value.split(',').map(s => s.trim()).filter(Boolean)
+      updatedFindings[index][field] = Array.isArray(value)
+        ? value
+        : String(value)
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
     } else {
       updatedFindings[index][field] = value
     }
@@ -211,23 +460,30 @@ const FindingForm = ({ onSubmit, initialData }) => {
                 </div>
 
                 <div>
-                  <Label>Klausul / Acuan (pisahkan dengan koma)</Label>
-                  <Input
-                    value={finding.clause_references?.join(', ') || ''}
-                    onChange={(e) => updateFinding(index, 'clause_references', e.target.value)}
-                    placeholder="Contoh: Klausul 7.5, Annex A 5.9, Annex A 5.33"
-                    required
+                  <Label>Klausul / Acuan</Label>
+                  <MultiSelect
+                    options={clauseOptions}
+                    value={finding.clause_references || []}
+                    onChange={(value) => updateFinding(index, 'clause_references', value)}
+                    placeholder={clausesLoading ? 'Memuat klausul...' : 'Pilih klausul'}
+                    loading={clausesLoading}
                   />
                 </div>
 
                 <div>
                   <Label>Bukti Objektif</Label>
-                  <Input
+                  <DocumentSelect
                     value={finding.objective_evidence}
-                    onChange={(e) => updateFinding(index, 'objective_evidence', e.target.value)}
-                    placeholder="Contoh: POS-AP-LSTI-UPA TIK UNILA-007"
-                    required
+                    onChange={(value) => updateFinding(index, 'objective_evidence', value)}
+                    disabled={documentsLoading}
+                    documents={documents}
+                    loading={documentsLoading}
                   />
+                  {finding.objective_evidence && !documentsError && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ID Dokumen: {finding.objective_evidence}
+                    </p>
+                  )}
                 </div>
               </div>
             ))}

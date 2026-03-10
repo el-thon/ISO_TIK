@@ -54,7 +54,7 @@ export const TopicBreadcrumb = ({ title }) => (
     <BreadcrumbList>
       <BreadcrumbItem>
         <BreadcrumbLink asChild>
-          <Link to="/dashboard" className="inline-flex items-center gap-2">
+          <Link to="/beranda" className="inline-flex items-center gap-2">
             <Home className="w-4 h-4" />
           </Link>
         </BreadcrumbLink>
@@ -62,7 +62,7 @@ export const TopicBreadcrumb = ({ title }) => (
       <BreadcrumbSeparator />
       <BreadcrumbItem>
         <BreadcrumbLink asChild>
-          <Link to="/rooms">Ruangan</Link>
+          <Link to="/forum">Forum</Link>
         </BreadcrumbLink>
       </BreadcrumbItem>
       <BreadcrumbSeparator />
@@ -818,16 +818,7 @@ export const TopicDetailSidebar = ({
             </div>
           </div>
         </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide">Deadline</div>
-          <div className="mt-1 font-medium">
-            {topic.deadline_at ? formatDate(topic.deadline_at, true) : 'Tidak ditentukan'}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide">Status terakhir</div>
-          <div className="mt-1 font-medium capitalize">{topic.status?.replace('_', ' ') || '-'}</div>
-        </div>
+        
         {isFrozen ? (
           <div>
             <div className="text-xs uppercase tracking-wide">Status beku</div>

@@ -1,7 +1,9 @@
 // pages/topics/detail.jsx
-import React, { useMemo, useState, useCallback, useEffect } from 'react'
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Send, CheckCircle2, MessageSquareWarning, Lock, Unlock, Snowflake, Undo2, Loader2 } from 'lucide-react'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,9 +19,13 @@ import {
   useUnfreezeTopic,
   useTopicVersions,
   useRevertTopicVersion,
+  useTopicInputItems,
 } from '@/services/topicHooks'
 import { useMe } from '@/services/authHooks'
-import { ACTION_METADATA, isLikelyTopicId, buildErrorMessage, formatDate } from './detail/utils'
+import { useAdminClauses } from '@/services/adminClauseHooks'
+import { ACTION_METADATA, isLikelyTopicId, buildErrorMessage } from './detail/utils'
+import { toast } from '@/components/ui/use-toast'
+import api from '@/services/api'
 import {
   TopicBreadcrumb,
   NotificationBanner,
@@ -41,7 +47,11 @@ import {
 // Import komponen Finding
 import FindingForm from '@/components/finding/FindingForm'
 import FindingTable from '@/components/finding/FindingTable'
-import { convertFormToInputItem, findFindingData } from '../../utils/findingHelper'
+import { convertFormToInputItem, extractFindingFromInputItem } from '../../utils/findingHelper'
+import * as documentService from '@/services/documentService'
+
+// Import PDF Generator
+import { generatePDF, createPDFGenerator } from '@/utils/pdfGenerator'
 
 // ============================================================================
 // Custom Hooks
@@ -52,25 +62,17 @@ const useCreateTopicInputItem = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const mutateAsync = async ({ topicId, data }) => {
+  const mutateAsync = async ({ topicId, data, inputItemId }) => {
     setIsLoading(true)
     setError(null)
     try {
-      // TODO: Ganti dengan actual API call
-      const response = await fetch(`/api/v1/topics/${topicId}/input-items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data)
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to create input item')
+      if (inputItemId) {
+        const response = await api.put(`/input-items/${inputItemId}`, data)
+        return response?.data
       }
-      
-      const result = await response.json()
-      return result
+
+      const response = await api.post(`/topics/${topicId}/input-items`, data)
+      return response?.data
     } catch (err) {
       setError(err)
       throw err
@@ -182,6 +184,8 @@ export default function TopicDetail() {
   const { id: paramTopicId } = useParams()
   const isValidTopicId = useMemo(() => isLikelyTopicId(paramTopicId), [paramTopicId])
 
+  const printRef = useRef(null)
+
   // State
   const [activeAction, setActiveAction] = useState(null)
   const [note, setNote] = useState('')
@@ -191,10 +195,18 @@ export default function TopicDetail() {
   // State untuk Finding
   const [findingData, setFindingData] = useState(null)
   const [showFindingForm, setShowFindingForm] = useState(false)
+  const [documentNameMap, setDocumentNameMap] = useState({})
+  const [signatureDataUrl, setSignatureDataUrl] = useState(null)
+  const [auditeeSignatureDataUrl, setAuditeeSignatureDataUrl] = useState(null)
+  const [logoDataUrl, setLogoDataUrl] = useState(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isPreviewing, setIsPreviewing] = useState(false)
+  const [findingInputItemId, setFindingInputItemId] = useState(null)
 
   // Custom hooks
   const { data: meData } = useMe()
   const currentUser = meData?.data?.user
+  const { data: clauseData } = useAdminClauses({ per_page: 100, is_active: true })
 
   // PERBAIKAN: Definisikan createInputItemMutation di sini
   const createInputItemMutation = useCreateTopicInputItem()
@@ -218,33 +230,350 @@ export default function TopicDetail() {
     refetchOnMount: true,
   })
 
+  const inputItemsParams = useMemo(() => ({ per_page: 100 }), [])
+  const { data: inputItemsData } = useTopicInputItems(paramTopicId, inputItemsParams, {
+    enabled: isValidTopicId,
+    refetchOnMount: true,
+  })
+
   // Definisikan topicId setelah topic tersedia
   const topicId = topic?.id || paramTopicId
 
   // Load finding data dari input_items
+  const resolvedInputItems = useMemo(() => {
+    if (Array.isArray(topic?.input_items) && topic.input_items.length) {
+      return topic.input_items
+    }
+    return inputItemsData?.items ?? []
+  }, [topic, inputItemsData])
+
+  const resolveLogoUrl = useCallback(() => {
+    const fallbackOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+    return `${fallbackOrigin}/Logo_UnivLampung.png`
+  }, [])
+
+
+  const FORM_DOC_NUMBER = 'FRM-POS-UPA TIK-SMKI-008-01'
+  const FORM_REVISION = '0'
+  const FORM_ISSUED_DATE = '13-10-2025'
+
+  const toDataUrl = useCallback((blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  }), [])
+
   useEffect(() => {
-    if (topic?.input_items) {
-      const extractedData = findFindingData(topic.input_items)
-      if (extractedData) {
-        setFindingData(extractedData)
+    let isMounted = true
+    const loadLogo = async () => {
+      try {
+        const response = await fetch(resolveLogoUrl(), { cache: 'no-store' })
+        if (!response.ok) throw new Error('Logo fetch failed')
+        const blob = await response.blob()
+        const dataUrl = await toDataUrl(blob)
+        if (isMounted) setLogoDataUrl(dataUrl)
+      } catch (error) {
+        if (isMounted) setLogoDataUrl(null)
       }
     }
-  }, [topic])
+    loadLogo()
+    return () => {
+      isMounted = false
+    }
+  }, [resolveLogoUrl, toDataUrl])
+
+  const clauseMap = useMemo(() => {
+    const clauses = clauseData?.clauses ?? clauseData?.items ?? clauseData?.data ?? []
+    return clauses.reduce((acc, clause) => {
+      const id = clause?.id ?? clause?.clause_id ?? clause?.uuid
+      if (!id) return acc
+      const label = clause?.name && clause?.code ? `${clause.code} - ${clause.name}` : clause?.name || clause?.code
+      if (label) acc[String(id)] = label
+      return acc
+    }, {})
+  }, [clauseData])
+
+  const resolveClauseLabel = useCallback(
+    (value) => {
+      if (!value) return '-'
+      if (typeof value === 'object') {
+        const id = value?.id ?? value?.clause_id ?? value?.uuid
+        const label = value?.name && value?.code ? `${value.code} - ${value.name}` : value?.name || value?.code
+        if (label) return label
+        if (id) return clauseMap[String(id)] || String(id)
+        return JSON.stringify(value)
+      }
+      const key = String(value)
+      return clauseMap[key] || value
+    },
+    [clauseMap]
+  )
+
+  useEffect(() => {
+    if (resolvedInputItems.length) {
+      const findingItem = resolvedInputItems.find((item) => extractFindingFromInputItem(item))
+      const extractedData = findingItem ? extractFindingFromInputItem(findingItem) : null
+      if (extractedData) {
+        setFindingData(extractedData)
+        setFindingInputItemId(findingItem?.id || findingItem?.input_item_id || null)
+      } else {
+        setFindingInputItemId(null)
+      }
+    }
+  }, [resolvedInputItems])
+
+  const ensureImagesLoaded = useCallback(async (root) => {
+    if (!root) return
+    const images = Array.from(root.querySelectorAll('img'))
+    await Promise.all(
+      images.map(
+        (img) =>
+          new Promise((resolve) => {
+            if (img.complete) return resolve()
+            img.onload = () => resolve()
+            img.onerror = () => resolve()
+          })
+      )
+    )
+  }, [])
+
+  useEffect(() => {
+    const objectiveEvidenceIds = findingData?.findings
+      ?.map((finding) => finding?.objective_evidence)
+      .filter(Boolean)
+      .map((id) => String(id))
+    if (!objectiveEvidenceIds || objectiveEvidenceIds.length === 0) return
+
+    let isMounted = true
+    const loadDocuments = async () => {
+      try {
+        const res = await documentService.listDocuments({ per_page: 200 })
+        const docs = res?.documents ?? []
+        const mapped = docs.reduce((acc, doc) => {
+          const docId = doc?.id ? String(doc.id) : null
+          if (!docId) return acc
+          const displayName =
+            doc.display_name ||
+            doc.original_filename ||
+            doc.original_name ||
+            doc.filename ||
+            doc.file_name ||
+            doc.name
+          if (displayName) acc[docId] = displayName
+          return acc
+        }, {})
+        if (isMounted && Object.keys(mapped).length > 0) {
+          setDocumentNameMap(mapped)
+        }
+      } catch (error) {
+      }
+    }
+
+    loadDocuments()
+
+    return () => {
+      isMounted = false
+    }
+  }, [findingData])
+
+  const getObjectiveEvidenceLabel = useCallback(
+    (value) => {
+      if (!value) return '-'
+      const docId = String(value)
+      return documentNameMap[docId] || value
+    },
+    [documentNameMap]
+  )
+
+  const resolveUserIdFromIdentity = useCallback(async (person) => {
+    if (!person) return null
+
+    const directId = person?.user_id || person?.userId || person?.id || person?.user?.id
+    if (directId) return directId
+
+    const nip = person?.nip || person?.employee_id || person?.employeeId
+    const name = person?.name || person?.full_name || person?.fullName
+    const terms = [nip, name].filter(Boolean)
+
+    for (const term of terms) {
+      try {
+        const res = await api.get('/users', { params: { search: term, per_page: 50 } })
+        const users = res?.data?.data?.users ?? []
+        const normalizedTerm = String(term).trim().toLowerCase()
+
+        const match = users.find((user) => {
+          const username = String(user?.username || '').trim().toLowerCase()
+          const fullName = String(user?.user?.profile?.full_name || '').trim().toLowerCase()
+          return (nip && username === normalizedTerm) || (name && fullName === normalizedTerm)
+        })
+
+        if (match?.id || match?.user_id) {
+          return match.id || match.user_id
+        }
+      } catch (error) {
+        // ignore lookup errors and continue
+      }
+    }
+
+    return null
+  }, [])
+
+  const fetchSignatureBlob = useCallback(async (userId) => {
+    if (!userId) return null
+    try {
+      const res = await api.get(`/users/${userId}/signature/download`, { responseType: 'blob' })
+      return res?.data instanceof Blob ? res.data : null
+    } catch (error) {
+      return null
+    }
+  }, [])
+
+  const resolveSignatures = useCallback(async () => {
+    const [auditorUserId, auditeeUserId] = await Promise.all([
+      resolveUserIdFromIdentity(findingData?.auditor),
+      resolveUserIdFromIdentity(findingData?.auditee)
+    ])
+
+    const [auditorBlob, auditeeBlob] = await Promise.all([
+      fetchSignatureBlob(auditorUserId),
+      fetchSignatureBlob(auditeeUserId)
+    ])
+
+    return { auditorBlob, auditeeBlob }
+  }, [fetchSignatureBlob, resolveUserIdFromIdentity, findingData])
+
+  // PERBAIKAN: Handler untuk export PDF menggunakan PDFGenerator
+  const handleExportPdf = useCallback(async () => {
+    if (!printRef.current) return
+
+    if (isExporting || isPreviewing) return
+
+    try {
+      setIsExporting(true)
+      const { auditorBlob, auditeeBlob } = await resolveSignatures()
+
+      const missingSignatures = []
+      if (!auditorBlob) missingSignatures.push('Auditor')
+      if (!auditeeBlob) missingSignatures.push('Auditee')
+
+      if (missingSignatures.length > 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Tanda tangan belum lengkap',
+          description: `${missingSignatures.join(' atau ')} belum memiliki tanda tangan.`,
+        })
+        setAuditeeSignatureDataUrl(null)
+        return
+      }
+
+      if (auditeeBlob) {
+        const auditeeDataUrl = await toDataUrl(auditeeBlob)
+        setAuditeeSignatureDataUrl(typeof auditeeDataUrl === 'string' ? auditeeDataUrl : null)
+      }
+
+      const auditorSignatureDownloader = {
+        mutateAsync: async () => auditorBlob,
+      }
+
+      await generatePDF({
+        printRef,
+        topicId,
+        hasSignature: true,
+        downloadSignature: auditorSignatureDownloader,
+        toDataUrl,
+        setSignatureDataUrl,
+        ensureImagesLoaded,
+        setWorkflowNotice,
+        mode: 'download'
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }, [
+    printRef, 
+    topicId, 
+    toDataUrl, 
+    setSignatureDataUrl, 
+    ensureImagesLoaded,
+    setWorkflowNotice,
+    isExporting,
+    isPreviewing,
+    resolveSignatures
+  ])
+
+  const handlePreviewPdf = useCallback(async () => {
+    if (!printRef.current) return
+
+    if (isExporting || isPreviewing) return
+
+    try {
+      setIsPreviewing(true)
+      const { auditorBlob, auditeeBlob } = await resolveSignatures()
+
+      const missingSignatures = []
+      if (!auditorBlob) missingSignatures.push('Auditor')
+      if (!auditeeBlob) missingSignatures.push('Auditee')
+
+      if (missingSignatures.length > 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Tanda tangan belum lengkap',
+          description: `${missingSignatures.join(' atau ')} belum memiliki tanda tangan.`,
+        })
+        setAuditeeSignatureDataUrl(null)
+        return
+      }
+
+      if (auditeeBlob) {
+        const auditeeDataUrl = await toDataUrl(auditeeBlob)
+        setAuditeeSignatureDataUrl(typeof auditeeDataUrl === 'string' ? auditeeDataUrl : null)
+      }
+
+      const auditorSignatureDownloader = {
+        mutateAsync: async () => auditorBlob,
+      }
+
+      await generatePDF({
+        printRef,
+        topicId,
+        hasSignature: true,
+        downloadSignature: auditorSignatureDownloader,
+        toDataUrl,
+        setSignatureDataUrl,
+        ensureImagesLoaded,
+        setWorkflowNotice,
+        mode: 'preview'
+      })
+    } finally {
+      setIsPreviewing(false)
+    }
+  }, [
+    printRef,
+    topicId,
+    toDataUrl,
+    setSignatureDataUrl,
+    ensureImagesLoaded,
+    setWorkflowNotice,
+    isExporting,
+    isPreviewing,
+    resolveSignatures
+  ])
 
   // Handlers
-  const handleSuccess = useCallback((message) => {
-    setWorkflowNotice({ type: 'success', text: message })
-    closeDialog()
-  }, [])
-
-  const handleError = useCallback((err) => {
-    setWorkflowNotice({ type: 'error', text: buildErrorMessage(err) })
-  }, [])
-
   const closeDialog = useCallback(() => {
     setActiveAction(null)
     setNote('')
     setNoteError(null)
+  }, [])
+
+  const handleSuccess = useCallback((message) => {
+    setWorkflowNotice({ type: 'success', text: message })
+    closeDialog()
+  }, [closeDialog])
+
+  const handleError = useCallback((err) => {
+    setWorkflowNotice({ type: 'error', text: buildErrorMessage(err) })
   }, [])
 
   // PERBAIKAN: Handler untuk menyimpan finding
@@ -254,7 +583,8 @@ export default function TopicDetail() {
       
       await createInputItemMutation.mutateAsync({
         topicId,
-        data: inputItem
+        data: inputItem,
+        inputItemId: findingInputItemId
       })
       
       setFindingData(formData)
@@ -264,10 +594,9 @@ export default function TopicDetail() {
       // Refresh data topic
       refetch()
     } catch (err) {
-      console.error('Error saving finding:', err)
       handleError(err)
     }
-  }, [topicId, createInputItemMutation, handleSuccess, handleError, refetch])
+  }, [topicId, createInputItemMutation, handleSuccess, handleError, refetch, findingInputItemId])
 
   // Mutation hooks - workflow
   const revertVersionMutation = useRevertTopicVersion({
@@ -315,7 +644,7 @@ export default function TopicDetail() {
   const versionsErrorMessage = versionsErrorObj?.response?.data?.message || versionsErrorObj?.message || 'Gagal memuat riwayat versi.'
   
   const inputItems = useMemo(() => {
-    const rawItems = topic?.input_items || []
+    const rawItems = resolvedInputItems
     
     return rawItems
       .filter(item => !item.deleted_at && item?.label !== "Form Daftar Temuan Ketidaksesuaian") // Filter out finding item
@@ -330,7 +659,7 @@ export default function TopicDetail() {
         visibility: item?.visibility || 'visible',
       }))
       .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
-  }, [topic])
+  }, [resolvedInputItems])
 
   const actionLoadingMap = {
     publish: publishMutation.isLoading,
@@ -452,51 +781,59 @@ export default function TopicDetail() {
                 </Card>
               )}
 
-              {/* Input Items Section (regular items) */}
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">Konten Topik</p>
-                      <span className="text-xs text-muted-foreground">{inputItems.length} item</span>
-                    </div>
-
-                    {inputItems.length > 0 ? (
-                      <div className="space-y-3">
-                        {inputItems.map((item, index) => (
-                          <InputItem key={item.id} item={item} index={index} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-muted-foreground border border-dashed rounded-md p-6 text-center">
-                        Belum ada konten yang ditambahkan.
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Finding Section - Form Daftar Temuan */}
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold">Daftar Temuan Ketidaksesuaian</h3>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setShowFindingForm(!showFindingForm)}
-                      disabled={createInputItemMutation.isLoading}
-                    >
-                      {createInputItemMutation.isLoading ? (
-                        <>Menyimpan...</>
-                      ) : showFindingForm ? (
-                        'Sembunyikan Form'
-                      ) : findingData ? (
-                        'Edit Temuan'
-                      ) : (
-                        'Tambah Temuan'
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePreviewPdf}
+                        disabled={!findingData || isExporting || isPreviewing}
+                      >
+                        {isPreviewing ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Membuka...
+                          </span>
+                        ) : (
+                          'Preview PDF'
+                        )}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleExportPdf}
+                        disabled={!findingData || isExporting}
+                      >
+                        {isExporting ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Mengekspor...
+                          </span>
+                        ) : (
+                          'Export PDF'
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setShowFindingForm(!showFindingForm)}
+                        disabled={createInputItemMutation.isLoading}
+                      >
+                        {createInputItemMutation.isLoading ? (
+                          <>Menyimpan...</>
+                        ) : showFindingForm ? (
+                          'Sembunyikan Form'
+                        ) : findingData ? (
+                          'Edit Temuan'
+                        ) : (
+                          'Tambah Temuan'
+                        )}
+                      </Button>
+                    </div>
                   </div>
 
                   {showFindingForm ? (
@@ -590,6 +927,185 @@ export default function TopicDetail() {
             />
           </div>
         )}
+      </div>
+
+      <div
+        ref={printRef}
+        data-print-root="true"
+        style={{
+          position: 'fixed',
+          left: '-10000px',
+          top: 0,
+          display: 'block',
+          width: '1123px',
+          padding: '28px 32px',
+          fontFamily: '"Times New Roman", serif',
+          fontSize: '12px',
+          color: '#111827',
+          backgroundColor: '#ffffff',
+          lineHeight: 1.4,
+        }}
+      >
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
+          <tbody>
+            <tr>
+              <td style={{ border: '1px solid #111827', width: '34%', padding: '12px', textAlign: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                  {logoDataUrl ? (
+                    <img
+                      src={logoDataUrl}
+                      alt="Logo Unila"
+                      style={{ width: '68px', height: '68px' }}
+                      crossOrigin="anonymous"
+                    />
+                  ) : null}
+                  <div style={{ fontSize: '10px', lineHeight: 1.9, textAlign: 'center' }}>
+                    <div style={{ fontWeight: 'bold' }}>KEMENTERIAN PENDIDIKAN TINGGI, SAINS, DAN TEKNOLOGI</div>
+                    <div style={{ fontWeight: 'bold' }}>UNIVERSITAS LAMPUNG</div>
+                    <div style={{ fontWeight: 'bold' }}>UPA TEKNOLOGI INFORMASI DAN KOMUNIKASI</div>
+                    <div>Jl. Prof. Dr. Sumantri Brojonegoro No. 1 Bandar Lampung 35145</div>
+                    <div>Telp (0721) 702673. Fax (0721) 702767</div>
+                    <div>e-mail: tik@kpa.unila.ac.id</div>
+                  </div>
+                </div>
+              </td>
+              <td style={{ border: '1px solid #111827', width: '33%', textAlign: 'center' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '12px', paddingTop: '12px', lineHeight: 1.35 }}>FORMULIR</div>
+                <div style={{ borderTop: '1px solid #111827', margin: '10px 0' }} />
+                <div style={{ fontWeight: 'bold', fontSize: '12px', paddingBottom: '12px', lineHeight: 1.35 }}>
+                  DAFTAR TEMUAN KETIDAKSESUAIAN
+                </div>
+              </td>
+              <td style={{ border: '1px solid #111827', width: '33%', fontSize: '10px' }}>
+                <div style={{ padding: '7px 10px', borderBottom: '1px solid #111827', lineHeight: 1.35 }}>
+                  <div>No. Dokumen</div>
+                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{FORM_DOC_NUMBER}</div>
+                </div>
+                <div style={{ padding: '7px 10px', borderBottom: '1px solid #111827', lineHeight: 1.5 }}>
+                  <div>Tanggal Terbit</div>
+                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{FORM_ISSUED_DATE}</div>
+                </div>
+                <div style={{ padding: '7px 10px', lineHeight: 1.5 }}>
+                  <div>No. Revisi</div>
+                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{FORM_REVISION}</div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table style={{ width: '100%', marginBottom: '12px', lineHeight: 2 }}>
+          <tbody>
+            <tr>
+              <td style={{ width: '25%', padding: '2px 0' }}>Kode / Nomor Audit</td>
+              <td style={{ width: '2%', lineHeight: 2 }}>:</td>
+              <td>{findingData?.audit_code || '-'}</td>
+            </tr>
+            <tr>
+              <td>Proses / Layanan / Unit Diaudit</td>
+              <td>:</td>
+              <td>{findingData?.audited_unit || '-'}</td>
+            </tr>
+            <tr>
+              <td>Tanggal Audit</td>
+              <td>:</td>
+              <td>{findingData?.audit_date || '-'}</td>
+            </tr>
+            <tr>
+              <td>Auditor</td>
+              <td>:</td>
+              <td>{findingData?.auditor?.name || '-'}{findingData?.auditor?.nip ? ` (${findingData.auditor.nip})` : ''}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style={{ textAlign: 'center', fontWeight: 'bold', margin: '12px 0 6px' }}>DAFTAR TEMUAN KETIDAKSESUAIAN</div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '16px' }}>
+          <thead>
+            <tr>
+              <th style={{ border: '1px solid #111827', padding: '8px 6px', textAlign: 'center', lineHeight: 1.35 }}>No</th>
+              <th style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.35 }}>Jenis Temuan</th>
+              <th style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.35 }}>Uraian Temuan</th>
+              <th style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.35 }}>Klausul / Acuan (ISO/POS/IK)</th>
+              <th style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.35 }}>Bukti Objektif</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(findingData?.findings || []).map((finding) => (
+              <tr key={finding.no}>
+                <td style={{ border: '1px solid #111827', padding: '8px 6px', textAlign: 'center' }}>{finding.no}</td>
+                <td style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.4, width: '10%' }}>
+                  {(() => {
+                    const rawType = String(finding.finding_type || '').toLowerCase().trim()
+                    let normalizedType = rawType
+                    if (rawType.includes('observ')) normalizedType = 'observation'
+                    if (rawType.includes('mayor')) normalizedType = 'major'
+                    if (rawType.includes('minor')) normalizedType = 'minor'
+                    return (
+                      <>
+                        <div style={{ marginBottom: '4px' }}>({normalizedType === 'minor' ? '✓' : ' '}) Minor</div>
+                        <div style={{ marginBottom: '4px' }}>({normalizedType === 'major' ? '✓' : ' '}) Mayor</div>
+                        <div>({normalizedType === 'observation' ? '✓' : ' '}) Observasi</div>
+                      </>
+                    )
+                  })()}
+                </td>
+                <td style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.4 }}>{finding.finding_description}</td>
+                <td style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.4 }}>
+                  {(finding.clause_references || []).map((ref) => (
+                    <div key={ref} style={{ marginBottom: '2px' }}>• {resolveClauseLabel(ref)}</div>
+                  ))}
+                </td>
+                <td style={{ border: '1px solid #111827', padding: '8px 6px', lineHeight: 1.4 }}>
+                  {getObjectiveEvidenceLabel(finding.objective_evidence)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={{ fontSize: '10px', lineHeight: 1.4, margin: '2px 0 14px' }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>*Keterangan kategori:</div>
+          <div style={{ marginBottom: '2px' }}>- Minor : Ketidaksesuaian yang tidak berpengaruh signifikan terhadap efektivitas SMKI.</div>
+          <div style={{ marginBottom: '2px' }}>- Mayor : Ketidaksesuaian yang berpotensi mengganggu tercapainya sasaran SMKI / tidak terpenuhinya persyaratan penting.</div>
+          <div>- Observasi : Temuan potensial / peluang perbaikan yang belum menjadi ketidaksesuaian.</div>
+        </div>
+
+        <div data-page-break="signature">
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <tbody>
+              <tr>
+                <td style={{ border: '1px solid #111827', padding: '20px', textAlign: 'center' }}>
+                  <div style={{ marginBottom: '40px' }}>Auditor,</div>
+                  {typeof signatureDataUrl === 'string' && signatureDataUrl.startsWith('data:') ? (
+                    <img
+                      src={signatureDataUrl}
+                      alt="Tanda tangan"
+                      style={{ height: '48px', objectFit: 'contain', margin: '0 auto 6px' }}
+                      crossOrigin="anonymous"
+                    />
+                  ) : null}
+                  <div style={{ marginBottom: '4px' }}>{findingData?.auditor?.name || ' '}</div>
+                  <div>NIP. {findingData?.auditor?.nip || ' '}</div>
+                </td>
+                <td style={{ border: '1px solid #111827', padding: '20px', textAlign: 'center' }}>
+                  <div style={{ marginBottom: '40px' }}>Auditee</div>
+                  {typeof auditeeSignatureDataUrl === 'string' && auditeeSignatureDataUrl.startsWith('data:') ? (
+                    <img
+                      src={auditeeSignatureDataUrl}
+                      alt="Tanda tangan auditee"
+                      style={{ height: '60px', objectFit: 'contain', margin: '0 auto 6px', lineHeight: 0 }}
+                      crossOrigin="anonymous"
+                    />
+                  ) : null}
+                  <div style={{ marginBottom: '4px' }}>{findingData?.auditee?.name || ' '}</div>
+                  <div>NIP. {findingData?.auditee?.nip || ' '}</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Action Dialog */}

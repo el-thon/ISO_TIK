@@ -11,19 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTopics } from '@/services/topicHooks'
-export * from './TopicBreadcrumb'
-export * from './NotificationBanner'
-export * from './ErrorAlert'
-export * from './TopicHeader'
-export * from './InputItem'
-export * from './VersionItem'
-export * from './ActionButton'
-export * from './TopicDetailSidebar'
-export * from './TopicVersionsHeader'
-export * from './WorkflowStates'
-export * from './Routings'
-export * from './Labels'
-export * from './Skeletons'
+
 // Constants
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Semua status' },
@@ -116,7 +104,7 @@ const TopicItem = React.memo(({ topic }) => {
 
   return (
     <Card>
-      <Link to={`/topics/${topic.id}`} className="block no-underline text-inherit">
+      <Link to={`/formulir/${topic.id}`} className="block no-underline text-inherit">
         <CardContent className="pt-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="flex-1">
@@ -216,7 +204,7 @@ const MyTopicsSection = React.memo(({
       {topics.map((topic) => (
         <Link 
           key={topic.id} 
-          to={`/topics/${topic.id}`} 
+          to={`/formulir/${topic.id}`} 
           className="flex items-center justify-between py-3 hover:text-primary"
         >
           <div>
@@ -340,7 +328,7 @@ export default function TopicsPage() {
             >
               {isFetching ? 'Menyegarkan...' : 'Refresh'}
             </Button>
-            <Link to="/topics/create">
+            <Link to="/formulir/buat">
               <Button 
                 size="sm" 
                 className="bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-2"

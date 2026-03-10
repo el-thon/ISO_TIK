@@ -1,8 +1,112 @@
 // components/finding/FindingTable.jsx
-import React from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
+import * as documentService from '@/services/documentService'
+import { useAdminClauses } from '@/services/adminClauseHooks'
 
 const FindingTable = ({ findings, auditInfo }) => {
+  const [documentNames, setDocumentNames] = useState({})
+  const [loadingNames, setLoadingNames] = useState({})
+  const [documentsLoaded, setDocumentsLoaded] = useState(false)
+  const knownDocumentIdsRef = useRef(new Set())
+  const missingDocumentIdsRef = useRef(new Set())
+  const { data: clauseData } = useAdminClauses({ per_page: 100, is_active: true })
+
+  const clauseMap = useMemo(() => {
+    const clauses = clauseData?.clauses ?? clauseData?.items ?? clauseData?.data ?? []
+    return clauses.reduce((acc, clause) => {
+      const id = clause?.id ?? clause?.clause_id ?? clause?.uuid
+      if (!id) return acc
+      const label = clause?.name && clause?.code ? `${clause.code} - ${clause.name}` : clause?.name || clause?.code
+      if (label) acc[String(id)] = label
+      return acc
+    }, {})
+  }, [clauseData])
+
+  const resolveClauseRef = (value) => {
+    if (!value) return '-'
+    if (typeof value === 'object') {
+      const id = value?.id ?? value?.clause_id ?? value?.uuid
+      const label = value?.name && value?.code ? `${value.code} - ${value.name}` : value?.name || value?.code
+      if (label) return label
+      if (id) return clauseMap[String(id)] || String(id)
+      return JSON.stringify(value)
+    }
+    const key = String(value)
+    return clauseMap[key] || value
+  }
+
+  const objectiveEvidenceIds = useMemo(() => {
+    if (!findings || findings.length === 0) return []
+    const ids = findings
+      .map((finding) => finding?.objective_evidence)
+      .filter(Boolean)
+      .map((id) => String(id))
+    return Array.from(new Set(ids))
+  }, [findings])
+
+  useEffect(() => {
+    if (objectiveEvidenceIds.length === 0 || documentsLoaded) return
+
+    let isMounted = true
+    const fetchDocumentList = async () => {
+      try {
+        const res = await documentService.listDocuments({ per_page: 200 })
+        const docs = res?.documents ?? []
+        const names = docs.reduce((acc, doc) => {
+          const docId = doc?.id ? String(doc.id) : null
+          if (!docId) return acc
+          const displayName =
+            doc.display_name ||
+            doc.original_filename ||
+            doc.original_name ||
+            doc.filename ||
+            doc.file_name ||
+            doc.name
+          if (displayName) acc[docId] = displayName
+          return acc
+        }, {})
+
+        knownDocumentIdsRef.current = new Set(docs.map((doc) => String(doc?.id)).filter(Boolean))
+
+        if (isMounted && Object.keys(names).length > 0) {
+          setDocumentNames((prev) => ({ ...prev, ...names }))
+        }
+      } catch (error) {
+        console.error('Failed to load documents list for evidence names:', error)
+      } finally {
+        if (isMounted) setDocumentsLoaded(true)
+      }
+    }
+
+    fetchDocumentList()
+
+    return () => {
+      isMounted = false
+    }
+  }, [objectiveEvidenceIds, documentsLoaded])
+
+  useEffect(() => {
+    if (objectiveEvidenceIds.length === 0 || !documentsLoaded) return
+    const missing = objectiveEvidenceIds.filter((docId) => !documentNames[docId])
+    if (missing.length === 0) return
+    setLoadingNames((prev) => ({
+      ...prev,
+      ...missing.reduce((acc, docId) => {
+        acc[docId] = false
+        return acc
+      }, {}),
+    }))
+  }, [objectiveEvidenceIds, documentNames, documentsLoaded])
+
+  const getObjectiveEvidenceLabel = (value) => {
+    if (!value) return '-'
+    const docId = String(value)
+    if (documentNames[docId]) return documentNames[docId]
+    if (loadingNames[docId]) return 'Memuat nama dokumen...'
+    return `Dokumen-${docId.substring(0, 8)}`
+  }
+
   if (!findings || findings.length === 0) {
     return (
       <Card>
@@ -68,10 +172,12 @@ const FindingTable = ({ findings, auditInfo }) => {
                   <td className="border p-2 text-sm align-top">{finding.finding_description}</td>
                   <td className="border p-2 text-sm align-top">
                     {finding.clause_references?.map((ref, idx) => (
-                      <div key={idx}>• {ref}</div>
+                      <div key={idx}>• {resolveClauseRef(ref)}</div>
                     ))}
                   </td>
-                  <td className="border p-2 text-sm align-top">{finding.objective_evidence}</td>
+                  <td className="border p-2 text-sm align-top">
+                    {getObjectiveEvidenceLabel(finding.objective_evidence)}
+                  </td>
                 </tr>
               ))}
             </tbody>

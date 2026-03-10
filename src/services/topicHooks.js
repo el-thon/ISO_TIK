@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAccessToken } from './api'
 import * as topicService from './topicService'
+import api from './api' // TAMBAHKAN IMPORT INI!
 
 const hasToken = () => Boolean(getAccessToken())
 const computeEnabled = (flag = true, guard = true) => Boolean((flag ?? true) && guard && hasToken())
@@ -72,8 +73,8 @@ export function useTopicInputItems(topicId, params = {}, options = {}) {
   return useQuery({
     queryKey: ['topics', topicId, 'input-items', params],
     queryFn: () => topicService.getTopicInputItems(topicId, params),
-    staleTime: 0, // Always fetch fresh data
-    cacheTime: 5 * 60 * 1000, // Keep in cache for 5 minutes but mark as stale immediately
+    staleTime: 0,
+    cacheTime: 5 * 60 * 1000,
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
   })
@@ -82,10 +83,10 @@ export function useTopicInputItems(topicId, params = {}, options = {}) {
 export function useCreateTopic(options = {}) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ roomId, payload }) => topicService.createTopic(roomId, payload),
+    mutationFn: ({ forumId, payload }) => topicService.createTopic(forumId, payload),
     onSuccess: (data, variables, context) => {
       queryClient.invalidateQueries({ queryKey: ['topics'] })
-      queryClient.invalidateQueries({ queryKey: ['rooms', variables?.roomId, 'topics'] })
+      queryClient.invalidateQueries({ queryKey: ['rooms', variables?.forumId, 'topics'] })
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
     ...options,
@@ -197,7 +198,7 @@ export function useTopicReviews(topicId, params = {}, options = {}) {
   return useQuery({
     queryKey: ['topics', topicId, 'reviews', params],
     queryFn: () => topicService.getTopicReviews(topicId, params),
-    staleTime: 0, // Always fetch fresh
+    staleTime: 0,
     cacheTime: 5 * 60 * 1000,
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
@@ -210,6 +211,17 @@ export function useAttachment(attachmentId, options = {}) {
     queryKey: ['attachments', attachmentId],
     queryFn: () => topicService.getAttachment(attachmentId),
     staleTime: 30_000,
+    ...rest,
+    enabled: computeEnabled(enabled ?? true, Boolean(attachmentId)),
+  })
+}
+
+export function useAttachmentDownloadInfo(attachmentId, options = {}) {
+  const { enabled, ...rest } = options
+  return useQuery({
+    queryKey: ['attachments', attachmentId, 'download-info'],
+    queryFn: () => topicService.getAttachmentDownloadInfo(attachmentId),
+    staleTime: 5 * 60 * 1000,
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(attachmentId)),
   })
@@ -281,7 +293,6 @@ export function useReplyComment(options = {}) {
   return useMutation({
     mutationFn: ({ commentId, payload }) => topicService.replyToComment(commentId, payload),
     onSuccess: (data, variables, context) => {
-      // Invalidate all topic review queries since comments changed
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey.includes('reviews') })
       if (onSuccess) onSuccess(data, variables, context)
     },
@@ -307,7 +318,7 @@ export function useTopicVersions(topicId, params = {}, options = {}) {
   return useQuery({
     queryKey: ['topics', topicId, 'versions', params],
     queryFn: () => topicService.getTopicVersions(topicId, params),
-    staleTime: 0, // Always fetch fresh
+    staleTime: 0,
     cacheTime: 5 * 60 * 1000,
     ...rest,
     enabled: computeEnabled(enabled ?? true, Boolean(topicId)),
@@ -343,6 +354,77 @@ export function useRevertTopicVersion(options = {}) {
   })
 }
 
+// ============== HOKS BARU UNTUK INPUT ITEMS ==============
+
+// Hook untuk create input item (menggunakan topicService yang sudah ada)
+export function useCreateInputItem(options = {}) {
+  const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options
+  
+  return useMutation({
+    mutationFn: ({ topicId, payload }) => {
+      if (!topicId) throw new Error('topicId is required')
+      if (!payload?.type) throw new Error('type is required')
+      
+      return topicService.createInputItem(topicId, payload)
+    },
+    onSuccess: (data, variables, context) => {
+      // Invalidate queries terkait
+      queryClient.invalidateQueries({ queryKey: ['topics', variables?.topicId, 'input-items'] })
+      if (onSuccess) onSuccess(data, variables, context)
+    },
+    ...rest,
+  })
+}
+
+// Hook untuk update input item
+export function useUpdateInputItem(options = {}) {
+  const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options
+  
+  return useMutation({
+    mutationFn: ({ inputItemId, payload }) => {
+      if (!inputItemId) throw new Error('inputItemId is required')
+      
+      return topicService.updateInputItem(inputItemId, payload)
+    },
+    onSuccess: (data, variables, context) => {
+      // Dapatkan topicId dari data response jika ada
+      const topicId = data?.topic_id || variables?.topicId
+      if (topicId) {
+        queryClient.invalidateQueries({ queryKey: ['topics', topicId, 'input-items'] })
+      }
+      if (onSuccess) onSuccess(data, variables, context)
+    },
+    ...rest,
+  })
+}
+
+// Hook untuk delete input item
+export function useDeleteInputItem(options = {}) {
+  const queryClient = useQueryClient()
+  const { onSuccess, ...rest } = options
+  
+  return useMutation({
+    mutationFn: ({ inputItemId, topicId }) => {
+      if (!inputItemId) throw new Error('inputItemId is required')
+      
+      // Gunakan service yang sudah ada atau buat fungsi baru di topicService
+      return topicService.deleteInputItem?.(inputItemId) || 
+             (async () => { throw new Error('deleteInputItem not implemented') })()
+    },
+    onSuccess: (data, variables, context) => {
+      if (variables?.topicId) {
+        queryClient.invalidateQueries({ queryKey: ['topics', variables.topicId, 'input-items'] })
+      }
+      if (onSuccess) onSuccess(data, variables, context)
+    },
+    ...rest,
+  })
+}
+
+// ============== EXPORT DEFAULT ==============
+
 export default {
   useTopics,
   useTopic,
@@ -364,6 +446,7 @@ export default {
   useTopicTimeline,
   useTopicReviews,
   useAttachment,
+  useAttachmentDownloadInfo,
   useDownloadAttachment,
   useComment,
   useCreateTopicReview,
@@ -372,40 +455,8 @@ export default {
   useTopicVersions,
   useTopicVersion,
   useRevertTopicVersion,
-}
-
-
-// services/topicHooks.js
-
-// Tambahkan hook ini di file yang sudah ada
-export const useCreateTopicInputItem = (options = {}) => {
-  return useMutation({
-    mutationFn: async ({ topicId, data }) => {
-      const response = await api.post(`/topics/${topicId}/input-items`, data)
-      return response.data
-    },
-    ...options
-  })
-}
-
-// Optional: hook untuk update input item
-export const useUpdateTopicInputItem = (options = {}) => {
-  return useMutation({
-    mutationFn: async ({ topicId, inputItemId, data }) => {
-      const response = await api.put(`/topics/${topicId}/input-items/${inputItemId}`, data)
-      return response.data
-    },
-    ...options
-  })
-}
-
-// Optional: hook untuk delete input item
-export const useDeleteTopicInputItem = (options = {}) => {
-  return useMutation({
-    mutationFn: async ({ topicId, inputItemId }) => {
-      const response = await api.delete(`/topics/${topicId}/input-items/${inputItemId}`)
-      return response.data
-    },
-    ...options
-  })
+  // Export hooks baru
+  useCreateInputItem,
+  useUpdateInputItem,
+  useDeleteInputItem,
 }

@@ -31,15 +31,37 @@ export const convertFormToInputItem = (formData) => {
  * Ekstrak data finding dari input item
  */
 export const extractFindingFromInputItem = (inputItem) => {
-  if (inputItem?.type === 'form_data' && 
-      inputItem?.label === "Form Daftar Temuan Ketidaksesuaian") {
+  if (!inputItem || inputItem?.type !== 'form_data') return null
+
+  let parsedValue = null
+  if (typeof inputItem?.value === 'string' && inputItem.value.trim()) {
+    try {
+      parsedValue = JSON.parse(inputItem.value)
+    } catch (error) {
+      parsedValue = null
+    }
+  } else if (typeof inputItem?.value === 'object' && inputItem.value !== null) {
+    parsedValue = inputItem.value
+  }
+
+  const metadata =
+    inputItem.metadata ||
+    parsedValue?.metadata ||
+    (parsedValue && typeof parsedValue === 'object' ? parsedValue : null) ||
+    {}
+
+  const findings = Array.isArray(metadata?.findings) ? metadata.findings : []
+  const label = String(inputItem?.label || '').toLowerCase()
+  const labelMatch = label.includes('temuan') && label.includes('ketidaksesuaian')
+
+  if (labelMatch || findings.length > 0) {
     return {
-      audit_code: inputItem.metadata?.audit_code,
-      audited_unit: inputItem.metadata?.audited_unit,
-      audit_date: inputItem.metadata?.audit_date,
-      auditor: inputItem.metadata?.auditor,
-      auditee: inputItem.metadata?.auditee,
-      findings: inputItem.metadata?.findings || []
+      audit_code: metadata?.audit_code,
+      audited_unit: metadata?.audited_unit,
+      audit_date: metadata?.audit_date,
+      auditor: metadata?.auditor,
+      auditee: metadata?.auditee,
+      findings,
     }
   }
   return null
@@ -50,11 +72,7 @@ export const extractFindingFromInputItem = (inputItem) => {
  */
 export const findFindingData = (inputItems) => {
   if (!inputItems || !Array.isArray(inputItems)) return null
-  
-  const findingItem = inputItems.find(
-    item => item?.type === 'form_data' && 
-            item?.label === "Form Daftar Temuan Ketidaksesuaian"
-  )
-  
+
+  const findingItem = inputItems.find((item) => extractFindingFromInputItem(item))
   return findingItem ? extractFindingFromInputItem(findingItem) : null
 }

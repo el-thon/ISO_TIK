@@ -13,14 +13,13 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useRooms } from '@/services/roomHooks'
-import { useCreateTopic } from '@/services/topicHooks'
-import * as topicService from '@/services/topicService'
+import { useRooms, useRoomParticipants } from '@/services/roomHooks'
+import { useCreateTopic, useCreateInputItem } from '@/services/topicHooks'
 import * as documentService from '@/services/documentService'
 import { cn } from '@/lib/utils'
 import { useAdminClauses } from '@/services/adminClauseHooks'
 
-// PERBAIKAN 1: Sesuaikan securityOptions dengan yang diharapkan backend (L0, L1, L2, L3)
+// PERBAIKAN: Security options
 const securityOptions = [
   { value: 'L0', label: 'L0 - Publik', description: 'Dapat diakses semua orang' },
   { value: 'L1', label: 'L1 - Internal', description: 'Hanya internal organisasi' },
@@ -28,6 +27,13 @@ const securityOptions = [
   { value: 'L3', label: 'L3 - Sangat Rahasia', description: 'Akses sangat terbatas' },
 ]
 
+const FINDING_TYPES = [
+  { value: 'minor', label: 'Minor', color: 'bg-yellow-100 text-yellow-800', description: 'Ketidaksesuaian ringan' },
+  { value: 'major', label: 'Mayor', color: 'bg-orange-100 text-orange-800', description: 'Ketidaksesuaian signifikan' },
+  { value: 'observation', label: 'Observasi', color: 'bg-blue-100 text-blue-800', description: 'Catatan untuk perbaikan' },
+]
+
+// Utility functions
 const normalizeId = (value) => {
   if (value == null) return undefined
   const numeric = Number(value)
@@ -39,12 +45,6 @@ const buildClauseLabel = (clause) => {
   if (clause.code && clause.name) return `${clause.code} - ${clause.name}`
   return clause.name || clause.code || ''
 }
-
-const FINDING_TYPES = [
-  { value: 'minor', label: 'Minor', color: 'bg-yellow-100 text-yellow-800', description: 'Ketidaksesuaian ringan' },
-  { value: 'major', label: 'Mayor', color: 'bg-orange-100 text-orange-800', description: 'Ketidaksesuaian signifikan' },
-  { value: 'observation', label: 'Observasi', color: 'bg-blue-100 text-blue-800', description: 'Catatan untuk perbaikan' },
-]
 
 const stringifyId = (value) => {
   if (value == null) return null
@@ -128,6 +128,21 @@ const resolveCreatedTopicId = (payload) => {
   return null
 }
 
+const formatFileSize = (bytes) => {
+  if (!bytes && bytes !== 0) return '-'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = bytes
+  let unitIndex = 0
+  
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex++
+  }
+  
+  return `${size.toFixed(1)} ${units[unitIndex]}`
+}
+
+// Komponen MultiSelect untuk klausul
 function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...', loading = false }) {
   const selected = new Set(value)
   const toggle = (val) => {
@@ -193,6 +208,94 @@ function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...
   )
 }
 
+// KOMPONEN: DocumentSelect untuk menampilkan nama asli file
+function DocumentSelect({ value, onChange, disabled, documents, loading }) {
+  const [documentNames, setDocumentNames] = useState({})
+  const [loadingNames, setLoadingNames] = useState({})
+
+  useEffect(() => {
+    const fetchOriginalNames = async () => {
+      const names = {}
+      const loading = {}
+      
+      for (const doc of documents) {
+        if (!doc.original_filename && !doc.display_name) {
+          loading[doc.id] = true
+          try {
+            const info = await documentService.getDocumentDownloadInfo(doc.id, { suppressNotFound: true })
+            if (info?.document?.original_filename) {
+              names[doc.id] = info.document.original_filename
+            }
+          } finally {
+            loading[doc.id] = false
+          }
+        }
+      }
+      
+      setDocumentNames(names)
+      setLoadingNames(loading)
+    }
+
+    if (documents.length > 0) {
+      fetchOriginalNames()
+    }
+  }, [documents])
+
+  const getDisplayName = (doc) => {
+    if (documentNames[doc.id]) return documentNames[doc.id]
+    if (doc.display_name) return doc.display_name
+    if (doc.original_filename) return doc.original_filename
+    if (doc.filename) return doc.filename
+    if (doc.name) return doc.name
+    return `Dokumen-${doc.id.substring(0, 8)}`
+  }
+
+  const isLoading = (docId) => loadingNames[docId]
+
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <SelectTrigger className="w-full">
+        <SelectValue placeholder={loading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'} />
+      </SelectTrigger>
+      <SelectContent className="w-full min-w-[300px] max-h-[300px]">
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="text-center py-6 text-sm text-muted-foreground">
+            Tidak ada dokumen tersedia
+          </div>
+        ) : (
+          documents.map((document) => (
+            <SelectItem key={document.id} value={String(document.id)} className="py-2">
+              <div className="flex items-start gap-3">
+                <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate" title={getDisplayName(document)}>
+                      {getDisplayName(document)}
+                    </span>
+                    {isLoading(document.id) && (
+                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+                    )}
+                  </div>
+                  {document.size && (
+                    <span className="text-xs text-muted-foreground">
+                      {formatFileSize(document.size)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  )
+}
+
+// Komponen FindingItem
 function FindingItem({ index, finding, onUpdate, onRemove, showRemove, clauseOptions, clausesLoading, documents, documentsLoading }) {
   return (
     <Card className="border-l-4 border-l-blue-500">
@@ -267,43 +370,37 @@ function FindingItem({ index, finding, onUpdate, onRemove, showRemove, clauseOpt
 
         <div className="space-y-2">
           <Label className="text-sm font-medium">Bukti Objektif</Label>
-          <Select
+          <DocumentSelect
             value={finding.objectiveEvidence}
-            onValueChange={(value) => onUpdate(index, { objectiveEvidence: value })}
+            onChange={(value) => onUpdate(index, { objectiveEvidence: value })}
             disabled={documentsLoading}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={documentsLoading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'} />
-            </SelectTrigger>
-            <SelectContent>
-              {documents.map((document) => (
-                <SelectItem key={document.id} value={String(document.id)}>
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>{document.filename || document.name || document.original_name || `Dokumen ${document.id}`}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            documents={documents}
+            loading={documentsLoading}
+          />
+          {finding.objectiveEvidence && (
+            <p className="text-xs text-muted-foreground mt-1">
+              ID Dokumen: {finding.objectiveEvidence}
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
   )
 }
 
+// Main Component
 export default function CreateTopic() {
   const navigate = useNavigate()
   const location = useLocation()
-  const roomFromState = location?.state?.roomId ? String(location.state.roomId) : ''
-  const roomTitleFromState = location?.state?.roomTitle || null
+  const forumFromState = location?.state?.roomId ? String(location.state.roomId) : ''
+  const forumTitleFromState = location?.state?.roomTitle || null
 
-  const [selectedRoom, setSelectedRoom] = useState(roomFromState)
-  // PERBAIKAN 2: Set default security level ke 'L1' (Internal) sesuai dengan backend
+  const [selectedForum, setSelectedForum] = useState(forumFromState)
   const [securityLevel, setSecurityLevel] = useState('L1')
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState('audit-info')
+  const [serverError, setServerError] = useState(null)
 
   const [auditCode, setAuditCode] = useState('')
   const [auditedUnit, setAuditedUnit] = useState('')
@@ -312,6 +409,8 @@ export default function CreateTopic() {
   const [auditorNip, setAuditorNip] = useState('')
   const [auditeeName, setAuditeeName] = useState('')
   const [auditeeNip, setAuditeeNip] = useState('')
+  const [selectedAuditorId, setSelectedAuditorId] = useState('')
+  const [selectedAuditeeId, setSelectedAuditeeId] = useState('')
 
   const [findings, setFindings] = useState([
     {
@@ -326,12 +425,12 @@ export default function CreateTopic() {
   const [documentsError, setDocumentsError] = useState(null)
 
   useEffect(() => {
-    if (!selectedRoom && roomFromState) {
-      setSelectedRoom(roomFromState)
+    if (!selectedForum && forumFromState) {
+      setSelectedForum(forumFromState)
     }
-    // PERBAIKAN 3: Hapus setSecurityLevel di sini karena sudah di-set di state awal
-  }, [roomFromState, selectedRoom])
+  }, [forumFromState, selectedForum])
 
+  // Load rooms
   const {
     data: roomsData,
     isLoading: roomsLoading,
@@ -339,7 +438,10 @@ export default function CreateTopic() {
     error: roomsErrorObj,
     refetch: refetchRooms,
   } = useRooms({ per_page: 100 })
+  
   const rooms = roomsData?.rooms ?? []
+
+  // Load clauses
   const {
     data: clausesData,
     isLoading: clausesLoading,
@@ -347,21 +449,98 @@ export default function CreateTopic() {
     error: clausesErrorObj,
     refetch: refetchClauses,
   } = useAdminClauses({ is_active: true, per_page: 100 })
+  
   const clauses = clausesData?.clauses ?? []
+  
   const clauseOptions = useMemo(
     () => clauses.map((clause) => ({ value: String(clause.id), label: buildClauseLabel(clause) })),
     [clauses]
   )
+  
+  // Hooks
   const createTopic = useCreateTopic()
-  const isBusy = createTopic.isPending || submitting
+  const createInputItem = useCreateInputItem()
+  const isBusy = createTopic.isPending || createInputItem.isPending || submitting
 
+  const participantsParams = useMemo(() => ({ per_page: 100 }), [])
+  const {
+    data: participantsData,
+    isLoading: participantsLoading,
+    isError: participantsError,
+    error: participantsErrorObj,
+  } = useRoomParticipants(selectedForum || forumFromState, participantsParams, {
+    enabled: Boolean(selectedForum || forumFromState),
+  })
+
+  const participants = participantsData?.participants ?? []
+
+  const participantLabel = (participant) => {
+    const fullName = participant?.user?.profile?.full_name
+    const username = participant?.user?.username
+    return fullName ? `${fullName}${username ? ` (${username})` : ''}` : username || 'Pengguna'
+  }
+
+  const normalizeRole = (role) => (role || '').toLowerCase()
+
+  const auditorOptions = useMemo(() => {
+    const filtered = participants.filter((p) => normalizeRole(p.role) === 'auditor')
+    return filtered.length ? filtered : participants
+  }, [participants])
+
+  const auditeeOptions = useMemo(() => {
+    const filtered = participants.filter((p) => normalizeRole(p.role) === 'auditee')
+    return filtered.length ? filtered : participants
+  }, [participants])
+
+  useEffect(() => {
+    if (!selectedAuditorId) {
+      setAuditorName('')
+      setAuditorNip('')
+      return
+    }
+    const match = participants.find((p) => String(p.user_id || p.user?.id) === String(selectedAuditorId))
+    if (match) {
+      setAuditorName(match.user?.profile?.full_name || match.user?.username || '')
+      setAuditorNip(match.user?.employee_id || '')
+    }
+  }, [selectedAuditorId, participants])
+
+  useEffect(() => {
+    if (!selectedAuditeeId) {
+      setAuditeeName('')
+      setAuditeeNip('')
+      return
+    }
+    const match = participants.find((p) => String(p.user_id || p.user?.id) === String(selectedAuditeeId))
+    if (match) {
+      setAuditeeName(match.user?.profile?.full_name || match.user?.username || '')
+      setAuditeeNip(match.user?.employee_id || '')
+    }
+  }, [selectedAuditeeId, participants])
+
+  // Load dokumen
   useEffect(() => {
     const loadDocuments = async () => {
       setDocumentsLoading(true)
       setDocumentsError(null)
       try {
         const res = await documentService.listDocuments({ per_page: 100 })
-        setDocuments(res?.documents ?? [])
+        const rawDocuments = res?.documents ?? []
+        
+        const transformedDocs = rawDocuments.map(doc => {
+          const displayName = doc.original_filename || 
+                             doc.filename || 
+                             doc.name || 
+                             doc.file_name || 
+                             `Dokumen-${doc.id.substring(0, 8)}`
+          
+          return {
+            ...doc,
+            display_name: displayName
+          }
+        })
+        
+        setDocuments(transformedDocs)
       } catch (err) {
         setDocumentsError(err?.response?.data?.message || err?.message || 'Gagal memuat dokumen.')
       } finally {
@@ -372,13 +551,13 @@ export default function CreateTopic() {
     loadDocuments()
   }, [])
 
-  const currentRoomName = useMemo(() => {
-    if (selectedRoom) {
-      const match = rooms.find((room) => String(room.id) === String(selectedRoom))
+  const currentForumName = useMemo(() => {
+    if (selectedForum) {
+      const match = rooms.find((room) => String(room.id) === String(selectedForum))
       if (match) return match.name
     }
-    return roomTitleFromState || '-'
-  }, [rooms, selectedRoom, roomTitleFromState])
+    return forumTitleFromState || '-'
+  }, [rooms, selectedForum, forumTitleFromState])
 
   const addFinding = () => {
     setFindings((prev) => [
@@ -403,8 +582,8 @@ export default function CreateTopic() {
 
   const validatePhase1 = () => {
     const validationErrors = {}
-    const chosenRoom = selectedRoom || roomFromState || ''
-    if (!chosenRoom) validationErrors.room = 'Pilih ruangan terlebih dahulu.'
+    const chosenForum = selectedForum || forumFromState || ''
+    if (!chosenForum) validationErrors.forum = 'Pilih forum terlebih dahulu.'
     if (!auditCode.trim()) validationErrors.auditCode = 'Kode/nomor audit wajib diisi.'
     if (!auditedUnit.trim()) validationErrors.auditedUnit = 'Proses/layanan/unit wajib diisi.'
     if (!auditDate.trim()) validationErrors.auditDate = 'Tanggal audit wajib diisi.'
@@ -413,98 +592,105 @@ export default function CreateTopic() {
       validationErrors.findings = 'Minimal satu temuan harus diisi.'
     }
     setErrors(validationErrors)
-    return { ok: Object.keys(validationErrors).length === 0, chosenRoom }
-  }
-
-  const buildPayload = (mode, roomId) => {
-    const payload = {
-      title: auditCode.trim() || 'Daftar Temuan Ketidaksesuaian',
-      description: auditedUnit.trim(),
-      // PERBAIKAN 4: Kirim security_level sesuai format backend (L0, L1, L2, L3)
-      security_level: securityLevel,
-      status: mode === 'publish' ? 'in_review' : 'draft',
-    }
-    Object.keys(payload).forEach((key) => {
-      if (payload[key] === undefined || payload[key] === '') delete payload[key]
-    })
-    payload.room_id = normalizeId(roomId)
-    return payload
-  }
-
-  const createInputItemsForTopic = async (topicId) => {
-    const payload = {
-      label: 'Form Daftar Temuan Ketidaksesuaian',
-      type: 'form_data',
-      order_index: 1,
-      visibility: 'visible',
-      value: '',
-      metadata: {
-        audit_code: auditCode.trim(),
-        audited_unit: auditedUnit.trim(),
-        audit_date: auditDate,
-        auditor: { name: auditorName.trim(), nip: auditorNip.trim() },
-        auditee: { name: auditeeName.trim(), nip: auditeeNip.trim() },
-        findings: findings.map((row, index) => ({
-          no: index + 1,
-          finding_type: row.findingType,
-          finding_description: row.findingDescription.trim(),
-          clause_references: row.clauseReferences,
-          objective_evidence: row.objectiveEvidence,
-        })),
-      },
-    }
-
-    try {
-      const item = await topicService.createInputItem(topicId, payload)
-      return [item]
-    } catch {
-      return []
-    }
+    return { ok: Object.keys(validationErrors).length === 0, chosenForum }
   }
 
   const handleSubmit = async (mode) => {
-    const { ok, chosenRoom } = validatePhase1()
+    // Reset server error
+    setServerError(null)
+    
+    const { ok, chosenForum } = validatePhase1()
     if (!ok) {
-      if (errors.auditCode || errors.auditedUnit || errors.auditDate || errors.auditorName || errors.room) {
+      if (errors.auditCode || errors.auditedUnit || errors.auditDate || errors.auditorName || errors.forum) {
         setActiveTab('audit-info')
       } else if (errors.findings) {
         setActiveTab('findings')
       }
       return
     }
-    const payload = buildPayload(mode, chosenRoom)
+    
     setSubmitting(true)
+    
     try {
-      const created = await createTopic.mutateAsync({ roomId: normalizeId(chosenRoom), payload })
+      // STEP 1: Create topic
+      const topicPayload = {
+        title: auditCode.trim() || `Audit ${new Date().toLocaleDateString('id-ID')}`,
+        description: auditedUnit.trim() || 'Audit tanpa unit',
+        security_level: securityLevel,
+        status: mode === 'publish' ? 'in_review' : 'draft'
+      }
+            
+      const created = await createTopic.mutateAsync({ 
+        forumId: normalizeId(chosenForum), 
+        payload: topicPayload
+      })
+            
+      // Extract topic ID from response
       const newTopicId = resolveCreatedTopicId(created)
-      if (newTopicId) {
-        await createInputItemsForTopic(newTopicId)
+      
+      if (!newTopicId) {
+        throw new Error('Topic ID not found in response')
       }
-
-      if (newTopicId && isLikelyTopicId(newTopicId)) {
-        navigate(`/topics/${newTopicId}`)
-        return
-      }
-
-      if (created?.redirect_url) {
-        const redirectId = extractIdFromUrl(created.redirect_url)
-        if (redirectId) {
-          navigate(`/topics/${redirectId}`)
-          return
+            
+      // STEP 2: Create input item untuk topic yang baru dibuat
+      const inputItemPayload = {
+        type: "form_data",
+        label: "Form Daftar Temuan Ketidaksesuaian",
+        value: "",
+        order_index: 1,
+        visibility: "visible",
+        metadata: {
+          audit_code: auditCode.trim(),
+          audited_unit: auditedUnit.trim(),
+          audit_date: auditDate,
+          auditor: {
+            name: auditorName.trim(),
+            nip: auditorNip.trim()
+          },
+          auditee: {
+            name: auditeeName.trim(),
+            nip: auditeeNip.trim()
+          },
+          findings: findings.map((row, index) => ({
+            no: index + 1,
+            finding_type: row.findingType,
+            finding_description: row.findingDescription.trim(),
+            clause_references: row.clauseReferences,
+            objective_evidence: row.objectiveEvidence
+          }))
         }
-        navigate(created.redirect_url)
-        return
       }
-
-      navigate('/topics', { state: { refetch: true } })
+            
+      await createInputItem.mutateAsync({
+        topicId: newTopicId,
+        payload: inputItemPayload
+      })
+            
+      // Navigate to the topic page
+      navigate(`/formulir/${newTopicId}`)
+      
     } catch (err) {
-      console.error('Error creating topic:', err)
+      
+      const errorMessage = err.response?.data?.message || err.message || 'Terjadi kesalahan'
+      const errorDetails = err.response?.data?.errors || {}
+      
+      setServerError(
+        <div className="space-y-2">
+          <p className="font-semibold">{errorMessage}</p>
+          {Object.keys(errorDetails).length > 0 && (
+            <ul className="list-disc list-inside text-sm">
+              {Object.entries(errorDetails).map(([field, message]) => (
+                <li key={field}>{field}: {message}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )
     } finally {
       setSubmitting(false)
     }
   }
 
-  const mutationMessage = createTopic.error?.response?.data?.message || createTopic.error?.message || ''
   const roomsErrorMessage = roomsErrorObj?.response?.data?.message || roomsErrorObj?.message || ''
 
   return (
@@ -514,7 +700,7 @@ export default function CreateTopic() {
         <div className="mb-6">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             <Building2 className="h-4 w-4" />
-            <span>Ruangan: {currentRoomName}</span>
+            <span>Forum: {currentForumName}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Form Daftar Temuan Ketidaksesuaian</h1>
           <p className="text-muted-foreground mt-1">Isi data temuan audit sesuai dengan format yang ditentukan</p>
@@ -602,15 +788,15 @@ export default function CreateTopic() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">
-                      Ruangan <span className="text-destructive">*</span>
+                      Forum <span className="text-destructive">*</span>
                     </Label>
                     <Select
-                      value={selectedRoom}
-                      onValueChange={(value) => setSelectedRoom(value)}
+                      value={selectedForum}
+                      onValueChange={(value) => setSelectedForum(value)}
                       disabled={roomsLoading}
                     >
-                      <SelectTrigger className={cn(errors.room && "border-destructive")}>
-                        <SelectValue placeholder={roomsLoading ? 'Memuat ruangan...' : 'Pilih ruangan'} />
+                      <SelectTrigger className={cn(errors.forum && "border-destructive")}>
+                        <SelectValue placeholder={roomsLoading ? 'Memuat forum...' : 'Pilih forum'} />
                       </SelectTrigger>
                       <SelectContent>
                         {rooms.map((room) => (
@@ -620,8 +806,8 @@ export default function CreateTopic() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {errors.room && (
-                      <p className="text-xs text-destructive">{errors.room}</p>
+                    {errors.forum && (
+                      <p className="text-xs text-destructive">{errors.forum}</p>
                     )}
                     {roomsError && (
                       <Alert variant="destructive" className="py-2">
@@ -688,44 +874,61 @@ export default function CreateTopic() {
               <TabsContent value="parties" className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Auditor - Nama</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        value={auditorName}
-                        onChange={(e) => setAuditorName(e.target.value)}
-                        className="pl-9"
-                        placeholder="Nama lengkap auditor"
-                      />
-                    </div>
+                    <Label className="text-sm font-medium">Auditor</Label>
+                    <Select
+                      value={selectedAuditorId}
+                      onValueChange={setSelectedAuditorId}
+                      disabled={participantsLoading}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={participantsLoading ? 'Memuat auditor...' : 'Pilih auditor'} />
+                      </SelectTrigger>
+                      <SelectContent className="w-full">
+                        {auditorOptions.map((participant) => (
+                          <SelectItem
+                            key={participant.id}
+                            value={String(participant.user_id || participant.user?.id)}
+                          >
+                            {participantLabel(participant)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {participantsError && (
+                      <p className="text-xs text-destructive">
+                        {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta.'}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Auditor - NIP</Label>
-                    <Input
-                      value={auditorNip}
-                      onChange={(e) => setAuditorNip(e.target.value)}
-                      placeholder="Nomor induk pegawai"
-                    />
+                    <Label className="text-sm font-medium">Auditor - NIP / Employee ID</Label>
+                    <Input value={auditorNip} disabled placeholder="Terisi otomatis" />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Auditee - Nama</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        value={auditeeName}
-                        onChange={(e) => setAuditeeName(e.target.value)}
-                        className="pl-9"
-                        placeholder="Nama lengkap auditee"
-                      />
-                    </div>
+                    <Label className="text-sm font-medium">Auditee</Label>
+                    <Select
+                      value={selectedAuditeeId}
+                      onValueChange={setSelectedAuditeeId}
+                      disabled={participantsLoading}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder={participantsLoading ? 'Memuat auditee...' : 'Pilih auditee'} />
+                      </SelectTrigger>
+                      <SelectContent className="w-full">
+                        {auditeeOptions.map((participant) => (
+                          <SelectItem
+                            key={participant.id}
+                            value={String(participant.user_id || participant.user?.id)}
+                          >
+                            {participantLabel(participant)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Auditee - NIP</Label>
-                    <Input
-                      value={auditeeNip}
-                      onChange={(e) => setAuditeeNip(e.target.value)}
-                      placeholder="Nomor induk pegawai"
-                    />
+                    <Label className="text-sm font-medium">Auditee - NIP / Employee ID</Label>
+                    <Input value={auditeeNip} disabled placeholder="Terisi otomatis" />
                   </div>
                 </div>
 
@@ -755,10 +958,10 @@ export default function CreateTopic() {
               </TabsContent>
             </Tabs>
 
-            {/* Error Message */}
-            {mutationMessage && (
+            {/* Server Error Message */}
+            {serverError && (
               <Alert variant="destructive" className="mt-6">
-                <AlertDescription>{mutationMessage}</AlertDescription>
+                <AlertDescription>{serverError}</AlertDescription>
               </Alert>
             )}
           </CardContent>

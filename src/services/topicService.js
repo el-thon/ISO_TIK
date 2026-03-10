@@ -236,19 +236,14 @@ export async function detachTopicLabel(topicId, labelId) {
   return unwrap(res) ?? {}
 }
 
-export async function createTopic(roomId, payload = {}) {
-  if (!roomId) throw new Error('roomId is required when creating a topic')
-  
+export async function createTopic(forumId, payload = {}) {
+  if (!forumId) throw new Error('forumId is required when creating a topic')
   try {
-    const res = await api.post(`/rooms/${roomId}/topics`, payload);
-    
-    // Return the full response data including any input_items that might be included
+ 
+    const res = await api.post(`/rooms/${forumId}/topics`, payload);
     const responseData = res?.data ?? {};
-    
-    // Log if input_items are included in response
     return responseData;
   } catch (error) {
-    // Rethrow dengan informasi lebih jelas
     const enhancedError = new Error(
       `Failed to create topic: ${error.response?.data?.message || error.message}`
     );
@@ -481,6 +476,32 @@ export async function uploadCommentAttachment(commentId, file, label) {
 export async function getAttachment(attachmentId) {
   if (!attachmentId) throw new Error('attachmentId is required to get attachment')
   const res = await api.get(`/attachments/${attachmentId}`)
+  const attachment = unwrap(res) ?? {}
+  
+  // Normalize attachment data - extract original filename
+  let normalizedAttachment = attachment
+  
+  // Jika response punya structure nested: { attachment: { ... } }
+  if (attachment.attachment) {
+    normalizedAttachment = attachment.attachment
+  }
+  // Jika response punya structure: { data: { attachment: { ... } } } 
+  else if (attachment.data?.attachment) {
+    normalizedAttachment = attachment.data.attachment
+  }
+  
+  // Ensure filename field ada dan tidak empty
+  if (!normalizedAttachment.filename) {
+    normalizedAttachment.filename = 'lampiran'
+  }
+  
+  return normalizedAttachment
+}
+
+// Get attachment download info (filename, metadata) sebelum download
+export async function getAttachmentDownloadInfo(attachmentId) {
+  if (!attachmentId) throw new Error('attachmentId is required to get download info')
+  const res = await api.get(`/attachments/${attachmentId}/download-info`)
   return unwrap(res) ?? {}
 }
 
@@ -491,19 +512,53 @@ export const getAttachmentDownloadUrl = (attachmentId) => {
 
 export async function downloadAttachment(attachmentId) {
   if (!attachmentId) throw new Error('attachmentId is required to download attachment')
-  const res = await api.get(`/attachments/${attachmentId}/download`, {
-    responseType: 'blob',
-  })
+  
+  try {
+    // Get download info dulu (original filename + metadata)
+    const infoResponse = await getAttachmentDownloadInfo(attachmentId)
+    
+    // Extract filename dari response - sesuaikan dengan struktur payload
+    let originalFilename = 'lampiran'
+    
+    // Coba dari nested structure: data.attachment.filename
+    if (infoResponse?.attachment?.filename) {
+      originalFilename = infoResponse.attachment.filename
+    }
+    // Coba dari alternative structure
+    else if (infoResponse?.data?.attachment?.filename) {
+      originalFilename = infoResponse.data.attachment.filename
+    }
+    // Coba langsung dari top level
+    else if (infoResponse?.filename) {
+      originalFilename = infoResponse.filename
+    }
+    
+    
+    // Download actual file
+    const res = await api.get(`/attachments/${attachmentId}/download`, {
+      responseType: 'blob',
+    })
 
-  const contentType = res.headers?.['content-type']
-  const disposition = res.headers?.['content-disposition'] || ''
-  const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
-  const filename = decodeURIComponent(filenameMatch?.[1] || filenameMatch?.[2] || '') || undefined
-
-  return {
-    blob: res.data,
-    contentType,
-    filename,
+    const contentType = res.headers?.['content-type']
+    
+    return {
+      blob: res.data,
+      contentType,
+      filename: originalFilename, // Gunakan original filename dari info endpoint
+    }
+  } catch (error) {
+    // Fallback: try to extract filename dari content-disposition header
+    const contentType = error.response?.headers?.['content-type']
+    const disposition = error.response?.headers?.['content-disposition'] || ''
+    const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i)
+    const filename = decodeURIComponent(filenameMatch?.[1] || filenameMatch?.[2] || '') || 'lampiran'
+    
+    throw {
+      message: error.message,
+      blob: error.response?.data,
+      contentType,
+      filename,
+    }
   }
 }
 
@@ -606,6 +661,7 @@ export default {
   replyToComment,
   uploadCommentAttachment,
   getAttachment,
+  getAttachmentDownloadInfo,
   getAttachmentDownloadUrl,
   downloadAttachment,
   getTopicVersions,

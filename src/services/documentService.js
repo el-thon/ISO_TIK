@@ -1,4 +1,4 @@
-import api, { getAccessToken } from './api' // Import getAccessToken
+import api, { getAccessToken } from './api'
 
 const DEFAULT_PAGINATION = {
   current_page: 1,
@@ -23,11 +23,36 @@ const resolveApiBaseUrl = () => {
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? null
 
+const extractDocumentName = (doc) => {
+  if (!doc) return null
+  return (
+    doc.display_name ||
+    doc.original_filename ||
+    doc.original_name ||
+    doc.original_file ||
+    doc.originalName ||
+    doc.filename ||
+    doc.name ||
+    doc.file_name ||
+    doc.title ||
+    null
+  )
+}
+
 export async function listDocuments(params = {}) {
   const res = await api.get('/documents', { params })
   const payload = unwrap(res) ?? {}
+  const documents = ensureArray(payload.documents ?? payload.items ?? [])
+  
+  // Transform documents untuk memastikan kita punya original_filename
+  const transformedDocuments = documents.map((doc) => ({
+    ...doc,
+    // Tambahkan field display_name dengan prioritas yang benar
+    display_name: extractDocumentName(doc) || 'Lampiran',
+  }))
+  
   return {
-    documents: ensureArray(payload.documents ?? payload.items ?? []),
+    documents: transformedDocuments,
     pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
   }
 }
@@ -59,15 +84,114 @@ export const getDocumentDownloadUrl = (documentId) => {
   return `${resolveApiBaseUrl()}/documents/${documentId}/download`
 }
 
-// FUNGSI BARU: Download dengan token dari API instance
+/**
+ * Mendapatkan informasi download dokumen dengan fallback ke beberapa endpoint
+ */
+export async function getDocumentDownloadInfo(documentId, options = {}) {
+  if (!documentId) throw new Error('documentId is required')
+  const { suppressNotFound = true } = options
+  try {
+    const res = await api.get(`/documents/${documentId}/download-info`)
+    const data = unwrap(res) ?? {}
+    return data
+  } catch (err) {
+    const status = err?.response?.status ?? err?.status
+    const message = `${err?.message || ''}`.toLowerCase()
+    const statusText = `${err?.response?.statusText || ''}`.toLowerCase()
+    const isNotFound = status === 404 || statusText.includes('not found') || message.includes('404')
+    if (isNotFound) {
+      try {
+        const res = await api.get(`/attachments/${documentId}/download-info`)
+        const data = unwrap(res) ?? {}
+        return {
+          document: data?.attachment || data?.document || null,
+          download_url: data?.download_url,
+        }
+      } catch (attachmentErr) {
+        if (suppressNotFound) return null
+        throw attachmentErr
+      }
+    }
+    if (suppressNotFound) return null
+    throw err
+  }
+}
+
+/**
+ * Mendapatkan URL signature dengan authentication token
+ */
+export const getSignatureUrl = (signaturePath) => {
+  if (!signaturePath) return null
+  
+  const token = getAccessToken()
+  const baseUrl = resolveApiBaseUrl().replace('/api/v1', '')
+  
+  // Pastikan path dimulai dengan /
+  const normalizedPath = signaturePath.startsWith('/') ? signaturePath : `/${signaturePath}`
+  const fullUrl = `${baseUrl}${normalizedPath}`
+  
+  // Tambahkan token ke URL jika ada
+  if (token) {
+    const separator = fullUrl.includes('?') ? '&' : '?'
+    return `${fullUrl}${separator}token=${token}`
+  }
+  
+  return fullUrl
+}
+
+/**
+ * Memuat signature sebagai blob URL dengan authentication
+ */
+export async function loadSignatureAsBlobUrl(signaturePath) {
+  if (!signaturePath) return null
+  
+  try {
+    const token = getAccessToken()
+    const baseUrl = resolveApiBaseUrl().replace('/api/v1', '')
+    const normalizedPath = signaturePath.startsWith('/') ? signaturePath : `/${signaturePath}`
+    const fullUrl = `${baseUrl}${normalizedPath}`
+    
+    const response = await fetch(fullUrl, {
+      headers: token ? {
+        'Authorization': `Bearer ${token}`
+      } : {}
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const blob = await response.blob()
+    return URL.createObjectURL(blob)
+  } catch (error) {
+    console.error('Error loading signature:', error)
+    return null
+  }
+}
+
 export async function downloadDocument(documentId, filename, onProgress = null) {
   if (!documentId) throw new Error('documentId is required')
   
   const token = getAccessToken()
   if (!token) throw new Error('No access token available')
   
+  let finalFilename = filename
+  let mimeType = null
+  
+  // STEP 1: Coba dapatkan informasi dokumen (opsional)
+  try {
+    const docInfo = await getDocument(documentId).catch(() => null)
+    if (docInfo) {
+      finalFilename = extractDocumentName(docInfo) || finalFilename
+      mimeType = docInfo.mime_type || docInfo.mimeType
+    }
+  } catch (err) {
+    // Abaikan error, lanjut dengan filename yang diberikan
+  }
+  
   const downloadUrl = getDocumentDownloadUrl(documentId)
   
+  // STEP 2: Download file
   const response = await fetch(downloadUrl, {
     method: 'GET',
     headers: {
@@ -85,26 +209,21 @@ export async function downloadDocument(documentId, filename, onProgress = null) 
 
   // Dapatkan filename dari Content-Disposition jika ada
   const contentDisposition = response.headers.get('Content-Disposition')
-  let downloadFilename = filename
-  
   if (contentDisposition) {
-    // Regex yang lebih baik untuk menangkap filename
     const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
     if (filenameMatch && filenameMatch[1]) {
-      downloadFilename = filenameMatch[1].replace(/['"]/g, '')
+      const extractedFilename = filenameMatch[1].replace(/['"]/g, '')
+      finalFilename = extractedFilename
     }
   }
   
-  // Dapatkan tipe konten dari response
-  const contentType = response.headers.get('Content-Type')
-  console.log('Content-Type:', contentType) // Untuk debugging
-  
-  // Baca response sebagai blob
+  // Gunakan MIME type dari response atau dari info dokumen
+  const responseContentType = response.headers.get('Content-Type')
   const blob = await response.blob()
   
-  // Tentukan tipe file berdasarkan ekstensi filename jika blob type tidak sesuai
+  // Tentukan tipe file berdasarkan ekstensi filename
   let finalBlob = blob
-  const fileExtension = downloadFilename.split('.').pop()?.toLowerCase()
+  const fileExtension = finalFilename.split('.').pop()?.toLowerCase()
   
   // Map ekstensi ke MIME type
   const mimeTypes = {
@@ -122,24 +241,22 @@ export async function downloadDocument(documentId, filename, onProgress = null) 
     'rar': 'application/x-rar-compressed',
   }
   
-  // Jika blob type adalah 'text/plain' atau 'application/octet-stream' tapi seharusnya bukan
-  if ((blob.type === 'text/plain' || blob.type === 'application/octet-stream') && fileExtension && mimeTypes[fileExtension]) {
-    // Buat blob baru dengan tipe yang benar
-    finalBlob = new Blob([await blob.arrayBuffer()], { type: mimeTypes[fileExtension] })
+  // Perbaiki MIME type jika diperlukan
+  const targetMimeType = mimeType || mimeTypes[fileExtension] || responseContentType
+  if (targetMimeType && (blob.type === 'text/plain' || blob.type === 'application/octet-stream' || blob.type !== targetMimeType)) {
+    finalBlob = new Blob([await blob.arrayBuffer()], { type: targetMimeType })
   }
   
-  // Untuk PDF, pastikan tipe-nya benar
-  if (fileExtension === 'pdf' && finalBlob.type !== 'application/pdf') {
-    finalBlob = new Blob([await finalBlob.arrayBuffer()], { type: 'application/pdf' })
-  }
-  
-  return { blob: finalBlob, filename: downloadFilename }
+  return { blob: finalBlob, filename: finalFilename }
 }
 
 export default {
   listDocuments,
   getDocument,
   getDocumentDownloadUrl,
+  getDocumentDownloadInfo,
   uploadDocument,
   downloadDocument,
+  getSignatureUrl,
+  loadSignatureAsBlobUrl,
 }
