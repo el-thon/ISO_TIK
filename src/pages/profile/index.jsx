@@ -226,15 +226,10 @@ export default function ProfilePage() {
     setPhotoOverride(null)
     
     try {
-      // 2. Upload ke server
       await uploadPhotoMutation.mutateAsync(file)
       
-      // 3. Setelah upload sukses, pertahankan preview lokal
-      // Biarkan user tetap melihat preview sampai mereka navigate
-      
     } catch {
-      // Jika error, tetap pertahankan preview agar user bisa melihat
-      // Hanya tampilkan pesan error
+
     } finally {
       setIsUploading(false)
     }
@@ -358,16 +353,16 @@ export default function ProfilePage() {
 
                 <div className="mt-6">
                   <nav className="flex flex-col gap-2">
-                    <Link to="/profile?tab=overview" className={navItemClass('overview')}>
+                    <Link to="/profil?tab=overview" className={navItemClass('overview')}>
                       <User className="w-4 h-4" /> Overview
                     </Link>
-                    <Link to="/profile?tab=personal" className={navItemClass('personal')}>
+                    <Link to="/profil?tab=personal" className={navItemClass('personal')}>
                       <FileText className="w-4 h-4" /> Personal Data
                     </Link>
-                    <Link to="/profile?tab=employment" className={navItemClass('employment')}>
+                    <Link to="/profil?tab=employment" className={navItemClass('employment')}>
                       <Briefcase className="w-4 h-4" /> Employment
                     </Link>
-                    <Link to="/profile?tab=security" className={navItemClass('security')}>
+                    <Link to="/profil?tab=security" className={navItemClass('security')}>
                       <Shield className="w-4 h-4" /> Security & Privacy
                     </Link>
                   </nav>
@@ -376,7 +371,6 @@ export default function ProfilePage() {
             </Card>
           </div>
 
-          {/* Right column */}
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4">
               <div>

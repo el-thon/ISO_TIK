@@ -34,6 +34,25 @@ function unwrapPaginator(body) {
   }
 }
 
+function stripSignaturePaths(signature) {
+  if (!signature || typeof signature !== 'object') return signature
+  const cleaned = { ...signature }
+  delete cleaned.stored_path
+  delete cleaned.signature_url
+  delete cleaned.url
+  delete cleaned.path
+  delete cleaned.download_url
+  return cleaned
+}
+
+function sanitizeSignaturePayload(payload) {
+  if (!payload || typeof payload !== 'object') return payload
+  if (payload.signature && typeof payload.signature === 'object') {
+    return { ...payload, signature: stripSignaturePaths(payload.signature) }
+  }
+  return stripSignaturePaths(payload)
+}
+
 function toPaginator(payload = {}) {
   const items = Array.isArray(payload.data) ? payload.data : []
   return {
@@ -163,7 +182,7 @@ export async function getSignature() {
     })
 
     if (res.status === 404) return {}
-    return unwrap(res) ?? {}
+    return sanitizeSignaturePayload(unwrap(res) ?? {})
   } catch (err) {
     if (err?.response?.status === 404) return {}
     throw err
@@ -194,7 +213,7 @@ export async function uploadSignature(fileOrFormData) {
   const res = await api.post('/profile/signature', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
-  return unwrap(res) ?? {}
+  return sanitizeSignaturePayload(unwrap(res) ?? {})
 }
 
 export async function deleteSignature() {

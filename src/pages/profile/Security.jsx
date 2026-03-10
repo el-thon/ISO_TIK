@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react'
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -28,65 +28,9 @@ const formatDate = (value) => {
   return date.toLocaleString()
 }
 
-const getStorageBaseUrl = () => {
-  const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
-  const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?.*$/, '') : ''
-  const proxyTarget = (import.meta.env.VITE_PROXY_TARGET || '').trim()
-  const explicitStorageBase = (import.meta.env.VITE_STORAGE_BASE_URL || '').trim()
-  const runtimeFallback = typeof window !== 'undefined' ? window.location.origin : ''
-  
-  return (explicitStorageBase || apiOrigin || proxyTarget || runtimeFallback).replace(/\/$/, '')
-}
-
-const STORAGE_BASE = getStorageBaseUrl()
-
-// Perbaikan fungsi resolveSignatureUrl
-const resolveSignatureUrl = (path) => {
-  if (!path) return null
-  if (path.startsWith('http')) return path
-
-  // Handle berbagai format path dari backend
-  let normalized = path
-  
-  // Case 1: Path dengan pattern storage/app/public/
-  const storagePatterns = [
-    '/storage/app/public/',
-    'storage/app/public/',
-    '/storage/',
-    'storage/'
-  ]
-  
-  for (const pattern of storagePatterns) {
-    if (normalized.includes(pattern)) {
-      const index = normalized.indexOf(pattern)
-      normalized = normalized.substring(index + pattern.length)
-      break
-    }
-  }
-  
-  // Pastikan path memiliki prefix /storage/
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`
-  }
-  
-  if (!normalized.startsWith('/storage/')) {
-    normalized = `/storage${normalized.startsWith('/') ? '' : '/'}${normalized}`
-  }
-  
-  // Build final URL
-  const base = STORAGE_BASE
-  if (!base) return normalized
-  
-  // Handle double slash
-  return `${base}${normalized}`.replace(/([^:]\/)\/+/g, '$1')
-}
-
-// ==================== COMPONENTS ====================
+// ==================== SIGNATURE COMPONENT (SEDERHANA) ====================
 const SignatureSection = ({ 
-  signatureQuery, 
-  previewUrl, 
   hasSignature,
-  onSelectFile,
   onUpload,
   onDownload,
   onDelete,
@@ -114,10 +58,9 @@ const SignatureSection = ({
             <h4 className="font-medium">Tanda Tangan Digital</h4>
             <p className="text-xs text-muted-foreground">Kelola unggahan tanda tangan Anda</p>
           </div>
-          {signatureQuery.isFetching && <Loader2 className="w-4 h-4 animate-spin" />}
         </div>
 
-        {!hasSignature && !signatureQuery.isFetching && (
+        {!hasSignature && (
           <div className="mb-3 text-xs text-amber-600">
             Tanda tangan belum tersedia. Silakan unggah file (PNG/JPG, maks 2MB) untuk mengaktifkan tanda tangan Anda.
           </div>
@@ -133,29 +76,12 @@ const SignatureSection = ({
         />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2 border rounded-lg p-4 flex items-center justify-center bg-slate-50 min-h-[160px]">
-            {hasSignature && previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="Signature Preview"
-                className="max-h-40 object-contain"
-                onError={(e) => {
-                  console.error('Preview image failed to load:', previewUrl)
-                  e.currentTarget.style.display = 'none'
-                  // Show fallback
-                  e.currentTarget.parentElement.innerHTML = `
-                    <div class="text-xs text-muted-foreground text-center">
-                      Gagal memuat pratinjau.<br/>Silakan unduh untuk melihat.
-                    </div>
-                  `
-                }}
-              />
-            ) : (
-              <div className="text-xs text-muted-foreground text-center">
-                {isUploading ? 'Mengunggah...' : 'Belum ada tanda tangan.'}<br />
-                {!isUploading && 'Unggah terlebih dahulu untuk melihat pratinjau.'}
-              </div>
-            )}
+          <div className="md:col-span-2 border rounded-lg p-4 flex items-center justify-center bg-slate-50 min-h-40">
+            <div className="text-xs text-muted-foreground text-center">
+              {hasSignature 
+                ? 'Tanda tangan sudah tersedia. Gunakan tombol di samping untuk mengunduh atau menghapus.' 
+                : 'Belum ada tanda tangan. Unggah terlebih dahulu.'}
+            </div>
           </div>
           
           <div className="flex flex-col gap-2 justify-start">
@@ -206,10 +132,8 @@ export default function Security({ preferences }) {
   const historyQuery = useLoginHistory({ page: historyPage, per_page: 5 })
   const signatureQuery = useSignature()
   
-  // Signature state
-  const [previewUrl, setPreviewUrl] = useState(null)
+  // Signature state (hanya status, tidak ada preview)
   const [signatureStatus, setSignatureStatus] = useState(null)
-  const previewObjectUrlRef = useRef(null)
   
   // Forms
   const changePasswordForm = useForm({
@@ -252,85 +176,14 @@ export default function Security({ preferences }) {
   // ========== SIGNATURE HANDLING ==========
   const signatureData = signatureQuery.data || {}
   const signatureEmbedded = signatureData.signature || signatureData.data || {}
-
-  // Extract signature URL dengan multiple fallback (dukungan nested payload)
-  const signaturePath = useMemo(() => {
-    const candidates = [signatureData, signatureEmbedded]
-    for (const candidate of candidates) {
-      if (!candidate) continue
-      const pathValue =
-        candidate.stored_path ||
-        candidate.signature_url ||
-        candidate.url ||
-        candidate.path ||
-        candidate.download_url ||
-        null
-      if (pathValue) return pathValue
-    }
-    return null
-  }, [signatureData, signatureEmbedded])
   
   const hasSignature = useMemo(() => {
     const candidates = [signatureData, signatureEmbedded]
     return candidates.some((c) => {
       if (!c) return false
-      return Boolean(c.id || c.signature_id || c.signatureId || signaturePath)
+      return Boolean(c.id || c.signature_id || c.signatureId)
     })
-  }, [signatureData, signatureEmbedded, signaturePath])
-
-  // Effect untuk handle preview URL
-  useEffect(() => {
-    // Cleanup function
-    const cleanup = () => {
-      if (previewObjectUrlRef.current) {
-        URL.revokeObjectURL(previewObjectUrlRef.current)
-        previewObjectUrlRef.current = null
-      }
-    }
-
-    cleanup() // Cleanup sebelum set new URL
-
-    if (!hasSignature) {
-      setPreviewUrl(null)
-      return cleanup
-    }
-
-    // Priority 1: Use resolved URL if available
-    if (signaturePath) {
-      const resolvedUrl = resolveSignatureUrl(signaturePath)
-      console.log('Resolved signature URL:', resolvedUrl) // Debug
-      setPreviewUrl(resolvedUrl)
-      return cleanup
-    }
-
-    // Priority 2: Download blob as fallback
-    const loadSignatureBlob = async () => {
-      try {
-        console.log('Fetching signature blob...')
-        const result = await downloadSignature.mutateAsync()
-        
-        if (result instanceof Blob) {
-          const url = URL.createObjectURL(result)
-          previewObjectUrlRef.current = url
-          setPreviewUrl(url)
-        } else if (result?.data instanceof Blob) {
-          const url = URL.createObjectURL(result.data)
-          previewObjectUrlRef.current = url
-          setPreviewUrl(url)
-        } else {
-          console.warn('Unexpected download result:', result)
-          setPreviewUrl(null)
-        }
-      } catch (error) {
-        console.error('Failed to load signature blob:', error)
-        setPreviewUrl(null)
-      }
-    }
-
-    loadSignatureBlob()
-
-    return cleanup
-  }, [hasSignature, signaturePath, downloadSignature])
+  }, [signatureData, signatureEmbedded])
 
   // Upload handler
   const handleUploadSignature = async (file) => {
@@ -355,29 +208,19 @@ export default function Security({ preferences }) {
       return
     }
 
-    // Show local preview
-    if (previewObjectUrlRef.current) {
-      URL.revokeObjectURL(previewObjectUrlRef.current)
-      previewObjectUrlRef.current = null
-    }
-    
-    const localUrl = URL.createObjectURL(file)
-    previewObjectUrlRef.current = localUrl
-    setPreviewUrl(localUrl)
-
     try {
       await uploadSignature.mutateAsync(file)
       setSignatureStatus({ 
         type: 'success', 
         text: 'Tanda tangan berhasil diunggah' 
       })
-      // Refresh data
+      
+      // Refetch untuk mendapatkan data terbaru
       await signatureQuery.refetch()
+      
     } catch (error) {
       const message = error?.response?.data?.message || 'Gagal mengunggah tanda tangan'
       setSignatureStatus({ type: 'error', text: message })
-      // Revert preview on error
-      setPreviewUrl(null)
     }
   }
 
@@ -394,7 +237,6 @@ export default function Security({ preferences }) {
       } else if (result?.data instanceof Blob) {
         blob = result.data
       } else if (result?.url) {
-        // If API returns URL, fetch it
         const response = await fetch(result.url)
         blob = await response.blob()
       }
@@ -407,7 +249,11 @@ export default function Security({ preferences }) {
         document.body.appendChild(link)
         link.click()
         link.remove()
-        URL.revokeObjectURL(url)
+        
+        // Cleanup URL setelah download
+        setTimeout(() => {
+          URL.revokeObjectURL(url)
+        }, 1000)
         
         setSignatureStatus({ 
           type: 'success', 
@@ -433,13 +279,6 @@ export default function Security({ preferences }) {
 
     try {
       await deleteSignature.mutateAsync()
-      
-      // Cleanup preview
-      if (previewObjectUrlRef.current) {
-        URL.revokeObjectURL(previewObjectUrlRef.current)
-        previewObjectUrlRef.current = null
-      }
-      setPreviewUrl(null)
       
       setSignatureStatus({ 
         type: 'success', 
@@ -600,10 +439,8 @@ export default function Security({ preferences }) {
         </CardContent>
       </Card>
 
-      {/* Signature Section */}
+      {/* Signature Section - Sederhana, tanpa preview */}
       <SignatureSection
-        signatureQuery={signatureQuery}
-        previewUrl={previewUrl}
         hasSignature={hasSignature}
         onUpload={handleUploadSignature}
         onDownload={handleDownloadSignature}
