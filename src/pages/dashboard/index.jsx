@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -32,16 +32,23 @@ const dateTimeFormatter = new Intl.DateTimeFormat('id-ID', {
   timeStyle: 'short',
 })
 
-function formatDate(value) {
-  if (!value) return 'Belum ada'
-  try {
-    return dateTimeFormatter.format(new Date(value))
-  } catch (error) {
-    return value
-  }
-}
+// PERBAIKAN: Memoized SectionState component
+const SectionState = React.memo(({ 
+  isLoading, 
+  isError, 
+  error, 
+  emptyText, 
+  children, 
+  onRetry, 
+  hasContent 
+}) => {
+  // Gunakan useCallback untuk handler
+  const handleRetry = useCallback(() => {
+    if (onRetry) {
+      onRetry()
+    }
+  }, [onRetry])
 
-function SectionState({ isLoading, isError, error, emptyText, children, onRetry, hasContent }) {
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -56,8 +63,8 @@ function SectionState({ isLoading, isError, error, emptyText, children, onRetry,
     return (
       <div className="flex flex-col gap-2 items-start">
         <p className="text-sm text-destructive">{error?.response?.data?.message || 'Gagal memuat data.'}</p>
-        {onRetry && (
-          <Button size="sm" variant="outline" onClick={onRetry}>
+        {handleRetry && (
+          <Button size="sm" variant="outline" onClick={handleRetry}>
             Coba lagi
           </Button>
         )}
@@ -70,31 +77,120 @@ function SectionState({ isLoading, isError, error, emptyText, children, onRetry,
   }
 
   return children
-}
+})
 
+// PERBAIKAN: Dashboard component dengan optimasi
 export default function Dashboard() {
-  const { data: meData } = useMe({ staleTime: 1000 * 60 * 5 })
+
+  const formatDate = useCallback((value) => {
+  if (!value) return 'Belum ada'
+  try {
+    return dateTimeFormatter.format(new Date(value))
+  } catch (error) {
+    return value
+  }
+}, [])
+
+  // PERBAIKAN: Tambahkan options untuk mencegah refetch berlebihan
+  const { data: meData } = useMe({ 
+    staleTime: 1000 * 60 * 5, // 5 menit
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    retry: 1
+  })
+  
   const user = meData?.data?.user
 
-  const summaryQuery = useDashboardSummary()
-  const assignmentsQuery = useMyAssignments()
-  const topicsQuery = useTopicsNeedingAttention()
-  const deadlinesQuery = useUpcomingDeadlines()
-  const statsQuery = useDashboardStatistics()
+  // PERBAIKAN: Tambahkan options untuk semua query
+  const queryOptions = {
+    staleTime: 1000 * 60 * 2, // 2 menit
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    retry: 1
+  }
 
-  const handleRefresh = () => {
+  const summaryQuery = useDashboardSummary(queryOptions)
+  const assignmentsQuery = useMyAssignments(queryOptions)
+  const topicsQuery = useTopicsNeedingAttention(queryOptions)
+  const deadlinesQuery = useUpcomingDeadlines(queryOptions)
+  const statsQuery = useDashboardStatistics(queryOptions)
+
+  // PERBAIKAN: useCallback untuk handler
+  const handleRefresh = useCallback(() => {
     summaryQuery.refetch()
     assignmentsQuery.refetch()
     topicsQuery.refetch()
     deadlinesQuery.refetch()
     statsQuery.refetch()
-  }
+  }, [summaryQuery, assignmentsQuery, topicsQuery, deadlinesQuery, statsQuery])
 
-  const summaryData = summaryQuery.data || {}
-  const assignments = assignmentsQuery.data || []
-  const topics = topicsQuery.data || []
-  const deadlines = deadlinesQuery.data || []
-  const stats = statsQuery.data || {}
+  // PERBAIKAN: Memoized data dengan useMemo
+  const summaryData = useMemo(() => summaryQuery.data || {}, [summaryQuery.data])
+  const assignments = useMemo(() => assignmentsQuery.data || [], [assignmentsQuery.data])
+  const topics = useMemo(() => topicsQuery.data || [], [topicsQuery.data])
+  const deadlines = useMemo(() => deadlinesQuery.data || [], [deadlinesQuery.data])
+  const stats = useMemo(() => statsQuery.data || {}, [statsQuery.data])
+
+  // PERBAIKAN: Memoized cards
+  const summaryCards = useMemo(() => {
+    return SUMMARY_CARDS.map((card) => (
+      <Card key={card.key} className={card.accent}>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground/80">{card.label}</CardTitle>
+          {summaryQuery.isLoading ? (
+            <Skeleton className="h-8 w-16" />
+          ) : summaryQuery.isError ? (
+            <CardDescription className="text-destructive text-lg">—</CardDescription>
+          ) : (
+            <CardDescription className="text-3xl font-semibold text-foreground">
+              {summaryData[card.key] ?? 0}
+            </CardDescription>
+          )}
+        </CardHeader>
+      </Card>
+    ))
+  }, [summaryQuery.isLoading, summaryQuery.isError, summaryData])
+
+  const statsCards = useMemo(() => {
+    if (statsQuery.isLoading) {
+      return (
+        <div className="space-y-3">
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-2/3" />
+        </div>
+      )
+    }
+
+    if (statsQuery.isError) {
+      return (
+        <SectionState
+          isLoading={false}
+          isError
+          error={statsQuery.error}
+          onRetry={statsQuery.refetch}
+          emptyText=""
+          hasContent={false}
+        />
+      )
+    }
+
+    return (
+      <dl className="grid grid-cols-1 gap-3">
+        {STATS_CARDS.map((card) => (
+          <div key={card.key} className="rounded-lg border p-3">
+            <dt className="text-xs text-muted-foreground">{card.label}</dt>
+            <dd className="text-lg font-semibold">
+              {stats[card.key] ?? '—'}
+              {card.suffix && stats[card.key] !== null && stats[card.key] !== undefined ? card.suffix : ''}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    )
+  }, [statsQuery.isLoading, statsQuery.isError, statsQuery.error, statsQuery.refetch, stats])
 
   return (
     <MainLayout>
@@ -104,28 +200,13 @@ export default function Dashboard() {
             <h1 className="text-heading-2 font-semibold">Selamat Datang, {user?.name || user?.username || 'Pengguna'}</h1>
             <p className="text-body-md text-muted-foreground">Ringkasan aktivitas & penugasan terbaru Anda.</p>
           </div>
-          <Button onClick={handleRefresh} variant="outline">
+          <Button onClick={handleRefresh} variant="outline" disabled={summaryQuery.isLoading || assignmentsQuery.isLoading}>
             Muat ulang data
           </Button>
         </header>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {SUMMARY_CARDS.map((card) => (
-            <Card key={card.key} className={card.accent}>
-              <CardHeader>
-                <CardTitle className="text-sm font-medium text-muted-foreground/80">{card.label}</CardTitle>
-                {summaryQuery.isLoading ? (
-                  <Skeleton className="h-8 w-16" />
-                ) : summaryQuery.isError ? (
-                  <CardDescription className="text-destructive text-lg">—</CardDescription>
-                ) : (
-                  <CardDescription className="text-3xl font-semibold text-foreground">
-                    {summaryData[card.key] ?? 0}
-                  </CardDescription>
-                )}
-              </CardHeader>
-            </Card>
-          ))}
+          {summaryCards}
         </section>
 
         <section>
@@ -137,22 +218,16 @@ export default function Dashboard() {
             <CardContent>
               <div className="flex flex-wrap gap-3">
                 <Link
-                  to="/groups"
+                  to="/forum"
                   className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-10 px-4 bg-navy text-white hover:opacity-95 no-underline"
                 >
-                  + Buat Grup
+                  + Buat Forum
                 </Link>
                 <Link
-                  to="/rooms"
+                  to="/formulir/buat"
                   className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-10 px-4 bg-navy text-white hover:opacity-95 no-underline"
                 >
-                  + Buat Ruangan
-                </Link>
-                <Link
-                  to="/topics/create"
-                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-10 px-4 bg-navy text-white hover:opacity-95 no-underline"
-                >
-                  + Buat Topik
+                  + Buat Formulir Laporan
                 </Link>
               </div>
             </CardContent>
@@ -277,34 +352,7 @@ export default function Dashboard() {
               <CardDescription>Metrix produktivitas Anda.</CardDescription>
             </CardHeader>
             <CardContent>
-              {statsQuery.isLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-6 w-full" />
-                  <Skeleton className="h-6 w-2/3" />
-                </div>
-              ) : statsQuery.isError ? (
-                <SectionState
-                  isLoading={false}
-                  isError
-                  error={statsQuery.error}
-                  onRetry={statsQuery.refetch}
-                  emptyText=""
-                  hasContent={false}
-                />
-              ) : (
-                <dl className="grid grid-cols-1 gap-3">
-                  {STATS_CARDS.map((card) => (
-                    <div key={card.key} className="rounded-lg border p-3">
-                      <dt className="text-xs text-muted-foreground">{card.label}</dt>
-                      <dd className="text-lg font-semibold">
-                        {stats[card.key] ?? '—'}
-                        {card.suffix && stats[card.key] !== null && stats[card.key] !== undefined ? card.suffix : ''}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+              {statsCards}
             </CardContent>
           </Card>
         </section>

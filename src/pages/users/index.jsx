@@ -277,37 +277,10 @@ export default function UsersPage() {
               <h2 className="text-heading-2 font-semibold">Manajemen Pengguna</h2>
               <p className="text-body-md text-muted-foreground">Integrasi penuh dengan Admin User Management API.</p>
             </div>
-            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto ">
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari username / status" className="w-full md:w-60" />
               <div className="flex gap-2">
-                <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" disabled={!selectedIds.size}>Ubah Status Massal</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Ubah Status Massal</DialogTitle>
-                      <DialogDescription>{selectedIds.size} pengguna dipilih</DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleBulkSubmit} className="grid gap-3">
-                      <Select value={bulkForm.status} onValueChange={(status) => setBulkForm((prev) => ({ ...prev, status }))}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Pilih status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <textarea className="border rounded-md p-2 text-sm" rows={3} placeholder="Alasan (opsional)" value={bulkForm.reason} onChange={(e) => setBulkForm((prev) => ({ ...prev, reason: e.target.value }))} />
-                      <DialogFooter>
-                        <Button type="submit" disabled={bulkMutation.isLoading}>
-                          {bulkMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
+                
                 <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                   <DialogTrigger asChild>
                     <Button className="bg-blue-600 text-white"><UserPlus className="w-4 h-4 mr-2" />Tambah Pengguna</Button>
