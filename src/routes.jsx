@@ -10,7 +10,7 @@ export default function AppRoutes() {
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/auth/forgot" element={<ForgotPassword />} />
+      <Route path="/auth/lupa-password" element={<ForgotPassword />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   )

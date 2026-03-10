@@ -24,6 +24,7 @@ export function setTokens({ access_token, refresh_token }) {
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+  localStorage.removeItem('user_data')
 }
 
 // Hard redirect ke halaman login ketika sesi kadaluarsa

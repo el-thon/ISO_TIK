@@ -1,14 +1,10 @@
 import React from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import RootRedirect from './routes/RootRedirect'
+// Perbaikan: Import langsung dari file Login.jsx, bukan dari index.jsx
 import Login from './pages/auth/index'
 import ForgotPassword from './pages/auth/ForgotPassword'
-import SsoCallback from './pages/auth/SsoCallback'
 import Dashboard from './pages/dashboard'
-import Groups from './pages/groups'
-import GroupsDetail from './pages/groups/detail'
-import Rooms from './pages/rooms'
-import RoomDetail from './pages/rooms/detail'
 import Users from './pages/users'
 import UserDetail from './pages/users/detail'
 import CreateTopic from './pages/topics/CreateTopic'
@@ -16,32 +12,38 @@ import TopicDetail from './pages/topics/detail'
 import Assignments from './pages/assignments'
 import Profile from './pages/profile'
 import Administration from './pages/administration'
+import RoomsPage from './pages/rooms'
+import RoomDetail from './pages/rooms/detail'
 import NotFound from './pages/not-found'
 import ProtectedRoute from '@/routes/ProtectedRoute'
+
+// Opsional: Jika ada SSO callback yang akan diaktifkan nanti
+// import SsoCallback from './pages/auth/SsoCallback'
 
 export const router = createBrowserRouter(
   [
     { path: '/', element: <RootRedirect /> },
     { path: '/login', element: <Login /> },
-    { path: '/login/sso', element: <SsoCallback /> },
-    { path: '/dashboard', element: (<ProtectedRoute><Dashboard /></ProtectedRoute>) },
-  { path: '/groups', element: (<ProtectedRoute><Groups /></ProtectedRoute>) },
-  { path: '/users', element: (<ProtectedRoute><Users /></ProtectedRoute>) },
-  { path: '/users/:id', element: (<ProtectedRoute><UserDetail /></ProtectedRoute>) },
-  { path: '/rooms', element: (<ProtectedRoute><Rooms /></ProtectedRoute>) },
-  { path: '/rooms/:id', element: (<ProtectedRoute><RoomDetail /></ProtectedRoute>) },
-  { path: '/assignments', element: (<ProtectedRoute><Assignments /></ProtectedRoute>) },
-  { path: '/administration', element: (<ProtectedRoute><Administration /></ProtectedRoute>) },
-  { path: '/topics/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
-  { path: '/topics/create', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },
-  { path: '/profile', element: (<ProtectedRoute><Profile /></ProtectedRoute>) },
-  { path: '/groups/:id', element: (<ProtectedRoute><GroupsDetail /></ProtectedRoute>) },
-    { path: '/auth/forgot', element: <ForgotPassword /> },
-    { path: '*', element: <NotFound /> },
+    // { path: '/login/sso', element: <SsoCallback /> }, // SSO sementara dinonaktifkan
+    { path: '/beranda', element: (<ProtectedRoute><Dashboard /></ProtectedRoute>) },
+    { path: '/pengguna', element: (<ProtectedRoute><Users /></ProtectedRoute>) },
+    { path: '/pengguna/:id', element: (<ProtectedRoute><UserDetail /></ProtectedRoute>) },
+    { path: '/tugas', element: (<ProtectedRoute><Assignments /></ProtectedRoute>) },
+    { path: '/forum', element: (<ProtectedRoute><RoomsPage/></ProtectedRoute>) },
+    { path: '/forum/:id', element: (<ProtectedRoute><RoomDetail /></ProtectedRoute>) },
+    { path: '/administrasi', element: (<ProtectedRoute><Administration /></ProtectedRoute>) },
+    { path: '/formulir/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
+    { path: '/formulir/buat', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },
+    { path: '/profil', element: (<ProtectedRoute><Profile /></ProtectedRoute>) },
+    { path: '/auth/lupa-password', element: <ForgotPassword /> },
+    { path: '*', element: <NotFound /> }, // Halaman tidak ditemukan
   ],
   {
-    future: { v7_startTransition: true },
-  },
+    future: { 
+      v7_startTransition: true,
+      v7_relativeSplatPath: true // Tambahkan ini untuk future warning
+    },
+  }
 )
 
 export default router

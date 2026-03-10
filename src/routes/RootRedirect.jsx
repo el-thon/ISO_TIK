@@ -1,36 +1,30 @@
-import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect } from 'react'
+import { Navigate } from 'react-router-dom'
 import { getAccessToken, getRefreshToken } from '@/services/api'
-import Login from '@/pages/auth/index'
 
 /**
- * RootRedirect component
- * Handles automatic redirect logic for root path (/)
- * - If user has valid tokens -> redirect to /dashboard
- * - If user has no tokens -> show Login page
+ * Komponen RootRedirect
+ * Menangani logika pengalihan otomatis untuk jalur root (/)
  */
 export default function RootRedirect() {
-  const navigate = useNavigate()
-  const [isChecking, setIsChecking] = useState(true)
+  const accessToken = getAccessToken()
+  const refreshToken = getRefreshToken()
 
+  // Log untuk debugging
   useEffect(() => {
-    const accessToken = getAccessToken()
-    const refreshToken = getRefreshToken()
+    console.log('[RootRedirect]', {
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+    })
+  }, [accessToken, refreshToken])
 
-    // If user has tokens, redirect to dashboard
-    if (accessToken || refreshToken) {
-      navigate('/dashboard', { replace: true })
-    } else {
-      // No tokens, allow login page to render
-      setIsChecking(false)
-    }
-  }, [navigate])
-
-  // While checking tokens, show nothing (or a loader if you want)
-  if (isChecking) {
-    return null // or return <LoadingSpinner />
+  // Jika punya token, langsung ke beranda
+  if (accessToken || refreshToken) {
+    console.log('[RootRedirect] Has token, redirecting to /beranda')
+    return <Navigate to="/beranda" replace />
   }
 
-  // If no tokens, render the Login page
-  return <Login />
+  // Tidak punya token, langsung ke login
+  console.log('[RootRedirect] No token, redirecting to /login')
+  return <Navigate to="/login" replace />
 }
