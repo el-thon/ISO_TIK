@@ -4,18 +4,6 @@ import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 import { useArchiveRoom, useLockRoom, useRestoreRoom, useUnlockRoom } from '@/services/roomHooks'
 
-const formatVisibility = (value) => {
-  switch (value) {
-    case 'private':
-      return 'Private'
-    case 'org-wide':
-      return 'Org-wide'
-    case 'group-wide':
-    default:
-      return 'Group-wide'
-  }
-}
-
 export default function SettingsTab({ room }) {
   const roomId = room?.id
 
@@ -50,7 +38,6 @@ export default function SettingsTab({ room }) {
 
   const infoItems = [
     { label: 'ID Ruangan', value: room?.id || '-' },
-    { label: 'Visibility', value: formatVisibility(room?.visibility) },
     { label: 'Status', value: room?.is_locked ? 'Locked' : 'Unlocked' },
     { label: 'Arsip', value: room?.is_archived ? 'Archived' : 'Active' },
     { label: 'Peran Saya', value: room?.user_role || 'Tidak diketahui' },

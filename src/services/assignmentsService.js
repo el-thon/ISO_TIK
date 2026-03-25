@@ -37,17 +37,21 @@ const normalizeAssignment = (raw) => {
   if (!raw || typeof raw !== 'object') return raw
   const topic = raw.topic || raw.topic_data || null
   const comment = raw.comment || raw.comment_data || null
+  const assignee = raw.assignee || raw.to_user || null
+  const assignedBy = raw.assigned_by || raw.assigner || raw.from_user || null
   return {
     ...raw,
     topic,
     comment,
-    from_user: raw.from_user || raw.assigner || raw.created_by || raw.author || null,
-    to_user: raw.to_user || raw.assignee || raw.user || null,
+    from_user: assignedBy || raw.created_by || raw.author || null,
+    to_user: assignee || raw.user || null,
+    from_user_id: raw.from_user_id || raw.assigned_by_id || assignedBy?.id || null,
+    to_user_id: raw.to_user_id || raw.assignee_id || assignee?.id || null,
   }
 }
 
 export async function listAssignments(params = {}) {
-  const res = await api.get('/assignments', { params })
+  const res = await api.get('/topic-assignments', { params })
   const payload = unwrap(res) ?? {}
   const arraySource =
     pickArrayData(
@@ -115,62 +119,30 @@ export async function listAssignments(params = {}) {
   }
 }
 
-export async function getAssignment(assignmentId) {
-  if (!assignmentId) throw new Error('assignmentId is required')
-  const res = await api.get(`/assignments/${assignmentId}`)
-  const payload = unwrap(res)
-  return normalizeAssignment(payload.assignment ?? payload)
-}
-
 export async function assignTopic(topicId, payload) {
   if (!topicId) throw new Error('topicId is required to assign topic')
-  const res = await api.post(`/topics/${topicId}/assign`, payload)
+  const res = await api.post(`/topics/${topicId}/assignments`, payload)
   const body = unwrap(res)
   return normalizeAssignment(body.assignment ?? body)
 }
 
-export async function assignComment(commentId, payload) {
-  if (!commentId) throw new Error('commentId is required to assign comment')
-  const res = await api.post(`/comments/${commentId}/assign`, payload)
+export async function completeAssignment(assignmentId) {
+  if (!assignmentId) throw new Error('assignmentId is required')
+  const res = await api.post(`/topic-assignments/${assignmentId}/complete`)
   const body = unwrap(res)
   return normalizeAssignment(body.assignment ?? body)
 }
 
-export async function updateAssignment(routingId, payload) {
-  if (!routingId) throw new Error('routingId is required')
-  const res = await api.put(`/routings/${routingId}`, payload)
-  const body = unwrap(res)
-  return normalizeAssignment(body.assignment ?? body)
-}
-
-export async function completeAssignment(routingId) {
-  if (!routingId) throw new Error('routingId is required')
-  const res = await api.post(`/routings/${routingId}/complete`)
-  const body = unwrap(res)
-  return normalizeAssignment(body.assignment ?? body)
-}
-
-export async function cancelAssignment(routingId, payload = {}) {
-  if (!routingId) throw new Error('routingId is required')
-  const res = await api.post(`/routings/${routingId}/cancel`, payload)
-  const body = unwrap(res)
-  return normalizeAssignment(body.assignment ?? body)
-}
-
-export async function escalateAssignment(routingId, payload = {}) {
-  if (!routingId) throw new Error('routingId is required')
-  const res = await api.post(`/routings/${routingId}/escalate`, payload)
+export async function cancelAssignment(assignmentId, payload = {}) {
+  if (!assignmentId) throw new Error('assignmentId is required')
+  const res = await api.post(`/topic-assignments/${assignmentId}/cancel`, payload)
   const body = unwrap(res)
   return normalizeAssignment(body.assignment ?? body)
 }
 
 export default {
   listAssignments,
-  getAssignment,
   assignTopic,
-  assignComment,
-  updateAssignment,
   completeAssignment,
   cancelAssignment,
-  escalateAssignment,
 }

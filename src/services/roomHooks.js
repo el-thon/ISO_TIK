@@ -199,6 +199,16 @@ export function useCreateRoom(options = {}) {
   })
 }
 
+export function useJoinForumByCode(options = {}) {
+  return useMutation({
+    mutationFn: (payload) => roomService.joinForumByCode(payload),
+    onSuccess: (data, variables, context) => {
+      if (options.onSuccess) options.onSuccess(data, variables, context)
+    },
+    ...options,
+  })
+}
+
 export function useAvailableUsers(params = {}, options = {}) {
   const { enabled, ...rest } = options
   return useQuery({
@@ -227,5 +237,6 @@ export default {
   useUpdateRoomParticipant,
   useRemoveRoomParticipant,
   useCreateRoom,
+  useJoinForumByCode,
   useAvailableUsers,
 }

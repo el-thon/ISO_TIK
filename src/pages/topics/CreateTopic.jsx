@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Plus, Trash2, Loader2, ChevronsUpDown, FileText, Calendar, User, Building2, Lock, Save, X } from 'lucide-react'
+import { Plus, Trash2, Loader2, ChevronsUpDown, FileText, Calendar, User, Building2, Lock, Save, X, ArrowLeft } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,30 +8,47 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useRooms, useRoomParticipants } from '@/services/roomHooks'
 import { useCreateTopic, useCreateInputItem } from '@/services/topicHooks'
-import * as documentService from '@/services/documentService'
+import * as forumAttachmentService from '@/services/forumAttachmentService'
+import * as topicService from '@/services/topicService'
 import { cn } from '@/lib/utils'
 import { useAdminClauses } from '@/services/adminClauseHooks'
-
-// PERBAIKAN: Security options
-const securityOptions = [
-  { value: 'L0', label: 'L0 - Publik', description: 'Dapat diakses semua orang' },
-  { value: 'L1', label: 'L1 - Internal', description: 'Hanya internal organisasi' },
-  { value: 'L2', label: 'L2 - Rahasia', description: 'Akses terbatas' },
-  { value: 'L3', label: 'L3 - Sangat Rahasia', description: 'Akses sangat terbatas' },
-]
 
 const FINDING_TYPES = [
   { value: 'minor', label: 'Minor', color: 'bg-yellow-100 text-yellow-800', description: 'Ketidaksesuaian ringan' },
   { value: 'major', label: 'Mayor', color: 'bg-orange-100 text-orange-800', description: 'Ketidaksesuaian signifikan' },
   { value: 'observation', label: 'Observasi', color: 'bg-blue-100 text-blue-800', description: 'Catatan untuk perbaikan' },
 ]
+
+const OBJECTIVE_EVIDENCE_SEPARATOR = '||'
+
+const splitObjectiveEvidence = (value) => {
+  if (!value) return { docId: '', note: '' }
+  const raw = String(value)
+  const [docId, ...noteParts] = raw.split(OBJECTIVE_EVIDENCE_SEPARATOR)
+  return { docId, note: noteParts.join(OBJECTIVE_EVIDENCE_SEPARATOR).trim() }
+}
+
+const buildObjectiveEvidence = (docId, note) => {
+  if (!docId) return note ? `${note}` : ''
+  if (!note) return String(docId)
+  return `${docId}${OBJECTIVE_EVIDENCE_SEPARATOR}${note}`
+}
 
 // Utility functions
 const normalizeId = (value) => {
@@ -59,7 +76,7 @@ const extractIdFromUrl = (url) => {
     const parsed = typeof window !== 'undefined' ? new URL(url, window.location.origin) : new URL(url)
     const match = parsed.pathname.match(/topics\/([^/]+)/i)
     return match?.[1] ?? null
-  } catch (err) {
+  } catch {
     const fallbackMatch = url.match(/topics\/([^/]+)/i)
     return fallbackMatch?.[1] ?? null
   }
@@ -144,6 +161,8 @@ const formatFileSize = (bytes) => {
 
 // Komponen MultiSelect untuk klausul
 function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...', loading = false }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const selected = new Set(value)
   const toggle = (val) => {
     if (selected.has(val)) {
@@ -153,63 +172,99 @@ function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...
     }
   }
 
+  const filteredOptions = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return options
+    return options.filter((option) => option.label?.toLowerCase().includes(normalized))
+  }, [options, query])
+
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" className="w-full justify-between h-10">
-          <span className="truncate flex items-center gap-2">
-            {value.length > 0 ? (
-              <>
-                <Badge variant="secondary" className="rounded-sm px-1 font-normal">
-                  {value.length}
-                </Badge>
-                <span>{value.length} klausul dipilih</span>
-              </>
-            ) : (
-              placeholder
-            )}
-          </span>
-          <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-        <div className="max-h-[300px] overflow-y-auto p-2">
-          {loading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : options.length === 0 ? (
-            <div className="text-center py-6 text-sm text-muted-foreground">
-              Tidak ada klausul tersedia
-            </div>
+    <>
+      <Button
+        variant="outline"
+        className="w-full justify-between h-10"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        <span className="truncate flex items-center gap-2">
+          {value.length > 0 ? (
+            <>
+              <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                {value.length}
+              </Badge>
+              <span>{value.length} klausul dipilih</span>
+            </>
           ) : (
-            <div className="space-y-1">
-              {options.map((option) => (
-                <label
-                  key={option.value}
-                  className={cn(
-                    "flex items-start gap-2 p-2 rounded-md text-sm cursor-pointer hover:bg-accent",
-                    selected.has(option.value) && "bg-accent"
-                  )}
-                >
-                  <Checkbox
-                    checked={selected.has(option.value)}
-                    onCheckedChange={() => toggle(option.value)}
-                    className="mt-0.5"
-                  />
-                  <span className="leading-tight flex-1">{option.label}</span>
-                </label>
-              ))}
-            </div>
+            placeholder
           )}
-        </div>
-      </PopoverContent>
-    </Popover>
+        </span>
+        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogOverlay className="backdrop-blur-sm" />
+          <DialogContent className="max-w-2xl p-0">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Daftar Klausul</DialogTitle>
+              <DialogDescription>Pilih klausul yang relevan untuk temuan ini.</DialogDescription>
+            </DialogHeader>
+
+            <div className="px-6 pb-4">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari klausul..."
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-6 pb-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredOptions.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  Tidak ada klausul tersedia
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className={cn(
+                        "flex items-start gap-2 p-3 rounded-md text-sm cursor-pointer border hover:bg-accent",
+                        selected.has(option.value) && "bg-accent"
+                      )}
+                    >
+                      <Checkbox
+                        checked={selected.has(option.value)}
+                        onCheckedChange={() => toggle(option.value)}
+                        className="mt-0.5"
+                      />
+                      <span className="leading-tight flex-1">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Selesai
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </>
   )
 }
 
 // KOMPONEN: DocumentSelect untuk menampilkan nama asli file
 function DocumentSelect({ value, onChange, disabled, documents, loading }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [documentNames, setDocumentNames] = useState({})
   const [loadingNames, setLoadingNames] = useState({})
 
@@ -217,13 +272,15 @@ function DocumentSelect({ value, onChange, disabled, documents, loading }) {
     const fetchOriginalNames = async () => {
       const names = {}
       const loading = {}
-      
+
       for (const doc of documents) {
         if (!doc.original_filename && !doc.display_name) {
           loading[doc.id] = true
           try {
-            const info = await documentService.getDocumentDownloadInfo(doc.id, { suppressNotFound: true })
-            if (info?.document?.original_filename) {
+            const info = await topicService.getAttachmentDownloadInfo(doc.id)
+            if (info?.attachment?.filename) {
+              names[doc.id] = info.attachment.filename
+            } else if (info?.document?.original_filename) {
               names[doc.id] = info.document.original_filename
             }
           } finally {
@@ -231,7 +288,7 @@ function DocumentSelect({ value, onChange, disabled, documents, loading }) {
           }
         }
       }
-      
+
       setDocumentNames(names)
       setLoadingNames(loading)
     }
@@ -250,48 +307,358 @@ function DocumentSelect({ value, onChange, disabled, documents, loading }) {
     return `Dokumen-${doc.id.substring(0, 8)}`
   }
 
-  const isLoading = (docId) => loadingNames[docId]
+  const selectedDocument = useMemo(() => {
+    if (!value) return null
+    return documents.find((doc) => String(doc.id) === String(value)) ?? null
+  }, [documents, value])
+
+  const filteredDocuments = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return documents
+    return documents.filter((doc) => getDisplayName(doc).toLowerCase().includes(normalized))
+  }, [documents, query, documentNames])
+
+  const isLoadingName = (docId) => loadingNames[docId]
 
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder={loading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'} />
-      </SelectTrigger>
-      <SelectContent className="w-full min-w-[300px] max-h-[300px]">
-        {loading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="text-center py-6 text-sm text-muted-foreground">
-            Tidak ada dokumen tersedia
-          </div>
-        ) : (
-          documents.map((document) => (
-            <SelectItem key={document.id} value={String(document.id)} className="py-2">
-              <div className="flex items-start gap-3">
-                <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium truncate" title={getDisplayName(document)}>
-                      {getDisplayName(document)}
-                    </span>
-                    {isLoading(document.id) && (
-                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
-                    )}
-                  </div>
-                  {document.size && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatFileSize(document.size)}
-                    </span>
-                  )}
+    <>
+      <Button
+        variant="outline"
+        className="w-full justify-between h-10"
+        onClick={() => setOpen(true)}
+        type="button"
+        disabled={disabled}
+      >
+        <span className="truncate flex items-center gap-2">
+          {selectedDocument ? (
+            <span className="truncate" title={getDisplayName(selectedDocument)}>
+              {getDisplayName(selectedDocument)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              {loading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'}
+            </span>
+          )}
+        </span>
+        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogOverlay className="backdrop-blur-sm" />
+          <DialogContent className="max-w-2xl p-0">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Daftar Dokumen</DialogTitle>
+              <DialogDescription>Pilih dokumen pendukung untuk bukti objektif.</DialogDescription>
+            </DialogHeader>
+
+            <div className="px-6 pb-4">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari dokumen..."
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-6 pb-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
+              ) : filteredDocuments.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  Tidak ada dokumen tersedia
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredDocuments.map((document) => {
+                    const selected = String(document.id) === String(value)
+                    return (
+                      <button
+                        key={document.id}
+                        type="button"
+                        onClick={() => {
+                          onChange(String(document.id))
+                          setOpen(false)
+                        }}
+                        className={cn(
+                          "w-full text-left flex items-start gap-3 p-3 rounded-md text-sm border hover:bg-accent",
+                          selected && "bg-accent"
+                        )}
+                      >
+                        <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate" title={getDisplayName(document)}>
+                              {getDisplayName(document)}
+                            </span>
+                            {isLoadingName(document.id) && (
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                            )}
+                          </div>
+                          {document.size && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatFileSize(document.size)}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <div className="flex flex-wrap gap-2 justify-between w-full">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    onChange('')
+                    setOpen(false)
+                  }}
+                >
+                  Hapus pilihan
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Selesai
+                </Button>
               </div>
-            </SelectItem>
-          ))
-        )}
-      </SelectContent>
-    </Select>
+            </DialogFooter>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </>
+  )
+}
+
+function ParticipantSelect({
+  value,
+  onChange,
+  disabled,
+  options,
+  loading,
+  placeholder,
+  title,
+  description,
+  emptyText,
+  getOptionLabel,
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const selectedOption = useMemo(() => {
+    if (!value) return null
+    return options.find((option) => String(option.value) === String(value)) ?? null
+  }, [options, value])
+
+  const filteredOptions = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return options
+    return options.filter((option) => getOptionLabel(option).toLowerCase().includes(normalized))
+  }, [options, query, getOptionLabel])
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="w-full justify-between h-10"
+        onClick={() => setOpen(true)}
+        type="button"
+        disabled={disabled}
+      >
+        <span className="truncate flex items-center gap-2">
+          {selectedOption ? (
+            <span className="truncate" title={getOptionLabel(selectedOption)}>
+              {getOptionLabel(selectedOption)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              {loading ? 'Memuat peserta...' : placeholder}
+            </span>
+          )}
+        </span>
+        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogOverlay className="backdrop-blur-sm" />
+          <DialogContent className="max-w-2xl p-0">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>{title}</DialogTitle>
+              {description && <DialogDescription>{description}</DialogDescription>}
+            </DialogHeader>
+
+            <div className="px-6 pb-4">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari nama..."
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-6 pb-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredOptions.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  {emptyText}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredOptions.map((option) => {
+                    const selected = String(option.value) === String(value)
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          onChange(String(option.value))
+                          setOpen(false)
+                        }}
+                        className={cn(
+                          "w-full text-left flex items-start gap-3 p-3 rounded-md text-sm border hover:bg-accent",
+                          selected && "bg-accent"
+                        )}
+                      >
+                        <User className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <span className="font-medium truncate">{getOptionLabel(option)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <div className="flex flex-wrap gap-2 justify-between w-full">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    onChange('')
+                    setOpen(false)
+                  }}
+                >
+                  Hapus pilihan
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Selesai
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </>
+  )
+}
+
+function FindingTypeSelect({ value, onChange, disabled }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const selectedOption = useMemo(
+    () => FINDING_TYPES.find((option) => option.value === value) ?? null,
+    [value]
+  )
+
+  const filteredOptions = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return FINDING_TYPES
+    return FINDING_TYPES.filter((option) => {
+      const text = `${option.label} ${option.description}`.toLowerCase()
+      return text.includes(normalized)
+    })
+  }, [query])
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        className="w-full justify-between h-10"
+        onClick={() => setOpen(true)}
+        type="button"
+        disabled={disabled}
+      >
+        <span className="truncate flex items-center gap-2">
+          {selectedOption ? (
+            <span className="flex items-center gap-2 truncate">
+              <Badge className={cn("px-1.5 py-0", selectedOption.color)}>
+                {selectedOption.label}
+              </Badge>
+              <span className="truncate text-muted-foreground">{selectedOption.description}</span>
+            </span>
+          ) : (
+            <span className="text-muted-foreground">Pilih jenis temuan</span>
+          )}
+        </span>
+        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogOverlay className="backdrop-blur-sm" />
+          <DialogContent className="max-w-xl p-0">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Jenis Temuan</DialogTitle>
+              <DialogDescription>Pilih klasifikasi temuan audit.</DialogDescription>
+            </DialogHeader>
+
+            <div className="px-6 pb-4">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari jenis temuan..."
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-6 pb-6">
+              {filteredOptions.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  Tidak ada jenis temuan tersedia
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredOptions.map((option) => {
+                    const selected = option.value === value
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                          onChange(option.value)
+                          setOpen(false)
+                        }}
+                        className={cn(
+                          "w-full text-left flex items-start gap-3 p-3 rounded-md text-sm border hover:bg-accent",
+                          selected && "bg-accent"
+                        )}
+                      >
+                        <Badge className={cn("px-1.5 py-0", option.color)}>
+                          {option.label}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{option.description}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Selesai
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </>
   )
 }
 
@@ -324,26 +691,10 @@ function FindingItem({ index, finding, onUpdate, onRemove, showRemove, clauseOpt
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label className="text-sm font-medium">Jenis Temuan</Label>
-            <Select
+            <FindingTypeSelect
               value={finding.findingType}
-              onValueChange={(value) => onUpdate(index, { findingType: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih jenis temuan" />
-              </SelectTrigger>
-              <SelectContent>
-                {FINDING_TYPES.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <div className="flex items-center gap-2">
-                      <Badge className={cn("px-1.5 py-0", option.color)}>
-                        {option.label}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{option.description}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(value) => onUpdate(index, { findingType: value })}
+            />
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-medium">Klausul / Acuan</Label>
@@ -370,18 +721,34 @@ function FindingItem({ index, finding, onUpdate, onRemove, showRemove, clauseOpt
 
         <div className="space-y-2">
           <Label className="text-sm font-medium">Bukti Objektif</Label>
-          <DocumentSelect
-            value={finding.objectiveEvidence}
-            onChange={(value) => onUpdate(index, { objectiveEvidence: value })}
-            disabled={documentsLoading}
-            documents={documents}
-            loading={documentsLoading}
-          />
-          {finding.objectiveEvidence && (
-            <p className="text-xs text-muted-foreground mt-1">
-              ID Dokumen: {finding.objectiveEvidence}
-            </p>
-          )}
+          {(() => {
+            const { docId, note } = splitObjectiveEvidence(finding.objectiveEvidence)
+            return (
+              <>
+                <DocumentSelect
+                  value={docId}
+                  onChange={(value) =>
+                    onUpdate(index, { objectiveEvidence: buildObjectiveEvidence(value, note) })
+                  }
+                  disabled={documentsLoading}
+                  documents={documents}
+                  loading={documentsLoading}
+                />
+                <Input
+                  value={note}
+                  onChange={(event) =>
+                    onUpdate(index, { objectiveEvidence: buildObjectiveEvidence(docId, event.target.value) })
+                  }
+                  placeholder="Tambahkan keterangan bukti objektif"
+                />
+                {docId && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Bukti: {docId}{note ? ` - ${note}` : ''}
+                  </p>
+                )}
+              </>
+            )
+          })()}
         </div>
       </CardContent>
     </Card>
@@ -392,11 +759,25 @@ function FindingItem({ index, finding, onUpdate, onRemove, showRemove, clauseOpt
 export default function CreateTopic() {
   const navigate = useNavigate()
   const location = useLocation()
-  const forumFromState = location?.state?.roomId ? String(location.state.roomId) : ''
-  const forumTitleFromState = location?.state?.roomTitle || null
+  const forumFromState = location?.state?.roomId
+    || location?.state?.forumId
+    || location?.state?.childForumId
+    || location?.state?.room?.id
+    || location?.state?.forum?.id
+    || ''
+  const forumFromQuery = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('forumId') || params.get('roomId') || ''
+  }, [location.search])
+  const forumTitleFromState = location?.state?.roomTitle
+    || location?.state?.forumTitle
+    || location?.state?.room?.name
+    || location?.state?.forum?.name
+    || null
 
-  const [selectedForum, setSelectedForum] = useState(forumFromState)
-  const [securityLevel, setSecurityLevel] = useState('L1')
+  const [selectedForum, setSelectedForum] = useState(
+    forumFromState ? String(forumFromState) : forumFromQuery
+  )
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState('audit-info')
@@ -405,6 +786,9 @@ export default function CreateTopic() {
   const [auditCode, setAuditCode] = useState('')
   const [auditedUnit, setAuditedUnit] = useState('')
   const [auditDate, setAuditDate] = useState('')
+  const [documentNumber, setDocumentNumber] = useState('')
+  const [issuedDate, setIssuedDate] = useState(new Date().toISOString().split('T')[0])
+  const [revisionNumber, setRevisionNumber] = useState('0')
   const [auditorName, setAuditorName] = useState('')
   const [auditorNip, setAuditorNip] = useState('')
   const [auditeeName, setAuditeeName] = useState('')
@@ -424,11 +808,13 @@ export default function CreateTopic() {
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [documentsError, setDocumentsError] = useState(null)
 
+  const resolvedForumId = selectedForum || forumFromState || forumFromQuery
+
   useEffect(() => {
-    if (!selectedForum && forumFromState) {
-      setSelectedForum(forumFromState)
+    if (!selectedForum && (forumFromState || forumFromQuery)) {
+      setSelectedForum(String(forumFromState || forumFromQuery))
     }
-  }, [forumFromState, selectedForum])
+  }, [forumFromQuery, forumFromState, selectedForum])
 
   // Load rooms
   const {
@@ -468,8 +854,8 @@ export default function CreateTopic() {
     isLoading: participantsLoading,
     isError: participantsError,
     error: participantsErrorObj,
-  } = useRoomParticipants(selectedForum || forumFromState, participantsParams, {
-    enabled: Boolean(selectedForum || forumFromState),
+  } = useRoomParticipants(resolvedForumId, participantsParams, {
+    enabled: Boolean(resolvedForumId),
   })
 
   const participants = participantsData?.participants ?? []
@@ -491,6 +877,22 @@ export default function CreateTopic() {
     const filtered = participants.filter((p) => normalizeRole(p.role) === 'auditee')
     return filtered.length ? filtered : participants
   }, [participants])
+
+  const auditorSelectOptions = useMemo(
+    () => auditorOptions.map((participant) => ({
+      value: String(participant.user_id || participant.user?.id),
+      label: participantLabel(participant),
+    })),
+    [auditorOptions]
+  )
+
+  const auditeeSelectOptions = useMemo(
+    () => auditeeOptions.map((participant) => ({
+      value: String(participant.user_id || participant.user?.id),
+      label: participantLabel(participant),
+    })),
+    [auditeeOptions]
+  )
 
   useEffect(() => {
     if (!selectedAuditorId) {
@@ -521,43 +923,49 @@ export default function CreateTopic() {
   // Load dokumen
   useEffect(() => {
     const loadDocuments = async () => {
+      const forumId = resolvedForumId || ''
+      if (!forumId) {
+        setDocuments([])
+        return
+      }
+
       setDocumentsLoading(true)
       setDocumentsError(null)
       try {
-        const res = await documentService.listDocuments({ per_page: 100 })
-        const rawDocuments = res?.documents ?? []
-        
+        const res = await forumAttachmentService.listForumAttachments(forumId, { per_page: 100 })
+        const rawDocuments = res?.attachments ?? []
+
         const transformedDocs = rawDocuments.map(doc => {
           const displayName = doc.original_filename || 
                              doc.filename || 
                              doc.name || 
                              doc.file_name || 
-                             `Dokumen-${doc.id.substring(0, 8)}`
-          
+                             `Lampiran-${doc.id.substring(0, 8)}`
+
           return {
             ...doc,
             display_name: displayName
           }
         })
-        
+
         setDocuments(transformedDocs)
       } catch (err) {
-        setDocumentsError(err?.response?.data?.message || err?.message || 'Gagal memuat dokumen.')
+        setDocumentsError(err?.response?.data?.message || err?.message || 'Gagal memuat lampiran.')
       } finally {
         setDocumentsLoading(false)
       }
     }
 
     loadDocuments()
-  }, [])
+  }, [resolvedForumId])
 
   const currentForumName = useMemo(() => {
-    if (selectedForum) {
-      const match = rooms.find((room) => String(room.id) === String(selectedForum))
+    if (resolvedForumId) {
+      const match = rooms.find((room) => String(room.id) === String(resolvedForumId))
       if (match) return match.name
     }
     return forumTitleFromState || '-'
-  }, [rooms, selectedForum, forumTitleFromState])
+  }, [rooms, resolvedForumId, forumTitleFromState])
 
   const addFinding = () => {
     setFindings((prev) => [
@@ -616,7 +1024,6 @@ export default function CreateTopic() {
       const topicPayload = {
         title: auditCode.trim() || `Audit ${new Date().toLocaleDateString('id-ID')}`,
         description: auditedUnit.trim() || 'Audit tanpa unit',
-        security_level: securityLevel,
         status: mode === 'publish' ? 'in_review' : 'draft'
       }
             
@@ -640,6 +1047,9 @@ export default function CreateTopic() {
         order_index: 1,
         visibility: "visible",
         metadata: {
+          document_number: documentNumber.trim(),
+          issued_date: issuedDate,
+          revision_number: revisionNumber.trim(),
           audit_code: auditCode.trim(),
           audited_unit: auditedUnit.trim(),
           audit_date: auditDate,
@@ -702,8 +1112,22 @@ export default function CreateTopic() {
             <Building2 className="h-4 w-4" />
             <span>Forum: {currentForumName}</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Form Daftar Temuan Ketidaksesuaian</h1>
-          <p className="text-muted-foreground mt-1">Isi data temuan audit sesuai dengan format yang ditentukan</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Form Daftar Temuan Ketidaksesuaian</h1>
+              <p className="text-muted-foreground mt-1">Isi data temuan audit sesuai dengan format yang ditentukan</p>
+            </div>
+            {resolvedForumId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/forum/${resolvedForumId}`)}
+                className="self-start"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" /> Kembali
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Main Card */}
@@ -714,9 +1138,6 @@ export default function CreateTopic() {
                 <CardTitle className="text-xl">Buat Temuan Baru</CardTitle>
                 <CardDescription>Lengkapi semua informasi yang diperlukan</CardDescription>
               </div>
-              <Badge variant="outline" className="px-3 py-1">
-                {securityOptions.find(opt => opt.value === securityLevel)?.label || 'Internal'}
-              </Badge>
             </div>
           </CardHeader>
 
@@ -787,38 +1208,32 @@ export default function CreateTopic() {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">
-                      Forum <span className="text-destructive">*</span>
-                    </Label>
-                    <Select
-                      value={selectedForum}
-                      onValueChange={(value) => setSelectedForum(value)}
-                      disabled={roomsLoading}
-                    >
-                      <SelectTrigger className={cn(errors.forum && "border-destructive")}>
-                        <SelectValue placeholder={roomsLoading ? 'Memuat forum...' : 'Pilih forum'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {rooms.map((room) => (
-                          <SelectItem key={room.id} value={String(room.id)}>
-                            {room.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors.forum && (
-                      <p className="text-xs text-destructive">{errors.forum}</p>
-                    )}
-                    {roomsError && (
-                      <Alert variant="destructive" className="py-2">
-                        <AlertDescription className="text-xs flex items-center justify-between">
-                          <span>{roomsErrorMessage}</span>
-                          <Button variant="ghost" size="sm" onClick={() => refetchRooms()} className="h-6 px-2">
-                            Coba lagi
-                          </Button>
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                    <Label className="text-sm font-medium">No. Dokumen</Label>
+                    <Input
+                      value={documentNumber}
+                      onChange={(e) => setDocumentNumber(e.target.value)}
+                      placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Tanggal Terbit</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="date"
+                        value={issuedDate}
+                        onChange={(e) => setIssuedDate(e.target.value)}
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">No. Revisi</Label>
+                    <Input
+                      value={revisionNumber}
+                      onChange={(e) => setRevisionNumber(e.target.value)}
+                      placeholder="Contoh: 0"
+                    />
                   </div>
                 </div>
               </TabsContent>
@@ -852,6 +1267,14 @@ export default function CreateTopic() {
                   </Alert>
                 )}
 
+                {documentsError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertDescription className="text-xs">
+                      {documentsError}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="space-y-4">
                   {findings.map((finding, index) => (
                     <FindingItem
@@ -875,25 +1298,18 @@ export default function CreateTopic() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Auditor</Label>
-                    <Select
+                    <ParticipantSelect
                       value={selectedAuditorId}
-                      onValueChange={setSelectedAuditorId}
+                      onChange={setSelectedAuditorId}
                       disabled={participantsLoading}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={participantsLoading ? 'Memuat auditor...' : 'Pilih auditor'} />
-                      </SelectTrigger>
-                      <SelectContent className="w-full">
-                        {auditorOptions.map((participant) => (
-                          <SelectItem
-                            key={participant.id}
-                            value={String(participant.user_id || participant.user?.id)}
-                          >
-                            {participantLabel(participant)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={auditorSelectOptions}
+                      loading={participantsLoading}
+                      placeholder="Pilih auditor"
+                      title="Daftar Auditor"
+                      description="Pilih auditor yang bertanggung jawab."
+                      emptyText="Tidak ada auditor tersedia"
+                      getOptionLabel={(option) => option.label}
+                    />
                     {participantsError && (
                       <p className="text-xs text-destructive">
                         {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta.'}
@@ -906,25 +1322,18 @@ export default function CreateTopic() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Auditee</Label>
-                    <Select
+                    <ParticipantSelect
                       value={selectedAuditeeId}
-                      onValueChange={setSelectedAuditeeId}
+                      onChange={setSelectedAuditeeId}
                       disabled={participantsLoading}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder={participantsLoading ? 'Memuat auditee...' : 'Pilih auditee'} />
-                      </SelectTrigger>
-                      <SelectContent className="w-full">
-                        {auditeeOptions.map((participant) => (
-                          <SelectItem
-                            key={participant.id}
-                            value={String(participant.user_id || participant.user?.id)}
-                          >
-                            {participantLabel(participant)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      options={auditeeSelectOptions}
+                      loading={participantsLoading}
+                      placeholder="Pilih auditee"
+                      title="Daftar Auditee"
+                      description="Pilih auditee yang akan diaudit."
+                      emptyText="Tidak ada auditee tersedia"
+                      getOptionLabel={(option) => option.label}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Auditee - NIP / Employee ID</Label>
@@ -932,29 +1341,6 @@ export default function CreateTopic() {
                   </div>
                 </div>
 
-                <Separator className="my-4" />
-
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Tingkat Keamanan</Label>
-                  <Select value={securityLevel} onValueChange={setSecurityLevel}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {securityOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          <div className="flex flex-col">
-                            <span>{option.label}</span>
-                            <span className="text-xs text-muted-foreground">{option.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Pilih tingkat keamanan sesuai klasifikasi data
-                  </p>
-                </div>
               </TabsContent>
             </Tabs>
 
@@ -970,8 +1356,14 @@ export default function CreateTopic() {
             <Button
               variant="outline"
               disabled={isBusy}
-              onClick={() => navigate(-1)}
-              className="min-w-[100px]"
+              onClick={() => {
+                if (resolvedForumId) {
+                  navigate(`/forum/${resolvedForumId}`)
+                } else {
+                  navigate(-1)
+                }
+              }}
+              className="min-w-25"
             >
               <X className="h-4 w-4 mr-2" /> Batal
             </Button>
@@ -979,7 +1371,7 @@ export default function CreateTopic() {
               variant="secondary"
               disabled={isBusy}
               onClick={() => handleSubmit('draft')}
-              className="min-w-[100px]"
+              className="min-w-25"
             >
               {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Save className="h-4 w-4 mr-2" /> Draft
@@ -987,7 +1379,7 @@ export default function CreateTopic() {
             <Button
               disabled={isBusy}
               onClick={() => handleSubmit('publish')}
-              className="min-w-[100px] bg-blue-600 hover:bg-blue-700"
+              className="min-w-25 bg-blue-600 hover:bg-blue-700"
             >
               {isBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Simpan Temuan

@@ -13,23 +13,26 @@ const Field = ({ label, children }) => (
   </div>
 )
 
-const toDefaultValues = (employment = {}) => ({
-  employee_id: employment.employee_id || '',
-  lecturer_id: employment.lecturer_id || '',
-  student_id: employment.student_id || '',
-  faculty: employment.faculty || '',
-  department: employment.department || '',
-  study_program: employment.study_program || '',
-  unit: employment.unit || '',
-  office_location: employment.office_location || '',
-  functional_position: employment.functional_position || '',
-  structural_position: employment.structural_position || '',
-  rank_grade: employment.rank_grade || '',
-  employment_status: employment.employment_status || '',
-  employment_start_date: employment.employment_start_date || '',
-  employment_end_date: employment.employment_end_date || '',
-  highest_education: employment.highest_education || '',
-})
+const toDefaultValues = (employment) => {
+  const data = employment ?? {}
+  return {
+    employee_id: data.employee_id || '',
+    lecturer_id: data.lecturer_id || '',
+    student_id: data.student_id || '',
+    faculty: data.faculty || '',
+    department: data.department || '',
+    study_program: data.study_program || '',
+    unit: data.unit || '',
+    office_location: data.office_location || '',
+    functional_position: data.functional_position || '',
+    structural_position: data.structural_position || '',
+    rank_grade: data.rank_grade || '',
+    employment_status: data.employment_status || '',
+    employment_start_date: data.employment_start_date || '',
+    employment_end_date: data.employment_end_date || '',
+    highest_education: data.highest_education || '',
+  }
+}
 const cleanPayload = (obj = {}) => {
   return Object.fromEntries(
     Object.entries(obj).filter(([, value]) => value !== undefined && value !== null && value !== '')

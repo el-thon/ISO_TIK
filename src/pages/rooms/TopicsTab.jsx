@@ -70,9 +70,7 @@ export default function TopicsTab({ roomId }) {
                       <div className="text-right text-sm text-muted-foreground">
                         <div className="text-xs uppercase tracking-wide">Deadline</div>
                         <div>{formatDate(topic.deadline_at)}</div>
-                        <div className="mt-4 text-xs">
-                          {topic.stats?.comment_count ?? 0} komentar • {topic.stats?.routing_count ?? 0} routing
-                        </div>
+
                       </div>
                     </div>
                   </CardContent>

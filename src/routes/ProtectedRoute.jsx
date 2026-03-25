@@ -1,13 +1,32 @@
 // routes/ProtectedRoute.jsx
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useMe } from '@/services/authHooks'
 import { getAccessToken } from '@/services/api'
+import { getUserData } from '@/utils/auth'
+import { toast } from '@/components/ui/use-toast'
 
-export default function ProtectedRoute({ children }) {
+const isUserAdmin = (userData) => {
+  if (!userData) return false
+
+  const roles = userData?.roles ||
+    userData?.data?.roles ||
+    userData?.data?.user?.roles ||
+    []
+
+  return roles.includes('admin') ||
+    roles.includes('administrator') ||
+    userData?.role === 'admin' ||
+    userData?.is_admin === true ||
+    userData?.data?.is_admin === true
+}
+
+export default function ProtectedRoute({ children, requireAdmin = false }) {
   const location = useLocation()
   const [isChecking, setIsChecking] = useState(true)
   const [isAuthorized, setIsAuthorized] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const hasShownExpiredToast = useRef(false)
   
   // Cek token dari berbagai sumber
   const checkAuth = () => {
@@ -21,19 +40,15 @@ export default function ProtectedRoute({ children }) {
     }
     
     // 3. Cek user data di localStorage
-    const userData = localStorage.getItem('user_data')
-    let user = null
-    try {
-      user = userData ? JSON.parse(userData) : null
-    } catch (e) {
-      console.error('[ProtectedRoute] Error parsing user data:', e)
-    }
+    const user = getUserData()
     
     // Jika punya token DAN user data, anggap authorized
     if (token && user) {
       setIsAuthorized(true)
+      setIsAdmin(isUserAdmin(user))
     } else {
       setIsAuthorized(false)
+      setIsAdmin(false)
     }
     
     setIsChecking(false)
@@ -50,6 +65,22 @@ export default function ProtectedRoute({ children }) {
     staleTime: 1000 * 60 * 5, // 5 menit
     gcTime: 1000 * 60 * 10, // 10 menit
   })
+
+  useEffect(() => {
+    if (!isError) return
+    const token = localStorage.getItem('iso_tik_access_token')
+    const userData = localStorage.getItem('user_data')
+    if (!token || !userData) {
+      if (!hasShownExpiredToast.current) {
+        toast({
+          variant: 'destructive',
+          title: 'Sesi berakhir',
+          description: 'Access token sudah kedaluwarsa. Silakan login kembali.',
+        })
+        hasShownExpiredToast.current = true
+      }
+    }
+  }, [isError])
   
   // Kasus 1: Masih checking awal (dari localStorage)
   if (isChecking) {
@@ -67,6 +98,10 @@ export default function ProtectedRoute({ children }) {
   if (!isAuthorized) {
     // Redirect ke halaman root, bukan langsung ke login
     return <Navigate to="/" replace state={{ from: location }} />
+  }
+
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/beranda" replace state={{ from: location }} />
   }
   
   // Kasus 3: Authorized, tapi sedang fetch user (opsional)
@@ -93,6 +128,17 @@ export default function ProtectedRoute({ children }) {
     // Jika token masih ada, mungkin hanya error network, tetap lanjutkan
     if (token && userData) {
       console.log('[ProtectedRoute] Token still exists, proceeding with cached data')
+      if (requireAdmin) {
+        let cachedUser = null
+        try {
+          cachedUser = JSON.parse(userData)
+        } catch (e) {
+          cachedUser = null
+        }
+        if (!isUserAdmin(cachedUser)) {
+          return <Navigate to="/beranda" replace state={{ from: location }} />
+        }
+      }
       return children
     }
     

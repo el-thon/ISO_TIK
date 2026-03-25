@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/components/ui/use-toast';
 import { Paperclip, Download, Search, UploadCloud, RefreshCw, X, FileText, Image, File } from 'lucide-react';
-import * as documentService from '@/services/documentService';
+import * as forumAttachmentService from '@/services/forumAttachmentService';
+import * as topicService from '@/services/topicService';
 import { getAccessToken } from '@/services/api';
 import { useBootstrapSession } from '../../services/authHooks';
 
@@ -64,7 +66,7 @@ const resolveFilename = (document) => {
   // Coba semua kemungkinan field yang mungkin berisi nama file
   const filename = document?.original_filename || 
                    document?.display_name ||
-                   document?.filename || 
+                   document?.filename ||
                    document?.original_name ||
                    document?.name || 
                    document?.file_name || 
@@ -146,7 +148,7 @@ const Pagination = ({ currentPage, lastPage, onPageChange, isLoading }) => {
 };
 
 // Main Component
-export default function AttachmentsTab() {
+export default function AttachmentsTab({ roomId }) {
   // Cek session
   const { isReady, isRefreshing } = useBootstrapSession();
   
@@ -173,13 +175,14 @@ export default function AttachmentsTab() {
   // Load documents
   const loadDocuments = useCallback(async () => {
     if (!isReady) return;
+    if (!roomId) return;
     
     setLoading(true);
     setError(null);
     
     try {
-      const res = await documentService.listDocuments(queryParams);
-      setDocuments(res?.documents ?? []);
+      const res = await forumAttachmentService.listForumAttachments(roomId, queryParams);
+      setDocuments(res?.attachments ?? []);
       setPagination(res?.pagination ?? { current_page: 1, last_page: 1 });
     } catch (err) {
       const errorMessage = err?.response?.data?.message || err?.message || 'Gagal memuat lampiran.';
@@ -187,7 +190,7 @@ export default function AttachmentsTab() {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, isReady]);
+  }, [queryParams, isReady, roomId]);
 
   // Initial load
   useEffect(() => {
@@ -223,7 +226,10 @@ export default function AttachmentsTab() {
     setUploadError(null);
     
     try {
-      await documentService.uploadDocument(selectedFile);
+      if (!roomId) {
+        throw new Error('Forum ID tidak ditemukan')
+      }
+      await forumAttachmentService.uploadForumAttachment(roomId, selectedFile);
       setSelectedFile(null);
       
       // Reset file input
@@ -233,7 +239,10 @@ export default function AttachmentsTab() {
       // Reload documents
       await loadDocuments();
       
-      alert('Dokumen berhasil diunggah!');
+      toast({
+        title: 'Upload berhasil',
+        description: 'Dokumen berhasil diunggah.',
+      });
     } catch (err) {
       const errorMessage = err?.response?.data?.message || err?.message || 'Gagal mengunggah dokumen.';
       setUploadError(errorMessage);
@@ -255,13 +264,8 @@ export default function AttachmentsTab() {
     
     try {
       // Gunakan fungsi download dari documentService
-      const { blob, filename: serverFilename } = await documentService.downloadDocument(
-        documentId, 
-        filename,
-        (progress) => {
-          setDownloadProgress(prev => ({ ...prev, [documentId]: progress }));
-        }
-      );
+      const { blob, filename: serverFilename } = await topicService.downloadAttachment(documentId);
+      setDownloadProgress(prev => ({ ...prev, [documentId]: 100 }));
       
       // Final filename
       const finalFilename = serverFilename || filename;
@@ -349,7 +353,7 @@ export default function AttachmentsTab() {
                   size="sm"
                   onClick={() => handleDownload(documentId, filename)}
                   disabled={isDownloading}
-                  className="flex-shrink-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 min-w-[100px]"
+                  className="shrink-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50 min-w-25"
                 >
                   {isDownloading ? (
                     <>
@@ -364,7 +368,7 @@ export default function AttachmentsTab() {
                   )}
                 </Button>
               ) : (
-                <span className="text-xs text-muted-foreground italic flex-shrink-0">
+                <span className="text-xs text-muted-foreground italic shrink-0">
                   File tidak tersedia
                 </span>
               )}

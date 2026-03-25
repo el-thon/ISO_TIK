@@ -22,6 +22,9 @@ export const createEmptyFindingData = () => ({
   visibility: "visible",
   value: "",
   metadata: {
+    document_number: '',
+    issued_date: new Date().toISOString().split('T')[0],
+    revision_number: '0',
     audit_code: '',
     audited_unit: '',
     audit_date: new Date().toISOString().split('T')[0],
@@ -39,6 +42,9 @@ export const sampleFindingData = {
   visibility: "visible",
   value: "",
   metadata: {
+    document_number: "FRM-POS-UPA TIK-SMKI-008-01",
+    issued_date: "2026-03-10",
+    revision_number: "0",
     audit_code: "AUD-2024-001",
     audited_unit: "Unit Keuangan",
     audit_date: "2026-03-01",

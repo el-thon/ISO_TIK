@@ -1,24 +1,20 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react'
+import React, { useMemo, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import {
   useChangePassword,
   useLoginHistory,
   useRevokeAllSessions,
   useRevokeSession,
-  useSecuritySettings,
   useSessions,
-  useUpdatePreferences,
   useSignature,
   useUploadSignature,
   useDeleteSignature,
   useDownloadSignature,
 } from '@/services/profileHooks'
-import { Loader2, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 
 // ==================== UTILS ====================
 const formatDate = (value) => {
@@ -123,9 +119,8 @@ const SignatureSection = ({
 }
 
 // ==================== MAIN COMPONENT ====================
-export default function Security({ preferences }) {
+export default function Security() {
   // Queries
-  const securityQuery = useSecuritySettings()
   const [sessionsPage, setSessionsPage] = useState(1)
   const [historyPage, setHistoryPage] = useState(1)
   const sessionsQuery = useSessions({ page: sessionsPage, per_page: 5 })
@@ -144,24 +139,8 @@ export default function Security({ preferences }) {
     },
   })
 
-  const preferencesDefaults = useMemo(
-    () => ({
-      theme: preferences?.theme || 'light',
-      language: preferences?.language || 'id',
-      notifications: Boolean(
-        typeof preferences?.notifications === 'boolean' ? preferences.notifications : true
-      ),
-    }),
-    [preferences]
-  )
-
-  const preferencesForm = useForm({
-    defaultValues: preferencesDefaults,
-  })
-
   // Mutations
   const changePassword = useChangePassword()
-  const updatePreferences = useUpdatePreferences()
   const revokeSession = useRevokeSession()
   const revokeAllSessions = useRevokeAllSessions()
   const uploadSignature = useUploadSignature()
@@ -170,7 +149,6 @@ export default function Security({ preferences }) {
 
   // UI States
   const [passwordStatus, setPasswordStatus] = useState(null)
-  const [preferencesStatus, setPreferencesStatus] = useState(null)
   const [revokeStatus, setRevokeStatus] = useState(null)
 
   // ========== SIGNATURE HANDLING ==========
@@ -263,7 +241,6 @@ export default function Security({ preferences }) {
         throw new Error('No blob data received')
       }
     } catch (error) {
-      console.error('Download error:', error)
       const message = error?.response?.data?.message || 'Gagal mengunduh tanda tangan'
       setSignatureStatus({ type: 'error', text: message })
     }
@@ -306,17 +283,6 @@ export default function Security({ preferences }) {
     }
   }
 
-  const handlePreferencesSubmit = async (values) => {
-    setPreferencesStatus(null)
-    try {
-      await updatePreferences.mutateAsync(values)
-      setPreferencesStatus({ type: 'success', text: 'Preferensi tersimpan' })
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Gagal menyimpan preferensi'
-      setPreferencesStatus({ type: 'error', text: message })
-    }
-  }
-
   const handleRevokeAll = async (event) => {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
@@ -339,8 +305,7 @@ export default function Security({ preferences }) {
         text: 'Semua sesi lain berhasil dicabut' 
       })
       event.currentTarget.reset()
-      sessionsQuery.refetch()
-      securityQuery.refetch()
+  sessionsQuery.refetch()
     } catch (error) {
       const message = error?.response?.data?.message || 'Gagal mencabut sesi'
       setRevokeStatus({ type: 'error', text: message })
@@ -353,11 +318,6 @@ export default function Security({ preferences }) {
   const loginHistory = historyQuery.data?.items ?? []
   const historyPagination = historyQuery.data?.pagination
 
-  // Reset form when preferences change
-  useEffect(() => {
-    preferencesForm.reset(preferencesDefaults)
-  }, [preferencesDefaults, preferencesForm])
-
   return (
     <div className="space-y-6">
       {/* Security Status Card */}
@@ -367,41 +327,12 @@ export default function Security({ preferences }) {
             <div>
               <h3 className="text-lg font-medium">Security & Privacy</h3>
               <p className="text-sm text-muted-foreground">
-                Kelola password, MFA, dan preferensi akun
+                Kelola password dan sesi akun
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* MFA Status */}
-            <div className="border rounded-lg p-4">
-              <div className="flex items-center gap-2">
-                {securityQuery.data?.mfa_enabled ? (
-                  <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                ) : (
-                  <ShieldAlert className="w-5 h-5 text-amber-500" />
-                )}
-                <div>
-                  <p className="text-sm font-medium">Multi Factor Authentication</p>
-                  <p className="text-xs text-muted-foreground">
-                    {securityQuery.isLoading
-                      ? 'Memuat...'
-                      : securityQuery.data?.mfa_enabled
-                        ? 'Akun anda dilindungi MFA'
-                        : 'Aktifkan MFA untuk keamanan ekstra'}
-                  </p>
-                </div>
-              </div>
-              <Button 
-                variant={securityQuery.data?.mfa_enabled ? 'outline' : 'default'} 
-                size="sm" 
-                className="mt-4" 
-                disabled
-              >
-                {securityQuery.data?.mfa_enabled ? 'Kelola MFA' : 'Aktifkan (coming soon)'}
-              </Button>
-            </div>
-
             {/* Change Password Form */}
             <form 
               onSubmit={changePasswordForm.handleSubmit(handlePasswordSubmit)} 
@@ -450,85 +381,6 @@ export default function Security({ preferences }) {
         isDeleting={deleteSignature.isPending}
         status={signatureStatus}
       />
-
-      {/* Preferences Form */}
-      <Card>
-        <CardContent>
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h4 className="font-medium">Preferensi Notifikasi & Tampilan</h4>
-              <p className="text-xs text-muted-foreground">
-                Sesuaikan bahasa, tema, dan notifikasi email
-              </p>
-            </div>
-          </div>
-
-          <form 
-            onSubmit={preferencesForm.handleSubmit(handlePreferencesSubmit)} 
-            className="grid grid-cols-1 md:grid-cols-3 gap-4"
-          >
-            <div>
-              <div className="text-xs text-muted-foreground">Tema</div>
-              <Select 
-                value={preferencesForm.watch('theme')} 
-                onValueChange={(value) => preferencesForm.setValue('theme', value)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Pilih" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="light">Terang</SelectItem>
-                  <SelectItem value="dark">Gelap</SelectItem>
-                  <SelectItem value="auto">Otomatis</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <div className="text-xs text-muted-foreground">Bahasa</div>
-              <Select 
-                value={preferencesForm.watch('language')} 
-                onValueChange={(value) => preferencesForm.setValue('language', value)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Pilih" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="id">Bahasa Indonesia</SelectItem>
-                  <SelectItem value="en">English</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex flex-col justify-end">
-              <label className="inline-flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={preferencesForm.watch('notifications')}
-                  onCheckedChange={(checked) => 
-                    preferencesForm.setValue('notifications', Boolean(checked))
-                  }
-                />
-                Email notifikasi aktivitas penting
-              </label>
-            </div>
-            
-            {preferencesStatus && (
-              <p className={`text-xs ${preferencesStatus.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
-                {preferencesStatus.text}
-              </p>
-            )}
-            
-            <div className="md:col-span-3 flex justify-end">
-              <Button 
-                type="submit" 
-                disabled={updatePreferences.isPending}
-              >
-                {updatePreferences.isPending ? 'Menyimpan...' : 'Simpan Preferensi'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
 
       {/* Active Sessions */}
       <Card>

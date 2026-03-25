@@ -90,12 +90,6 @@ export async function updateEmployment({ userId, payload }) {
   return unwrap(res) ?? {}
 }
 
-export async function updatePreferences(preferencesPayload) {
-  const res = await api.put('/profile/preferences', { preferences: preferencesPayload })
-  const data = unwrap(res) ?? {}
-  return data.preferences ?? data
-}
-
 export async function changePassword(payload) {
   const res = await api.post('/profile/change-password', payload)
   return res?.data ?? {}
@@ -118,12 +112,6 @@ export async function uploadPhoto(fileOrFormData) {
 export async function deletePhoto() {
   const res = await api.delete('/profile/photo')
   return res?.data ?? {}
-}
-
-export async function getSecuritySettings() {
-  const res = await api.get('/profile/security')
-  // Returns { mfa_enabled, sessions: [...], login_history: [...] }
-  return unwrap(res) ?? {}
 }
 
 export async function getSessions(params = {}) {
@@ -234,11 +222,9 @@ export async function downloadSignature() {
 export default {
   fetchProfile,
   updateProfile,
-  updatePreferences,
   changePassword,
   uploadPhoto,
   deletePhoto,
-  getSecuritySettings,
   getSessions,
   getLoginHistory,
   revokeSession,

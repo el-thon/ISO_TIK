@@ -21,49 +21,12 @@ export function useAssignments(params = {}, options = {}) {
   })
 }
 
-export function useAssignment(assignmentId, options = {}) {
-  const { enabled, ...rest } = options
-  return useQuery({
-    queryKey: ['assignments', 'detail', assignmentId],
-    queryFn: () => assignmentsService.getAssignment(assignmentId),
-    ...rest,
-    enabled: withEnabled({ enabled }, Boolean(assignmentId)),
-  })
-}
-
 export function useAssignTopic(options = {}) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ topicId, payload }) => assignmentsService.assignTopic(topicId, payload),
     onSuccess: (data, variables, context) => {
       invalidateAssignments(queryClient)
-      if (options.onSuccess) options.onSuccess(data, variables, context)
-    },
-    ...options,
-  })
-}
-
-export function useAssignComment(options = {}) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ commentId, payload }) => assignmentsService.assignComment(commentId, payload),
-    onSuccess: (data, variables, context) => {
-      invalidateAssignments(queryClient)
-      if (options.onSuccess) options.onSuccess(data, variables, context)
-    },
-    ...options,
-  })
-}
-
-export function useUpdateAssignment(options = {}) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ assignmentId, payload }) => assignmentsService.updateAssignment(assignmentId, payload),
-    onSuccess: (data, variables, context) => {
-      invalidateAssignments(queryClient)
-      if (variables?.assignmentId) {
-        queryClient.invalidateQueries({ queryKey: ['assignments', 'detail', variables.assignmentId] })
-      }
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
     ...options,
@@ -100,28 +63,9 @@ export function useCancelAssignment(options = {}) {
   })
 }
 
-export function useEscalateAssignment(options = {}) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ assignmentId, payload }) => assignmentsService.escalateAssignment(assignmentId, payload),
-    onSuccess: (data, variables, context) => {
-      invalidateAssignments(queryClient)
-      if (variables?.assignmentId) {
-        queryClient.invalidateQueries({ queryKey: ['assignments', 'detail', variables.assignmentId] })
-      }
-      if (options.onSuccess) options.onSuccess(data, variables, context)
-    },
-    ...options,
-  })
-}
-
 export default {
   useAssignments,
-  useAssignment,
   useAssignTopic,
-  useAssignComment,
-  useUpdateAssignment,
   useCompleteAssignment,
   useCancelAssignment,
-  useEscalateAssignment,
 }

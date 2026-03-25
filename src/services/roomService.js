@@ -14,75 +14,65 @@ const ensureArray = (value) => (Array.isArray(value) ? value : value ? [value] :
 const unwrap = (response) => response?.data?.data ?? response?.data ?? null
 
 export async function listRooms(params = {}) {
-	const res = await api.get('/rooms', { params })
+	const res = await api.get('/forums', { params })
 	const payload = unwrap(res) ?? {}
-	const securityLevels = ensureArray(
-		payload.security_levels ??
-		payload.securityLevels ??
-		payload.available_security_levels ??
-		payload.availableSecurityLevels ??
-		payload.metadata?.security_levels ??
-		payload.metadata?.securityLevels ??
-		[]
-	)
 	return {
-		rooms: ensureArray(payload.rooms ?? payload.items ?? []),
+		rooms: ensureArray(payload.forums ?? payload.rooms ?? payload.items ?? []),
 		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
-		securityLevels,
 		metadata: payload.metadata ?? null,
 	}
 }
 
 export async function getRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.get(`/rooms/${roomId}`)
+	const res = await api.get(`/forums/${roomId}`)
 	return unwrap(res) ?? {}
 }
 
 export async function updateRoom(roomId, payload) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.put(`/rooms/${roomId}`, payload)
+	const res = await api.put(`/forums/${roomId}`, payload)
 	return unwrap(res) ?? {}
 }
 
 export async function deleteRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.delete(`/rooms/${roomId}`)
+	const res = await api.delete(`/forums/${roomId}`)
 	return res?.data ?? {}
 }
 
 export async function createRoom(payload) {
-	const res = await api.post('/rooms', payload)
+	const res = await api.post('/forums', payload)
 	return unwrap(res) ?? {}
 }
 
 export async function lockRoom(roomId, payload = {}) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.post(`/rooms/${roomId}/lock`, payload)
+	const res = await api.post(`/forums/${roomId}/lock`, payload)
 	return unwrap(res) ?? {}
 }
 
 export async function unlockRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.post(`/rooms/${roomId}/unlock`)
+	const res = await api.post(`/forums/${roomId}/unlock`)
 	return unwrap(res) ?? {}
 }
 
 export async function archiveRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.post(`/rooms/${roomId}/archive`)
+	const res = await api.post(`/forums/${roomId}/archive`)
 	return unwrap(res) ?? {}
 }
 
 export async function restoreRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.post(`/rooms/${roomId}/restore`)
+	const res = await api.post(`/forums/${roomId}/restore`)
 	return unwrap(res) ?? {}
 }
 
 export async function listParticipants(roomId, params = {}) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.get(`/rooms/${roomId}/participants`, { params })
+	const res = await api.get(`/forums/${roomId}/participants`, { params })
 	const payload = unwrap(res) ?? {}
 	const isUuidLike = (value) => {
 		if (!value) return false
@@ -122,36 +112,41 @@ export async function listParticipants(roomId, params = {}) {
 
 export async function addParticipant(roomId, payload) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.post(`/rooms/${roomId}/participants`, payload)
+	const res = await api.post(`/forums/${roomId}/participants`, payload)
 	return unwrap(res) ?? {}
 }
 
 export async function updateParticipant(roomId, participantId, payload) {
 	if (!roomId || !participantId) throw new Error('roomId and participantId are required')
-	const res = await api.put(`/rooms/${roomId}/participants/${participantId}`, payload)
+	const res = await api.put(`/forums/${roomId}/participants/${participantId}`, payload)
 	return unwrap(res) ?? {}
 }
 
 export async function removeParticipant(roomId, participantId) {
 	if (!roomId || !participantId) throw new Error('roomId and participantId are required')
-	const res = await api.delete(`/rooms/${roomId}/participants/${participantId}`)
+	const res = await api.delete(`/forums/${roomId}/participants/${participantId}`)
 	return res?.data ?? {}
 }
 
 export async function leaveRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.post(`/rooms/${roomId}/leave`)
+	const res = await api.post(`/forums/${roomId}/leave`)
 	return unwrap(res) ?? {}
 }
 
 export async function listTopics(roomId, params = {}) {
 	if (!roomId) throw new Error('roomId is required')
-	const res = await api.get(`/rooms/${roomId}/topics`, { params })
+	const res = await api.get(`/forums/${roomId}/topics`, { params })
 	const payload = unwrap(res) ?? {}
 	return {
 		topics: ensureArray(payload.topics ?? []),
 		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
 	}
+}
+
+export async function joinForumByCode(payload) {
+	const res = await api.post('/forums/join', payload)
+	return unwrap(res) ?? {}
 }
 
 export async function listAvailableUsers(params = {}) {
@@ -193,5 +188,6 @@ export default {
 	removeParticipant,
 	leaveRoom,
 	listTopics,
+	joinForumByCode,
 	listAvailableUsers,
 }

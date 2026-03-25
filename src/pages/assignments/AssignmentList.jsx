@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,19 +13,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  useCancelAssignment,
-  useCompleteAssignment,
-  useEscalateAssignment,
-  useUpdateAssignment,
-} from '@/services/assignmentsHooks'
+import { useCancelAssignment, useCompleteAssignment } from '@/services/assignmentsHooks'
 
 const STATUS_STYLES = {
   pending: 'bg-amber-50 text-amber-700 border border-amber-200',
+  assigned: 'bg-amber-50 text-amber-700 border border-amber-200',
   completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   cancelled: 'bg-slate-200 text-slate-700 border border-slate-300',
 }
@@ -45,16 +40,6 @@ const formatDate = (value, withTime = false) => {
     ? { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
     : { day: '2-digit', month: 'short', year: 'numeric' }
   return date.toLocaleString('id-ID', options)
-}
-
-const toInputDateTime = (value) => {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  const pad = (num) => String(num).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
-    date.getMinutes()
-  )}`
 }
 
 const getInitials = (name) => {
@@ -110,39 +95,21 @@ function ListSkeleton({ count = 3 }) {
 }
 
 function AssignmentActions({ assignment, currentUserId }) {
-  const isPending = (assignment.status || '').toLowerCase() === 'pending'
+  const statusKey = (assignment.status || '').toLowerCase()
+  const isPending = statusKey === 'pending' || statusKey === 'assigned'
   const isAssignee = currentUserId && assignment.to_user_id === currentUserId
   const isAssigner = currentUserId && assignment.from_user_id === currentUserId
   const [dialog, setDialog] = useState(null)
   const [formError, setFormError] = useState(null)
-  const [form, setForm] = useState({
-    due_at: toInputDateTime(assignment.due_at),
-    note: assignment.note ?? '',
-    reason: '',
-  })
-
-  useEffect(() => {
-    setForm({ due_at: toInputDateTime(assignment.due_at), note: assignment.note ?? '', reason: '' })
-    setFormError(null)
-    setDialog(null)
-  }, [assignment.id, assignment.due_at, assignment.note])
+  const [form, setForm] = useState({ reason: '' })
 
   const completeMutation = useCompleteAssignment({ onSuccess: () => setDialog(null) })
   const cancelMutation = useCancelAssignment({ onSuccess: () => setDialog(null) })
-  const escalateMutation = useEscalateAssignment({ onSuccess: () => setDialog(null) })
-  const updateMutation = useUpdateAssignment({ onSuccess: () => setDialog(null) })
 
   const closeDialog = () => {
     setDialog(null)
     setFormError(null)
-    setForm((prev) => ({ ...prev, reason: '' }))
-  }
-
-  const handleUpdate = () => {
-    const payload = {}
-    if (form.note && form.note.trim().length > 0) payload.note = form.note.trim()
-    if (form.due_at) payload.due_at = new Date(form.due_at).toISOString()
-    updateMutation.mutate({ assignmentId: assignment.id, payload })
+    setForm({ reason: '' })
   }
 
   const handleCancel = () => {
@@ -153,22 +120,12 @@ function AssignmentActions({ assignment, currentUserId }) {
     cancelMutation.mutate({ assignmentId: assignment.id, payload: { reason: form.reason.trim() } })
   }
 
-  const handleEscalate = () => {
-    if (!form.reason.trim()) {
-      setFormError('Alasan eskalasi wajib diisi.')
-      return
-    }
-    escalateMutation.mutate({ assignmentId: assignment.id, payload: { reason: form.reason.trim() } })
-  }
-
-  const dialogPending = updateMutation.isPending || cancelMutation.isPending || escalateMutation.isPending
+  const dialogPending = cancelMutation.isPending
 
   const showComplete = isPending && isAssignee
-  const showEscalate = isPending && isAssignee
-  const showUpdate = isAssigner && isPending
   const showCancel = (isAssigner || isAssignee) && isPending
 
-  if (!showComplete && !showEscalate && !showUpdate && !showCancel) {
+  if (!showComplete && !showCancel) {
     return null
   }
 
@@ -183,58 +140,11 @@ function AssignmentActions({ assignment, currentUserId }) {
           {completeMutation.isPending ? 'Memproses…' : 'Selesaikan'}
         </Button>
       )}
-      {showEscalate && (
-        <Button size="sm" variant="outline" onClick={() => setDialog('escalate')} disabled={dialogPending}>
-          Eskalasi
-        </Button>
-      )}
-      {showUpdate && (
-        <Button size="sm" variant="outline" onClick={() => setDialog('update')} disabled={dialogPending}>
-          Perbarui
-        </Button>
-      )}
       {showCancel && (
         <Button size="sm" variant="ghost" onClick={() => setDialog('cancel')} disabled={dialogPending}>
           Batalkan
         </Button>
       )}
-
-      <Dialog open={dialog === 'update'} onOpenChange={(open) => (!open ? closeDialog() : setDialog('update'))}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Perbarui penugasan</DialogTitle>
-            <DialogDescription>Atur ulang catatan maupun batas waktu penugasan ini.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor={`due-${assignment.id}`}>Batas waktu (opsional)</Label>
-              <Input
-                id={`due-${assignment.id}`}
-                type="datetime-local"
-                value={form.due_at}
-                onChange={(event) => setForm((prev) => ({ ...prev, due_at: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`note-${assignment.id}`}>Catatan untuk penerima</Label>
-              <Textarea
-                id={`note-${assignment.id}`}
-                placeholder="Tambahkan instruksi atau konteks tambahan"
-                value={form.note}
-                onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeDialog} disabled={dialogPending}>
-              Batal
-            </Button>
-            <Button onClick={handleUpdate} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? 'Menyimpan…' : 'Simpan perubahan'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={dialog === 'cancel'} onOpenChange={(open) => (!open ? closeDialog() : setDialog('cancel'))}>
         <DialogContent>
@@ -249,7 +159,7 @@ function AssignmentActions({ assignment, currentUserId }) {
               value={form.reason}
               onChange={(event) => {
                 setFormError(null)
-                setForm((prev) => ({ ...prev, reason: event.target.value }))
+                setForm({ reason: event.target.value })
               }}
               placeholder="Contoh: tidak lagi relevan"
             />
@@ -261,36 +171,6 @@ function AssignmentActions({ assignment, currentUserId }) {
             </Button>
             <Button variant="destructive" onClick={handleCancel} disabled={cancelMutation.isPending}>
               {cancelMutation.isPending ? 'Membatalkan…' : 'Konfirmasi'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={dialog === 'escalate'} onOpenChange={(open) => (!open ? closeDialog() : setDialog('escalate'))}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Eskalasi penugasan</DialogTitle>
-            <DialogDescription>Kirimkan penugasan ini kepada Room Responsible dengan mencantumkan alasan.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor={`escalate-${assignment.id}`}>Alasan eskalasi</Label>
-            <Textarea
-              id={`escalate-${assignment.id}`}
-              value={form.reason}
-              onChange={(event) => {
-                setFormError(null)
-                setForm((prev) => ({ ...prev, reason: event.target.value }))
-              }}
-              placeholder="Contoh: membutuhkan approval RR"
-            />
-            {formError && <p className="text-xs text-rose-600">{formError}</p>}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeDialog} disabled={dialogPending}>
-              Batal
-            </Button>
-            <Button onClick={handleEscalate} disabled={escalateMutation.isPending}>
-              {escalateMutation.isPending ? 'Mengirim…' : 'Eskalasi sekarang'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -329,7 +209,7 @@ export default function AssignmentList({ query, emptyText, page, onPageChange, p
     return (
       <Card>
         <CardContent>
-          <div className="min-h-[120px] flex flex-col items-center justify-center gap-2 text-muted-foreground">
+          <div className="min-h-30 flex flex-col items-center justify-center gap-2 text-muted-foreground">
             <p>{emptyText}</p>
           </div>
         </CardContent>
@@ -346,15 +226,15 @@ export default function AssignmentList({ query, emptyText, page, onPageChange, p
         const routeClass = ROUTE_STYLES[routeType] || 'bg-slate-100 text-slate-700 border border-slate-200'
         const topicTitle = assignment.topic?.title || 'Penugasan tanpa judul'
         const description = assignment.note || assignment.topic?.description || excerpt(assignment.comment?.body, 120)
-        const roomName = assignment.topic?.room?.name
+        const roomName = assignment.topic?.forum?.name || assignment.topic?.room?.name
         const dueLabel = formatDate(assignment.due_at, true)
         const linkTarget = assignment.topic?.id
-          ? `/topics/${assignment.topic.id}`
+          ? `/formulir/${assignment.topic.id}`
           : assignment.comment?.topic_id
-          ? `/topics/${assignment.comment.topic_id}`
+          ? `/formulir/${assignment.comment.topic_id}`
           : null
-        const assignerName = getDisplayName(assignment.from_user)
-        const assigneeName = getDisplayName(assignment.to_user)
+        const assignerName = getDisplayName(assignment.assigned_by || assignment.from_user)
+        const assigneeName = getDisplayName(assignment.assignee || assignment.to_user)
 
         const card = (
           <Card className="hover:border-blue-200 transition-colors">
@@ -400,7 +280,7 @@ export default function AssignmentList({ query, emptyText, page, onPageChange, p
               )}
 
               <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-3 min-w-[200px]">
+                <div className="flex items-center gap-3 min-w-50">
                   <Avatar className="w-10 h-10">
                     <AvatarFallback>{getInitials(assignerName)}</AvatarFallback>
                   </Avatar>
@@ -409,7 +289,7 @@ export default function AssignmentList({ query, emptyText, page, onPageChange, p
                     <p className="text-xs text-muted-foreground">Penugasan dibuat {formatDate(assignment.created_at, true)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 min-w-[200px]">
+                <div className="flex items-center gap-3 min-w-50">
                   <Avatar className="w-10 h-10">
                     <AvatarFallback>{getInitials(assigneeName)}</AvatarFallback>
                   </Avatar>

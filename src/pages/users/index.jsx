@@ -387,7 +387,7 @@ export default function UsersPage() {
                       <TableCell>{user.created_at ? new Date(user.created_at).toLocaleString() : '–'}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
-                          <Link to={`/users/${user.id}`} className="text-blue-600 text-sm">Detail</Link>
+                          <Link to={`/pengguna/${user.id}`} className="text-blue-600 text-sm">Detail</Link>
                           <Button variant="outline" size="sm" onClick={() => { setEditingId(user.id); setEditOpen(true) }}>
                             <Edit2 className="w-4 h-4 mr-1" /> Edit
                           </Button>
@@ -503,7 +503,7 @@ export default function UsersPage() {
               )}
               {!isRolesLoading && !isRolesError && !roleOptions.length && (
                 <div className="text-xs text-muted-foreground border border-dashed rounded-md px-3 py-2">
-                  Belum ada role yang tersedia. Tambahkan role baru melalui modul administrasi terlebih dahulu.
+                  Belum ada role yang tersedia. Tambahkan role baru melalui modul klausul terlebih dahulu.
                 </div>
               )}
               <textarea className="border rounded-md p-2 text-sm" rows={3} placeholder="Catatan (opsional)" value={roleForm.reason} onChange={(e) => setRoleForm((prev) => ({ ...prev, reason: e.target.value }))} />

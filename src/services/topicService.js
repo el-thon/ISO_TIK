@@ -240,7 +240,7 @@ export async function createTopic(forumId, payload = {}) {
   if (!forumId) throw new Error('forumId is required when creating a topic')
   try {
  
-    const res = await api.post(`/rooms/${forumId}/topics`, payload);
+    const res = await api.post(`/forums/${forumId}/topics`, payload);
     const responseData = res?.data ?? {};
     return responseData;
   } catch (error) {

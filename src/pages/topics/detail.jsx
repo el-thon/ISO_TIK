@@ -2,8 +2,6 @@
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Send, CheckCircle2, MessageSquareWarning, Lock, Unlock, Snowflake, Undo2, Loader2 } from 'lucide-react'
-import html2canvas from 'html2canvas'
-import { jsPDF } from 'jspdf'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,9 +24,9 @@ import { useAdminClauses } from '@/services/adminClauseHooks'
 import { ACTION_METADATA, isLikelyTopicId, buildErrorMessage } from './detail/utils'
 import { toast } from '@/components/ui/use-toast'
 import api from '@/services/api'
+import { getUserData } from '@/utils/auth'
 import {
   TopicBreadcrumb,
-  NotificationBanner,
   ErrorAlert,
   TopicHeader,
   InputItem,
@@ -51,7 +49,7 @@ import { convertFormToInputItem, extractFindingFromInputItem } from '../../utils
 import * as documentService from '@/services/documentService'
 
 // Import PDF Generator
-import { generatePDF, createPDFGenerator } from '@/utils/pdfGenerator'
+import { generatePDF } from '@/utils/pdfGenerator'
 
 // ============================================================================
 // Custom Hooks
@@ -91,8 +89,19 @@ const useCreateTopicInputItem = () => {
 const useWorkflowActions = (topic, currentUser, hasContent) => {
   const status = (topic?.status || '').toLowerCase()
   const currentUserId = currentUser?.id
-  const isCreator = Boolean(currentUserId && (topic?.created_by_user_id === currentUserId || topic?.created_by?.id === currentUserId))
-  const isResponsible = Boolean(currentUserId && (topic?.room?.responsible_user_id === currentUserId || topic?.room?.responsible_user?.id === currentUserId))
+  const normalizedCurrentUserId = currentUserId != null ? String(currentUserId) : null
+  const isCreator = Boolean(
+    normalizedCurrentUserId &&
+    (String(topic?.created_by_user_id ?? '') === normalizedCurrentUserId || String(topic?.created_by?.id ?? '') === normalizedCurrentUserId)
+  )
+  const forum = topic?.forum || topic?.room || null
+  const responsibleId =
+    forum?.responsible_user_id ??
+    forum?.responsible_user?.id ??
+    forum?.responsibleUser?.id
+  const isResponsible = Boolean(
+    normalizedCurrentUserId && responsibleId != null && String(responsibleId) === normalizedCurrentUserId
+  )
   const isFrozen = Boolean(topic?.is_frozen || topic?.frozen_at)
 
   const canPublish = status === 'draft' && isCreator && currentUser?.can_create_topics
@@ -190,7 +199,6 @@ export default function TopicDetail() {
   const [activeAction, setActiveAction] = useState(null)
   const [note, setNote] = useState('')
   const [noteError, setNoteError] = useState(null)
-  const [workflowNotice, setWorkflowNotice] = useState(null)
   
   // State untuk Finding
   const [findingData, setFindingData] = useState(null)
@@ -205,14 +213,15 @@ export default function TopicDetail() {
 
   // Custom hooks
   const { data: meData } = useMe()
-  const currentUser = meData?.data?.user
+  const storedUser = useMemo(() => getUserData(), [])
+  const currentUser = meData?.data?.user ?? meData ?? storedUser
   const { data: clauseData } = useAdminClauses({ per_page: 100, is_active: true })
 
   // PERBAIKAN: Definisikan createInputItemMutation di sini
   const createInputItemMutation = useCreateTopicInputItem()
 
   // Data fetching hooks
-  const { data: topic, isLoading, isError, error, refetch } = useTopic(paramTopicId, { 
+  const { data: topic, isLoading, isError, error: topicError, refetch } = useTopic(paramTopicId, { 
     enabled: isValidTopicId,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
@@ -273,7 +282,7 @@ export default function TopicDetail() {
         const blob = await response.blob()
         const dataUrl = await toDataUrl(blob)
         if (isMounted) setLogoDataUrl(dataUrl)
-      } catch (error) {
+      } catch {
         if (isMounted) setLogoDataUrl(null)
       }
     }
@@ -366,7 +375,8 @@ export default function TopicDetail() {
         if (isMounted && Object.keys(mapped).length > 0) {
           setDocumentNameMap(mapped)
         }
-      } catch (error) {
+      } catch {
+        // ignore document loading errors
       }
     }
 
@@ -380,8 +390,11 @@ export default function TopicDetail() {
   const getObjectiveEvidenceLabel = useCallback(
     (value) => {
       if (!value) return '-'
-      const docId = String(value)
-      return documentNameMap[docId] || value
+      const rawValue = String(value)
+      const [docId, ...noteParts] = rawValue.split('||')
+      const note = noteParts.join('||').trim()
+      const baseLabel = documentNameMap[docId] || docId || rawValue
+      return note ? `${baseLabel} - ${note}` : baseLabel
     },
     [documentNameMap]
   )
@@ -411,7 +424,7 @@ export default function TopicDetail() {
         if (match?.id || match?.user_id) {
           return match.id || match.user_id
         }
-      } catch (error) {
+      } catch {
         // ignore lookup errors and continue
       }
     }
@@ -424,7 +437,7 @@ export default function TopicDetail() {
     try {
       const res = await api.get(`/users/${userId}/signature/download`, { responseType: 'blob' })
       return res?.data instanceof Blob ? res.data : null
-    } catch (error) {
+    } catch {
       return null
     }
   }, [])
@@ -484,7 +497,6 @@ export default function TopicDetail() {
         toDataUrl,
         setSignatureDataUrl,
         ensureImagesLoaded,
-        setWorkflowNotice,
         mode: 'download'
       })
     } finally {
@@ -496,7 +508,6 @@ export default function TopicDetail() {
     toDataUrl, 
     setSignatureDataUrl, 
     ensureImagesLoaded,
-    setWorkflowNotice,
     isExporting,
     isPreviewing,
     resolveSignatures
@@ -542,7 +553,6 @@ export default function TopicDetail() {
         toDataUrl,
         setSignatureDataUrl,
         ensureImagesLoaded,
-        setWorkflowNotice,
         mode: 'preview'
       })
     } finally {
@@ -554,7 +564,6 @@ export default function TopicDetail() {
     toDataUrl,
     setSignatureDataUrl,
     ensureImagesLoaded,
-    setWorkflowNotice,
     isExporting,
     isPreviewing,
     resolveSignatures
@@ -568,17 +577,38 @@ export default function TopicDetail() {
   }, [])
 
   const handleSuccess = useCallback((message) => {
-    setWorkflowNotice({ type: 'success', text: message })
+    toast({ title: 'Berhasil', description: message })
     closeDialog()
   }, [closeDialog])
 
   const handleError = useCallback((err) => {
-    setWorkflowNotice({ type: 'error', text: buildErrorMessage(err) })
+    const message = buildErrorMessage(err)
+    if (String(message).toLowerCase().includes('topic is frozen')) {
+      toast({
+        variant: 'destructive',
+        title: 'Topik sedang dibekukan',
+        description: 'Aksi tidak dapat dilakukan karena topik sedang dibekukan.',
+      })
+      return
+    }
+    toast({
+      variant: 'destructive',
+      title: 'Gagal',
+      description: message,
+    })
   }, [])
 
   // PERBAIKAN: Handler untuk menyimpan finding
   const handleSaveFinding = useCallback(async (formData) => {
     try {
+      if (String(topic?.status || '').toLowerCase() === 'closed') {
+        toast({
+          variant: 'destructive',
+          title: 'Topik sudah ditutup',
+          description: 'Perubahan temuan tidak diizinkan untuk topik yang sudah ditutup.',
+        })
+        return
+      }
       const inputItem = convertFormToInputItem(formData)
       
       await createInputItemMutation.mutateAsync({
@@ -596,7 +626,7 @@ export default function TopicDetail() {
     } catch (err) {
       handleError(err)
     }
-  }, [topicId, createInputItemMutation, handleSuccess, handleError, refetch, findingInputItemId])
+  }, [topic?.status, topicId, createInputItemMutation, handleSuccess, handleError, refetch, findingInputItemId])
 
   // Mutation hooks - workflow
   const revertVersionMutation = useRevertTopicVersion({
@@ -620,22 +650,46 @@ export default function TopicDetail() {
   })
 
   const closeTopicMutation = useCloseTopic({
-    onSuccess: () => handleSuccess('Topik berhasil ditutup.'),
+    onSuccess: () => {
+      handleSuccess('Topik berhasil ditutup.')
+      toast({
+        title: 'Topik ditutup',
+        description: 'Topik berhasil ditutup.',
+      })
+    },
     onError: handleError,
   })
 
   const reopenTopicMutation = useReopenTopic({
-    onSuccess: () => handleSuccess('Topik berhasil dibuka kembali.'),
+    onSuccess: () => {
+      handleSuccess('Topik berhasil dibuka kembali.')
+      toast({
+        title: 'Topik dibuka kembali',
+        description: 'Topik berhasil dibuka kembali.',
+      })
+    },
     onError: handleError,
   })
 
   const freezeTopicMutation = useFreezeTopic({
-    onSuccess: () => handleSuccess('Topik berhasil dibekukan.'),
+    onSuccess: () => {
+      handleSuccess('Topik berhasil dibekukan.')
+      toast({
+        title: 'Berhasil',
+        description: 'Topik berhasil dibekukan.',
+      })
+    },
     onError: handleError,
   })
 
   const unfreezeTopicMutation = useUnfreezeTopic({
-    onSuccess: () => handleSuccess('Pembekuan topik telah dilepas.'),
+    onSuccess: () => {
+      handleSuccess('Pembekuan topik telah dilepas.')
+      toast({
+        title: 'Berhasil',
+        description: 'Pembekuan topik telah dilepas.',
+      })
+    },
     onError: handleError,
   })
 
@@ -674,9 +728,16 @@ export default function TopicDetail() {
   const isAnyWorkflowLoading = Object.values(actionLoadingMap).some(Boolean)
   const hasContent = inputItems.length > 0
   const authorName = topic?.created_by?.profile?.full_name || topic?.created_by?.name || topic?.created_by?.username || 'Tidak diketahui'
-  const roomName = topic?.room?.name || 'Tidak ada informasi'
+  const roomName = topic?.forum?.name || topic?.room?.name || 'Tidak ada informasi'
   const isFrozen = Boolean(topic?.is_frozen || topic?.frozen_at)
+  const isClosed = String(topic?.status || '').toLowerCase() === 'closed'
   const versionDisplay = topic ? `v${topic.version_major}.${topic.version_minor}` : ''
+
+  useEffect(() => {
+    if (isClosed) {
+      setShowFindingForm(false)
+    }
+  }, [isClosed])
 
   const actionButtons = useWorkflowActions(topic, currentUser, hasContent)
   const activeMeta = activeAction ? ACTION_METADATA[activeAction] : null
@@ -753,13 +814,11 @@ export default function TopicDetail() {
 
         {isError && (
           <ErrorAlert 
-            error={error} 
+            error={topicError} 
             onRetry={refetch} 
-            message={error?.response?.data?.message || error?.message || 'Silakan coba ulang.'} 
+            message={topicError?.response?.data?.message || topicError?.message || 'Silakan coba ulang.'} 
           />
         )}
-
-        <NotificationBanner notice={workflowNotice} onClose={() => setWorkflowNotice(null)} />
 
         {!isLoading && topic && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -821,10 +880,12 @@ export default function TopicDetail() {
                         variant="outline" 
                         size="sm"
                         onClick={() => setShowFindingForm(!showFindingForm)}
-                        disabled={createInputItemMutation.isLoading}
+                        disabled={createInputItemMutation.isLoading || isClosed}
                       >
                         {createInputItemMutation.isLoading ? (
                           <>Menyimpan...</>
+                        ) : isClosed ? (
+                          'Temuan Dikunci'
                         ) : showFindingForm ? (
                           'Sembunyikan Form'
                         ) : findingData ? (
@@ -835,6 +896,11 @@ export default function TopicDetail() {
                       </Button>
                     </div>
                   </div>
+                  {isClosed && (
+                    <p className="text-xs text-muted-foreground">
+                      Topik sudah ditutup. Edit temuan akan aktif kembali setelah topik dibuka.
+                    </p>
+                  )}
 
                   {showFindingForm ? (
                     <FindingForm 
@@ -922,7 +988,6 @@ export default function TopicDetail() {
               onOpenActionDialog={openActionDialog}
               versionDisplay={versionDisplay}
               commentsCount={topic.comments_count}
-              securityLevel={topic.security_level}
               deadlineAt={topic.deadline_at}
             />
           </div>
@@ -979,15 +1044,15 @@ export default function TopicDetail() {
               <td style={{ border: '1px solid #111827', width: '33%', fontSize: '10px' }}>
                 <div style={{ padding: '7px 10px', borderBottom: '1px solid #111827', lineHeight: 1.35 }}>
                   <div>No. Dokumen</div>
-                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{FORM_DOC_NUMBER}</div>
+                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{findingData?.document_number || FORM_DOC_NUMBER}</div>
                 </div>
                 <div style={{ padding: '7px 10px', borderBottom: '1px solid #111827', lineHeight: 1.5 }}>
                   <div>Tanggal Terbit</div>
-                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{FORM_ISSUED_DATE}</div>
+                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{findingData?.issued_date || FORM_ISSUED_DATE}</div>
                 </div>
                 <div style={{ padding: '7px 10px', lineHeight: 1.5 }}>
                   <div>No. Revisi</div>
-                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{FORM_REVISION}</div>
+                  <div style={{ fontWeight: 'bold', lineHeight: 0, margin: '5px 0' }}>{findingData?.revision_number || FORM_REVISION}</div>
                 </div>
               </td>
             </tr>
@@ -1065,14 +1130,13 @@ export default function TopicDetail() {
           </tbody>
         </table>
 
-        <div style={{ fontSize: '10px', lineHeight: 1.4, margin: '2px 0 14px' }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>*Keterangan kategori:</div>
-          <div style={{ marginBottom: '2px' }}>- Minor : Ketidaksesuaian yang tidak berpengaruh signifikan terhadap efektivitas SMKI.</div>
-          <div style={{ marginBottom: '2px' }}>- Mayor : Ketidaksesuaian yang berpotensi mengganggu tercapainya sasaran SMKI / tidak terpenuhinya persyaratan penting.</div>
-          <div>- Observasi : Temuan potensial / peluang perbaikan yang belum menjadi ketidaksesuaian.</div>
-        </div>
-
         <div data-page-break="signature">
+          <div style={{ fontSize: '10px', lineHeight: 1.4, margin: '2px 0 14px' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>*Keterangan kategori:</div>
+            <div style={{ marginBottom: '2px' }}>- Minor : Ketidaksesuaian yang tidak berpengaruh signifikan terhadap efektivitas SMKI.</div>
+            <div style={{ marginBottom: '2px' }}>- Mayor : Ketidaksesuaian yang berpotensi mengganggu tercapainya sasaran SMKI / tidak terpenuhinya persyaratan penting.</div>
+            <div>- Observasi : Temuan potensial / peluang perbaikan yang belum menjadi ketidaksesuaian.</div>
+          </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <tbody>
               <tr>

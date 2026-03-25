@@ -132,11 +132,6 @@ export const TopicHeader = ({ topic, authorName, roomName }) => (
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {topic.security_level && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
-              {topic.security_level}
-            </span>
-          )}
           {topic.category && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
               {topic.category}

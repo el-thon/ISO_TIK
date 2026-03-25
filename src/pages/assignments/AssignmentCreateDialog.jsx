@@ -12,26 +12,26 @@ import {
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useAssignComment, useAssignTopic } from '@/services/assignmentsHooks'
+import { useAssignTopic } from '@/services/assignmentsHooks'
 
-const ROUTE_TYPES = [
-  { value: 'review', label: 'Review' },
-  { value: 'approval', label: 'Approval' },
-  { value: 'follow_up', label: 'Follow Up' },
-  { value: 'info', label: 'Informasi' },
+const ROLE_OPTIONS = [
+  { value: 'auditor', label: 'Auditor' },
+  { value: 'auditee', label: 'Auditee' },
+  { value: 'responsible', label: 'Responsible' },
 ]
 
-const TARGET_TYPES = [
-  { value: 'topic', label: 'Topik' },
-  { value: 'comment', label: 'Komentar' },
+const URGENCY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
 ]
 
 const initialState = {
-  targetType: 'topic',
   targetId: '',
-  toUserId: '',
-  routeType: ROUTE_TYPES[0].value,
-  dueAt: '',
+  assigneeId: '',
+  role: ROLE_OPTIONS[0].value,
+  urgency: URGENCY_OPTIONS[1].value,
   note: '',
 }
 
@@ -49,17 +49,7 @@ export default function AssignmentCreateDialog() {
       setError(err?.response?.data?.message || err?.message || 'Gagal membuat penugasan.')
     },
   })
-  const assignComment = useAssignComment({
-    onSuccess: () => {
-      resetForm()
-      setOpen(false)
-    },
-    onError: (err) => {
-      setError(err?.response?.data?.message || err?.message || 'Gagal membuat penugasan.')
-    },
-  })
-
-  const isLoading = assignTopic.isPending || assignComment.isPending
+  const isLoading = assignTopic.isPending
 
   const resetForm = () => {
     setForm(initialState)
@@ -69,27 +59,17 @@ export default function AssignmentCreateDialog() {
   const handleSubmit = (event) => {
     event.preventDefault()
     setError(null)
-    if (!form.targetId.trim() || !form.toUserId.trim()) {
-      setError('ID target dan penerima wajib diisi.')
+    if (!form.targetId.trim() || !form.assigneeId.trim()) {
+      setError('ID topik dan penerima wajib diisi.')
       return
     }
     const payload = {
-      to_user_id: form.toUserId.trim(),
-      route_type: form.routeType,
+      assignee_id: form.assigneeId.trim(),
+      role: form.role,
+      urgency: form.urgency,
       note: form.note?.trim() || undefined,
     }
-    if (form.dueAt) {
-      const due = new Date(form.dueAt)
-      if (!Number.isNaN(due.getTime())) {
-        payload.due_at = due.toISOString()
-      }
-    }
-
-    if (form.targetType === 'comment') {
-      assignComment.mutate({ commentId: form.targetId.trim(), payload })
-    } else {
-      assignTopic.mutate({ topicId: form.targetId.trim(), payload })
-    }
+    assignTopic.mutate({ topicId: form.targetId.trim(), payload })
   }
 
   const actionLabel = useMemo(() => (isLoading ? 'Menyimpan…' : 'Buat penugasan'), [isLoading])
@@ -109,55 +89,52 @@ export default function AssignmentCreateDialog() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>Penugasan baru</DialogTitle>
-            <DialogDescription>Kirimi rekan Anda tugas baru berdasarkan topik atau komentar yang relevan.</DialogDescription>
+            <DialogDescription>Kirimi rekan Anda tugas baru berdasarkan topik yang relevan.</DialogDescription>
           </DialogHeader>
 
           <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Jenis target</Label>
-              <Select
-                value={form.targetType}
-                onValueChange={(value) => setForm((prev) => ({ ...prev, targetType: value, targetId: '' }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih jenis" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TARGET_TYPES.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>ID {form.targetType === 'comment' ? 'Komentar' : 'Topik'}</Label>
+              <Label>ID Topik</Label>
               <Input
-                placeholder={form.targetType === 'comment' ? 'contoh: 21f0-...' : 'contoh: 9a02-...'}
+                placeholder="contoh: 9a02-..."
                 value={form.targetId}
                 onChange={(event) => setForm((prev) => ({ ...prev, targetId: event.target.value }))}
               />
             </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>ID penerima (UUID)</Label>
               <Input
                 placeholder="Masukkan UUID user"
-                value={form.toUserId}
-                onChange={(event) => setForm((prev) => ({ ...prev, toUserId: event.target.value }))}
+                value={form.assigneeId}
+                onChange={(event) => setForm((prev) => ({ ...prev, assigneeId: event.target.value }))}
               />
             </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Jenis routing</Label>
-              <Select value={form.routeType} onValueChange={(value) => setForm((prev) => ({ ...prev, routeType: value }))}>
+              <Label>Peran</Label>
+              <Select value={form.role} onValueChange={(value) => setForm((prev) => ({ ...prev, role: value }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Pilih jenis" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ROUTE_TYPES.map((option) => (
+                  {ROLE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Urgensi</Label>
+              <Select value={form.urgency} onValueChange={(value) => setForm((prev) => ({ ...prev, urgency: value }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih urgensi" />
+                </SelectTrigger>
+                <SelectContent>
+                  {URGENCY_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>
@@ -167,23 +144,13 @@ export default function AssignmentCreateDialog() {
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Batas waktu (opsional)</Label>
-              <Input
-                type="datetime-local"
-                value={form.dueAt}
-                onChange={(event) => setForm((prev) => ({ ...prev, dueAt: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Catatan</Label>
-              <Input
-                placeholder="Tambahkan instruksi singkat"
-                value={form.note}
-                onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label>Catatan</Label>
+            <Input
+              placeholder="Tambahkan instruksi singkat"
+              value={form.note}
+              onChange={(event) => setForm((prev) => ({ ...prev, note: event.target.value }))}
+            />
           </div>
 
           {error && <p className="text-sm text-rose-600">{error}</p>}

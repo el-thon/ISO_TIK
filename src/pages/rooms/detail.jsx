@@ -1,6 +1,6 @@
 import React, { useMemo, useEffect } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
-import { Home } from 'lucide-react'
+import { FileText, Home, Paperclip, Settings, Users } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,7 +19,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRoom, useRoomParticipants } from '@/services/roomHooks'
 import { useMe } from '@/services/authHooks'
-import { getCurrentUserId, getUserData } from '@/utils/auth'
+import { getAccessToken, getCurrentUserId, getUserData } from '@/utils/auth'
 
 const formatDateTime = (value) => {
   if (!value) return '-'
@@ -69,16 +69,19 @@ export default function RoomDetail() {
   const location = useLocation()
   const fromGroup = location.state?.fromGroup
   const { data: room, isLoading, isError, error, refetch } = useRoom(roomId)
+  const cachedUser = getUserData()
+  const shouldFetchMe = !cachedUser?.id && !cachedUser?.user_id && Boolean(getAccessToken())
   const { data: meData } = useMe({ 
     staleTime: 60_000,
-    enabled: false // DISABLED: Gunakan localStorage cache only
+    enabled: shouldFetchMe,
   })
 
   // Enhanced currentUserId detection with multiple fallbacks
-  const cachedUser = getUserData()
   const currentUserId =
     cachedUser?.id ||
     cachedUser?.user_id ||
+    meData?.id ||
+    meData?.user?.id ||
     meData?.data?.user?.id ||
     getCurrentUserId()
 
@@ -121,6 +124,10 @@ export default function RoomDetail() {
   const roleKey = normalizeRoleKey(room?.user_role || room?.role || room?.participant_role || participantRole)
   const canCreateTopic = Boolean(currentParticipant)
   const defaultTab = 'topics' // Default to topics tab
+  const isPeriodClosed = Boolean(
+    room?.forum_period_deadline_passed ||
+      (room?.forum_period_end_date && new Date(room.forum_period_end_date) < new Date())
+  )
   
   // Check if current user is the responsible user (owner) of this room
   const isRoomOwner = Boolean(
@@ -196,11 +203,6 @@ export default function RoomDetail() {
                     <CardDescription className="text-sm text-muted-foreground">
                       {room.description || 'Belum ada deskripsi'}
                     </CardDescription>
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">
-                        {formatVisibility(room.visibility)}
-                      </span>
-                    </div>
                     <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
                       <div>
                         <div className="text-xs uppercase tracking-wide">Dibuat</div>
@@ -216,7 +218,7 @@ export default function RoomDetail() {
                   <div className="flex flex-col sm:flex-row gap-3">
                     {canCreateTopic && (
                       <Link to="/formulir/buat" state={{ roomId: room.id, roomTitle: room.name }}>
-                        <Button size="sm" className="bg-blue-600 text-white">
+                        <Button size="sm" className="bg-blue-600 text-white px-4 py-2" disabled={isPeriodClosed}>
                           + Buat Formulir
                         </Button>
                       </Link>
@@ -241,17 +243,17 @@ export default function RoomDetail() {
                 <div className="bg-white">
                   <TabsBar
                     items={[
-                      { label: 'Formulir', value: 'topics', count: stats.topic_count ?? 0 },
-                      { label: 'Lampiran', value: 'attachments' },
-                      { label: 'Peserta', value: 'participants', count: stats.participant_count ?? 0 },
-                      ...(isRoomOwner ? [{ label: 'Pengaturan', value: 'settings' }] : []),
+                      { label: 'Formulir', value: 'topics', count: stats.topic_count ?? 0, icon: <FileText className="w-4 h-4" /> },
+                      { label: 'Lampiran', value: 'attachments', icon: <Paperclip className="w-4 h-4" /> },
+                      { label: 'Peserta', value: 'participants', count: stats.participant_count ?? 0, icon: <Users className="w-4 h-4" /> },
+                      ...(isRoomOwner ? [{ label: 'Pengaturan', value: 'settings', icon: <Settings className="w-4 h-4" /> }] : []),
                     ]}
                   />
                 </div>
                 <RoomTabsContent 
                   roomId={room.id} 
                   room={room} 
-                  isRoomOwner={isRoomOwner}
+                  isRoomOwner={isRoomOwner && !isPeriodClosed}
                   currentUserId={normalizedCurrentUserId}
                 />
               </Tabs>

@@ -21,6 +21,21 @@ const createEmptyFinding = () => ({
   objective_evidence: ''
 })
 
+const OBJECTIVE_EVIDENCE_SEPARATOR = '||'
+
+const splitObjectiveEvidence = (value) => {
+  if (!value) return { docId: '', note: '' }
+  const raw = String(value)
+  const [docId, ...noteParts] = raw.split(OBJECTIVE_EVIDENCE_SEPARATOR)
+  return { docId, note: noteParts.join(OBJECTIVE_EVIDENCE_SEPARATOR).trim() }
+}
+
+const buildObjectiveEvidence = (docId, note) => {
+  if (!docId) return note ? `${note}` : ''
+  if (!note) return String(docId)
+  return `${docId}${OBJECTIVE_EVIDENCE_SEPARATOR}${note}`
+}
+
 const normalizeClauseReferences = (refs) => {
   if (!Array.isArray(refs)) return []
   return refs
@@ -222,6 +237,9 @@ const FindingForm = ({ onSubmit, initialData }) => {
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [documentsError, setDocumentsError] = useState(null)
   const [formData, setFormData] = useState({
+    document_number: initialData?.document_number || '',
+    issued_date: initialData?.issued_date || new Date().toISOString().split('T')[0],
+    revision_number: initialData?.revision_number || '0',
     audit_code: initialData?.audit_code || '',
     audited_unit: initialData?.audited_unit || '',
     audit_date: initialData?.audit_date || new Date().toISOString().split('T')[0],
@@ -358,6 +376,30 @@ const FindingForm = ({ onSubmit, initialData }) => {
                 required
               />
             </div>
+            <div>
+              <Label>No. Dokumen</Label>
+              <Input
+                value={formData.document_number}
+                onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
+                placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
+              />
+            </div>
+            <div>
+              <Label>Tanggal Terbit</Label>
+              <Input
+                type="date"
+                value={formData.issued_date}
+                onChange={(e) => setFormData({ ...formData, issued_date: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>No. Revisi</Label>
+              <Input
+                value={formData.revision_number}
+                onChange={(e) => setFormData({ ...formData, revision_number: e.target.value })}
+                placeholder="Contoh: 0"
+              />
+            </div>
           </div>
 
           {/* Auditor Info */}
@@ -472,18 +514,32 @@ const FindingForm = ({ onSubmit, initialData }) => {
 
                 <div>
                   <Label>Bukti Objektif</Label>
-                  <DocumentSelect
-                    value={finding.objective_evidence}
-                    onChange={(value) => updateFinding(index, 'objective_evidence', value)}
-                    disabled={documentsLoading}
-                    documents={documents}
-                    loading={documentsLoading}
-                  />
-                  {finding.objective_evidence && !documentsError && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      ID Dokumen: {finding.objective_evidence}
-                    </p>
-                  )}
+                  {(() => {
+                    const { docId, note } = splitObjectiveEvidence(finding.objective_evidence)
+                    return (
+                      <>
+                        <DocumentSelect
+                          value={docId}
+                          onChange={(value) => updateFinding(index, 'objective_evidence', buildObjectiveEvidence(value, note))}
+                          disabled={documentsLoading}
+                          documents={documents}
+                          loading={documentsLoading}
+                        />
+                        <Input
+                          value={note}
+                          onChange={(event) =>
+                            updateFinding(index, 'objective_evidence', buildObjectiveEvidence(docId, event.target.value))
+                          }
+                          placeholder="Tambahkan keterangan bukti objektif"
+                        />
+                        {docId && !documentsError && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Bukti: {docId}{note ? ` - ${note}` : ''}
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             ))}

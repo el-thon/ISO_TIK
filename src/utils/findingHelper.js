@@ -11,6 +11,9 @@ export const convertFormToInputItem = (formData) => {
     visibility: "visible",
     value: "",
     metadata: {
+      document_number: formData.document_number,
+      issued_date: formData.issued_date,
+      revision_number: formData.revision_number,
       audit_code: formData.audit_code,
       audited_unit: formData.audited_unit,
       audit_date: formData.audit_date,
@@ -56,6 +59,9 @@ export const extractFindingFromInputItem = (inputItem) => {
 
   if (labelMatch || findings.length > 0) {
     return {
+      document_number: metadata?.document_number,
+      issued_date: metadata?.issued_date,
+      revision_number: metadata?.revision_number,
       audit_code: metadata?.audit_code,
       audited_unit: metadata?.audited_unit,
       audit_date: metadata?.audit_date,

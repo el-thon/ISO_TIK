@@ -10,11 +10,11 @@ import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import AuthLayout from './AuthLayout'
-import { useLogin } from '@/services/authHooks'
+import { useLogin, useResendLoginOtp } from '@/services/authHooks'
 
 function Login() {
   const REMEMBER_KEY = import.meta.env.VITE_REMEMBER_KEY || 'iso_tik_remember_me'
@@ -23,19 +23,35 @@ function Login() {
   const [remember, setRemember] = useState(() => localStorage.getItem(REMEMBER_KEY) === 'true')
   const [username, setUsername] = useState(() => localStorage.getItem(REMEMBER_USERNAME_KEY) || '')
   const [password, setPassword] = useState('')
+  const [otp, setOtp] = useState('')
+  const [otpStep, setOtpStep] = useState(false)
+  const [otpDelivery, setOtpDelivery] = useState(null)
+  const [otpError, setOtpError] = useState('')
+  const [otpInfo, setOtpInfo] = useState('')
+  const [otpAttemptsRemaining, setOtpAttemptsRemaining] = useState(null)
+  const [otpMaxAttempts, setOtpMaxAttempts] = useState(null)
+  const [otpTransitioning, setOtpTransitioning] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
+  const otpInputRef = useRef(null)
   const navigate = useNavigate()
 
   const { mutate: loginMutate, isLoading: isLoginLoading, error: loginError } = useLogin({
     onSuccess: (data) => {
-      
-      // Verifikasi data tersimpan di localStorage
-      const token = localStorage.getItem('iso_tik_access_token')
-      const userData = localStorage.getItem('user_data')
-
+      if (data?.otp_required) {
+        setOtpStep(true)
+        setOtpTransitioning(false)
+        setOtpDelivery(data?.otp_sent_to || data?.otp_delivery || data?.email || null)
+        setOtp('')
+        setOtpError('')
+        setOtpInfo('')
+        setOtpAttemptsRemaining(data?.otp_attempts_remaining ?? null)
+        setOtpMaxAttempts(data?.otp_max_attempts ?? null)
+        return
+      }
       // Gunakan setTimeout untuk memastikan semua state ter-update
       setTimeout(() => {
-        navigate('/beranda', { 
+        navigate('/beranda', {
           replace: true,
           state: { fromLogin: true }
         })
@@ -43,11 +59,30 @@ function Login() {
     }
   })
 
+  const { mutate: resendOtp, isLoading: isResendLoading } = useResendLoginOtp({
+    onSuccess: (data) => {
+      if (data?.otp_required) {
+        setOtpDelivery(data?.otp_sent_to || data?.otp_delivery || data?.email || null)
+      }
+      setOtpAttemptsRemaining(data?.otp_attempts_remaining ?? otpAttemptsRemaining)
+      setOtpMaxAttempts(data?.otp_max_attempts ?? otpMaxAttempts)
+      setOtpInfo('OTP baru sudah dikirim ke email Anda.')
+      setResendCooldown(60)
+    },
+    onError: (error) => {
+      setOtpError(
+        error?.response?.data?.message ||
+          error?.message ||
+          'Gagal mengirim ulang OTP. Coba lagi nanti.'
+      )
+    },
+  })
+
   // Cek apakah sudah login, redirect otomatis
   useEffect(() => {
     const token = localStorage.getItem('iso_tik_access_token')
     const userData = localStorage.getItem('user_data')
-    
+
     if (token && userData) {
       navigate('/beranda', { replace: true })
     }
@@ -58,10 +93,54 @@ function Login() {
       localStorage.removeItem(REMEMBER_USERNAME_KEY)
       localStorage.setItem(REMEMBER_KEY, 'false')
     }
-  }, [remember])
+  }, [remember, REMEMBER_KEY, REMEMBER_USERNAME_KEY])
+
+  useEffect(() => {
+    const remaining = loginError?.response?.data?.otp_attempts_remaining
+    const maxAttempts = loginError?.response?.data?.otp_max_attempts
+    if (remaining !== undefined) {
+      setOtpAttemptsRemaining(remaining)
+    }
+    if (maxAttempts !== undefined) {
+      setOtpMaxAttempts(maxAttempts)
+    }
+
+    if (loginError && otpTransitioning) {
+      setOtpTransitioning(false)
+      setOtpStep(false)
+    }
+  }, [loginError])
+
+  useEffect(() => {
+    if (!resendCooldown) return
+    const timer = setInterval(() => {
+      setResendCooldown((value) => (value > 1 ? value - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
   const onSubmitCredentials = (e) => {
     e.preventDefault()
+
+    if (otpStep) {
+      const normalizedOtp = otp.replace(/\D/g, '').slice(0, 6)
+      if (normalizedOtp.length !== 6) {
+        setOtpError('Kode OTP harus 6 digit.')
+        return
+      }
+      setOtp(normalizedOtp)
+    }
+
+    setOtpInfo('')
+
+    if (!otpStep) {
+      setOtpStep(true)
+      setOtpTransitioning(true)
+      setOtpDelivery(null)
+      setOtp('')
+      setOtpError('')
+      setOtpInfo('Meminta OTP...')
+    }
 
 
     if (remember) {
@@ -72,91 +151,185 @@ function Login() {
       localStorage.removeItem(REMEMBER_USERNAME_KEY)
     }
 
-    loginMutate({ username, password })
+    loginMutate({ login: username, username, password, otp: otpStep ? otp : undefined })
   }
 
   return (
     <AuthLayout title="Sistem Internal TIK" subtitle="Universitas">
       <Card className="w-full">
         <CardHeader className="text-center space-y-2">
-          <CardTitle className="text-heading-3 font-semibold">Masuk</CardTitle>
+          <CardTitle className="text-heading-3 font-semibold">
+            {otpStep ? 'Verifikasi OTP' : 'Masuk'}
+          </CardTitle>
           <CardDescription className="text-body-md text-muted-foreground">
-            Masuk menggunakan username dan kata sandi Anda
+            {otpStep
+              ? otpTransitioning
+                ? 'Meminta OTP...'
+                : 'Masukkan kode OTP 6 digit yang dikirim ke email Anda.'
+              : 'Masuk menggunakan username dan kata sandi Anda.'}
           </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5">
           <form onSubmit={onSubmitCredentials} className="flex flex-col gap-4 border border-border rounded-lg p-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="username" className="text-small text-foreground">Username</Label>
-              <Input
-                id="username"
-                name="username"
-                type="text"
-                placeholder="contoh: alice"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="text-body-md"
-                required
-                autoComplete="username"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password" className="text-small text-foreground">Kata Sandi</Label>
-              <div className="relative">
+            {!otpStep && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="username" className="text-small text-foreground">Username</Label>
                 <Input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="masukkan kata sandi"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="text-body-md pr-10"
+                  id="username"
+                  name="username"
+                  type="text"
+                  placeholder="contoh: alice"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="text-body-md"
                   required
-                  autoComplete="current-password"
+                  autoComplete="username"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="remember"
-                  checked={remember}
-                  onCheckedChange={(value) => setRemember(Boolean(value))}
-                />
-                <Label htmlFor="remember" className="text-small text-muted-foreground">
-                  Ingat Saya
-                </Label>
-              </div>
-              <Link to="/auth/lupa-password" className="text-sm text-primary hover:underline">
-                Lupa kata sandi?
-              </Link>
-            </div>
-
-            {loginError && (
-              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-                {loginError?.response?.data?.message || 
-                 loginError?.message || 
-                 'Gagal masuk. Periksa kembali username dan password Anda.'}
               </div>
             )}
 
-            <Button 
-              type="submit" 
-              disabled={isLoginLoading} 
+            {!otpStep && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="password" className="text-small text-foreground">Kata Sandi</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="masukkan kata sandi"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="text-body-md pr-10"
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {otpStep && (
+              <div className="flex flex-col items-center gap-4">
+                <div className="text-center">
+                  <Label htmlFor="otp" className="text-small text-foreground">Kode OTP (6 digit)</Label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Kode dikirim ke email {otpDelivery || 'terdaftar'}.
+                  </p>
+                </div>
+                <div className="relative">
+                  <input
+                    ref={otpInputRef}
+                    id="otp"
+                    name="otp"
+                    type="text"
+                    value={otp}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6)
+                      setOtp(value)
+                      if (otpError) setOtpError('')
+                    }}
+                    autoComplete="one-time-code"
+                    required
+                    inputMode="numeric"
+                    maxLength={6}
+                    className="absolute inset-0 h-full w-full opacity-0"
+                    aria-label="Kode OTP"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => otpInputRef.current?.focus()}
+                    className="grid grid-cols-6 gap-2"
+                  >
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className={`flex h-12 w-12 items-center justify-center rounded-md border text-lg font-semibold transition-colors ${
+                          otp[index]
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-border bg-muted/30 text-foreground'
+                        }`}
+                      >
+                        {otp[index] || ''}
+                      </div>
+                    ))}
+                  </button>
+                </div>
+                {otpAttemptsRemaining !== null && otpMaxAttempts !== null && (
+                  <p className="text-xs text-muted-foreground">
+                    Sisa percobaan OTP: {otpAttemptsRemaining} dari {otpMaxAttempts}.
+                  </p>
+                )}
+                {otpInfo && (
+                  <p className="text-xs text-emerald-600">{otpInfo}</p>
+                )}
+                {otpError && (
+                  <p className="text-xs text-destructive">{otpError}</p>
+                )}
+                <div className="flex flex-col items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => resendOtp({ login: username, username, password })}
+                    disabled={isResendLoading || resendCooldown > 0 || otpTransitioning}
+                    className="text-primary hover:underline disabled:opacity-60"
+                  >
+                    {isResendLoading
+                      ? 'Mengirim ulang...'
+                      : resendCooldown > 0
+                        ? `Kirim ulang OTP (${resendCooldown}s)`
+                        : 'Kirim ulang OTP'}
+                  </button>
+                  <span className="text-muted-foreground">Periksa folder spam jika belum masuk.</span>
+                </div>
+              </div>
+            )}
+
+            {!otpStep && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="remember"
+                    checked={remember}
+                    onCheckedChange={(value) => setRemember(Boolean(value))}
+                  />
+                  <Label htmlFor="remember" className="text-small text-muted-foreground">
+                    Ingat Saya
+                  </Label>
+                </div>
+                <Link to="/auth/lupa-password" className="text-sm text-primary hover:underline">
+                  Lupa kata sandi?
+                </Link>
+              </div>
+            )}
+
+            {(loginError || otpError) && (
+              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+                {otpError ||
+                  loginError?.response?.data?.message ||
+                  loginError?.message ||
+                  'Gagal masuk. Periksa kembali username dan password Anda.'}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={isLoginLoading}
               className="w-full text-body-md bg-black hover:opacity-80 text-white hover:bg-navy-hover"
             >
-              {isLoginLoading ? 'Memproses...' : 'Masuk'}
+              {isLoginLoading
+                ? 'Memproses...'
+                : otpStep
+                  ? otpTransitioning
+                    ? 'Menunggu OTP...'
+                    : 'Verifikasi OTP'
+                  : 'Masuk'}
             </Button>
           </form>
         </CardContent>

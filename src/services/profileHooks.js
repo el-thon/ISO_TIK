@@ -80,32 +80,10 @@ export function useDeleteProfilePhoto(options = {}) {
   })
 }
 
-export function useUpdatePreferences(options = {}) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload) => profileService.updatePreferences(payload),
-    onSuccess: (data, variables, context) => {
-      queryClient.invalidateQueries({ queryKey: ['profile'] })
-      if (options.onSuccess) options.onSuccess(data, variables, context)
-    },
-    ...options,
-  })
-}
-
 export function useChangePassword(options = {}) {
   return useMutation({
     mutationFn: (payload) => profileService.changePassword(payload),
     ...options,
-  })
-}
-
-export function useSecuritySettings(options = {}) {
-  return useQuery({
-    queryKey: ['profile', 'security'],
-    queryFn: () => profileService.getSecuritySettings(),
-    staleTime: 1000 * 15,
-    ...options,
-    enabled: authEnabled(options),
   })
 }
 
@@ -208,9 +186,7 @@ export default {
   useUpdateProfile,
   useUploadProfilePhoto,
   useDeleteProfilePhoto,
-  useUpdatePreferences,
   useChangePassword,
-  useSecuritySettings,
   useSessions,
   useLoginHistory,
   useRevokeSession,

@@ -31,7 +31,7 @@ export const router = createBrowserRouter(
     { path: '/tugas', element: (<ProtectedRoute><Assignments /></ProtectedRoute>) },
     { path: '/forum', element: (<ProtectedRoute><RoomsPage/></ProtectedRoute>) },
     { path: '/forum/:id', element: (<ProtectedRoute><RoomDetail /></ProtectedRoute>) },
-    { path: '/administrasi', element: (<ProtectedRoute><Administration /></ProtectedRoute>) },
+  { path: '/klausul', element: (<ProtectedRoute requireAdmin><Administration /></ProtectedRoute>) },
     { path: '/formulir/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
     { path: '/formulir/buat', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },
     { path: '/profil', element: (<ProtectedRoute><Profile /></ProtectedRoute>) },

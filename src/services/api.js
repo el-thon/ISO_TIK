@@ -7,6 +7,8 @@ const API_BASE = apiBaseEnv || '/api/v1'
 // Token storage helpers (configurable via env)
 const ACCESS_KEY = (import.meta.env.VITE_ACCESS_TOKEN_KEY || 'iso_tik_access_token').trim()
 const REFRESH_KEY = (import.meta.env.VITE_REFRESH_TOKEN_KEY || 'iso_tik_refresh_token').trim()
+const ACCESS_EXPIRES_KEY = (import.meta.env.VITE_ACCESS_TOKEN_EXPIRES_KEY || 'iso_tik_access_expires_at').trim()
+const REFRESH_EXPIRES_KEY = (import.meta.env.VITE_REFRESH_TOKEN_EXPIRES_KEY || 'iso_tik_refresh_expires_at').trim()
 
 export function getAccessToken() {
   return localStorage.getItem(ACCESS_KEY)
@@ -16,14 +18,26 @@ export function getRefreshToken() {
   return localStorage.getItem(REFRESH_KEY)
 }
 
-export function setTokens({ access_token, refresh_token }) {
+export function getAccessExpiresAt() {
+  return localStorage.getItem(ACCESS_EXPIRES_KEY)
+}
+
+export function getRefreshExpiresAt() {
+  return localStorage.getItem(REFRESH_EXPIRES_KEY)
+}
+
+export function setTokens({ access_token, refresh_token, access_expires_at, refresh_expires_at }) {
   if (access_token) localStorage.setItem(ACCESS_KEY, access_token)
   if (refresh_token) localStorage.setItem(REFRESH_KEY, refresh_token)
+  if (access_expires_at) localStorage.setItem(ACCESS_EXPIRES_KEY, access_expires_at)
+  if (refresh_expires_at) localStorage.setItem(REFRESH_EXPIRES_KEY, refresh_expires_at)
 }
 
 export function clearTokens() {
   localStorage.removeItem(ACCESS_KEY)
   localStorage.removeItem(REFRESH_KEY)
+  localStorage.removeItem(ACCESS_EXPIRES_KEY)
+  localStorage.removeItem(REFRESH_EXPIRES_KEY)
   localStorage.removeItem('user_data')
 }
 
@@ -47,9 +61,68 @@ const api = axios.create({
   },
 })
 
+const parseExpiry = (value) => {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+const isExpiringSoon = (expiresAt, skewMs = 60000) => {
+  const parsed = parseExpiry(expiresAt)
+  if (!parsed) return false
+  return parsed <= Date.now() + skewMs
+}
+
+const extractTokenMeta = (payload) => {
+  return {
+    access_expires_at: payload.access_expires_at || payload.accessExpiresAt || payload.access_expires || null,
+    refresh_expires_at: payload.refresh_expires_at || payload.refreshExpiresAt || payload.refresh_expires || null,
+  }
+}
+
+let refreshPromise = null
+
+const performRefresh = async () => {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) throw new Error('No refresh token available')
+
+  if (refreshPromise) return refreshPromise
+
+  refreshPromise = axios
+    .post(`${API_BASE}/auth/refresh`, null, {
+      headers: { Authorization: `Bearer ${refreshToken}` },
+    })
+    .then((refreshRes) => {
+      const payload = refreshRes.data?.data ?? refreshRes.data ?? {}
+      const newAccess = payload.access_token || payload.token || payload.accessToken
+      const newRefresh = payload.refresh_token || payload.refreshToken || null
+      const { access_expires_at, refresh_expires_at } = extractTokenMeta(payload)
+
+      if (!newAccess) {
+        throw new Error('Unable to refresh token')
+      }
+
+      setTokens({
+        access_token: newAccess,
+        refresh_token: newRefresh,
+        access_expires_at,
+        refresh_expires_at,
+      })
+      api.defaults.headers.common.Authorization = `Bearer ${newAccess}`
+      return newAccess
+    })
+    .finally(() => {
+      refreshPromise = null
+    })
+
+  return refreshPromise
+}
+
 // Attach access token if available
-api.interceptors.request.use((config) => {
-  const token = getAccessToken()
+api.interceptors.request.use(async (config) => {
+  let token = getAccessToken()
+  const refreshToken = getRefreshToken()
+  const accessExpiresAt = getAccessExpiresAt()
   // Attach timezone header according to OpenAPI parameter recommendation
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -62,6 +135,16 @@ api.interceptors.request.use((config) => {
   } catch (e) {
     // ignore timezone errors
   }
+  if (token && refreshToken && isExpiringSoon(accessExpiresAt)) {
+    try {
+      token = await performRefresh()
+    } catch (e) {
+      clearTokens()
+      redirectToLogin()
+      return Promise.reject(e)
+    }
+  }
+
   if (token) {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${token}`
@@ -129,29 +212,9 @@ api.interceptors.response.use(
     isRefreshing = true
 
     try {
-      // Use a bare axios instance to avoid interceptors
-      const refreshRes = await axios.post(
-        `${API_BASE}/auth/refresh`,
-        null,
-        { headers: { Authorization: `Bearer ${refreshToken}` } }
-      )
-
-      const payload = refreshRes.data?.data ?? refreshRes.data ?? {}
-      const newAccess = payload.access_token || payload.token || payload.accessToken
-      const newRefresh = payload.refresh_token || payload.refreshToken || null
-
-      if (newAccess) {
-        setTokens({ access_token: newAccess, refresh_token: newRefresh })
-        api.defaults.headers.common.Authorization = `Bearer ${newAccess}`
-        processQueue(null, newAccess)
-        return api(originalRequest)
-      }
-
-      // If refresh didn't provide token, clear and reject
-      clearTokens()
-      processQueue(new Error('Unable to refresh token'), null)
-      redirectToLogin()
-      return Promise.reject(err)
+      const newAccess = await performRefresh()
+      processQueue(null, newAccess)
+      return api(originalRequest)
     } catch (refreshErr) {
       clearTokens()
       processQueue(refreshErr, null)

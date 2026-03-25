@@ -255,7 +255,9 @@ export default function Dashboard() {
                       <div className="flex flex-col gap-1">
                         <p className="text-base font-semibold">{assignment.topic?.title}</p>
                         <p className="text-sm text-muted-foreground">
-                          {assignment.topic?.room?.name ? `Ruang: ${assignment.topic.room.name}` : 'Tanpa ruang'}
+                          {assignment.topic?.forum?.name || assignment.topic?.room?.name
+                            ? `Ruang: ${assignment.topic?.forum?.name || assignment.topic?.room?.name}`
+                            : 'Tanpa ruang'}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           Ditugaskan oleh {assignment.assigned_by?.name || 'Sistem'} pada {formatDate(assignment.assigned_at)}
@@ -297,7 +299,9 @@ export default function Dashboard() {
                   {topics.map((topic) => (
                     <li key={topic.id} className="p-3 rounded-lg bg-slate-50">
                       <p className="text-sm font-semibold">{topic.title}</p>
-                      <p className="text-xs text-muted-foreground">Ruang: {topic.room?.name || 'Tidak tersedia'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Ruang: {topic.forum?.name || topic.room?.name || 'Tidak tersedia'}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Dibuat oleh {topic.assigned_by?.name || 'Sistem'} • {topic.deadline_at ? `Deadline ${formatDate(topic.deadline_at)}` : 'Tanpa deadline'}
                       </p>

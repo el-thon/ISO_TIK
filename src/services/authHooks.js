@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as authService from './authService'
-import { clearTokens, setTokens, getAccessToken, getRefreshToken } from './api'
+import { clearTokens, setTokens, getAccessToken, getRefreshToken, getAccessExpiresAt } from './api'
 
 /**
  * useLogin - Hook untuk login
@@ -18,7 +18,9 @@ export function useLogin(options = {}) {
       if (data?.access_token) {
         setTokens({ 
           access_token: data.access_token, 
-          refresh_token: data.refresh_token 
+          refresh_token: data.refresh_token,
+          access_expires_at: data.access_expires_at,
+          refresh_expires_at: data.refresh_expires_at,
         })
       }
       
@@ -105,6 +107,8 @@ export function useSsoLogin(options = {}) {
         setTokens({
           access_token: data.access_token,
           refresh_token: data.refresh_token,
+          access_expires_at: data.access_expires_at,
+          refresh_expires_at: data.refresh_expires_at,
         })
       }
 
@@ -131,6 +135,15 @@ export function useSsoLogin(options = {}) {
 
       if (options.onSuccess) options.onSuccess(data)
     },
+    onError: options.onError,
+    onSettled: options.onSettled,
+  })
+}
+
+export function useResendLoginOtp(options = {}) {
+  return useMutation({
+    mutationFn: (payload) => authService.resendLoginOtp(payload),
+    onSuccess: options.onSuccess,
     onError: options.onError,
     onSettled: options.onSettled,
   })
@@ -219,14 +232,29 @@ export function useBootstrapSession(options = {}) {
   useEffect(() => {
     if (!enabled) return
 
-    // Jika sudah punya access token, langsung ready
-    if (getAccessToken()) {
+    const accessToken = getAccessToken()
+    const accessExpiresAt = getAccessExpiresAt()
+
+    const parseExpiry = (value) => {
+      if (!value) return null
+      const parsed = Date.parse(value)
+      return Number.isNaN(parsed) ? null : parsed
+    }
+
+    const isExpiringSoon = (expiresAt, skewMs = 60000) => {
+      const parsed = parseExpiry(expiresAt)
+      if (!parsed) return false
+      return parsed <= Date.now() + skewMs
+    }
+
+    // Jika sudah punya access token dan belum kedaluwarsa, langsung ready
+    if (accessToken && !isExpiringSoon(accessExpiresAt)) {
       setState({ status: 'ready', error: null })
       return
     }
 
     // Jika tidak punya refresh token, langsung ready (akan redirect ke login)
-    const refreshToken = getRefreshToken()
+  const refreshToken = getRefreshToken()
     if (!refreshToken) {
       setState({ status: 'ready', error: null })
       return
