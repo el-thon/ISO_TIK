@@ -21,6 +21,9 @@ export default function TabsBar({ items }) {
           className="px-4 py-3 text-small text-muted-foreground hover:text-navy-hover focus:text-black focus-visible:text-navy-active data-[state=active]:text-navy-active data-[state=active]:font-semibold"
         >
           <div className="flex items-center gap-2">
+            {t.icon ? (
+              <span className="inline-flex items-center justify-center text-muted-foreground">{t.icon}</span>
+            ) : null}
             <span>{t.label}</span>
             {typeof t.count === 'number' && (
               <span className="inline-flex items-center justify-center text-[11px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">{t.count}</span>
