@@ -2,12 +2,14 @@ import React, { useState } from 'react'
 import { FileText } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import Clauses from './Clauses'
+import TopicDocumentMasters from './TopicDocumentMasters'
 
 export default function AdministrationPage() {
   const [tab, setTab] = useState('clauses')
 
   const tabs = [
     { key: 'clauses', label: 'Klausul', Icon: FileText },
+    { key: 'masters', label: 'Master Dokumen', Icon: FileText },
   ]
 
   return (
@@ -41,6 +43,7 @@ export default function AdministrationPage() {
 
         <div>
           {tab === 'clauses' && <Clauses />}
+          {tab === 'masters' && <TopicDocumentMasters />}
         </div>
       </div>
     </MainLayout>
