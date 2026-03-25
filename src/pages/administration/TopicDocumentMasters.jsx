@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import api from '@/services/api'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogTrigger, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 
 function formatDate(d) {
   if (!d) return ''
@@ -9,19 +10,34 @@ function formatDate(d) {
 }
 
 function MastersList({ masters, onActivate, onEdit, onDelete }) {
+  if (!masters || masters.length === 0) {
+    return <div className="text-sm text-muted-foreground">Belum ada master dibuat.</div>
+  }
+
   return (
-    <div className="space-y-3">
-      {masters.map(m => (
-        <div key={m.id} className="p-3 border rounded flex items-center justify-between">
-          <div>
-            <div className="font-medium">{m.document_number || '—'}</div>
-            <div className="text-xs text-muted-foreground">Published: {formatDate(m.published_at)} · Rev: {m.revision_number || '—'}</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="text-sm text-muted-foreground">{m.is_active ? 'Aktif' : 'Tidak aktif'}</div>
-            <button className="text-sm px-2 py-1 border rounded" onClick={() => onActivate(m)}>{m.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>
-            <button className="text-sm px-2 py-1 border rounded" onClick={() => onEdit(m)}>Edit</button>
-            <button className="text-sm px-2 py-1 border rounded text-red-600" onClick={() => onDelete(m)}>Hapus</button>
+    <div className="grid gap-3">
+      {masters.map((m, idx) => (
+        <div
+          key={m.id}
+          className={`p-4 rounded-lg border bg-background shadow-sm animate-in fade-in-0 slide-in-from-bottom-2`}
+          style={{ animationDelay: `${idx * 40}ms` }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3">
+                <div className="text-sm font-semibold truncate">{m.document_number || '—'}</div>
+                {m.is_active && <div className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Aktif</div>}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Tanggal terbit: {formatDate(m.published_at)} · Revisi: {m.revision_number || '—'}</div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => onActivate(m)}>
+                {m.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => onEdit(m)}>Edit</Button>
+              <Button variant="destructive" size="sm" onClick={() => onDelete(m)}>Hapus</Button>
+            </div>
           </div>
         </div>
       ))}
@@ -83,45 +99,55 @@ export default function TopicDocumentMasters() {
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
+    <Card>
+      <CardHeader className="flex items-center justify-between">
+        <CardTitle>Dokumen Header</CardTitle>
         <div>
-          <h2 className="text-heading-3 font-semibold">Master Dokumen Formulir</h2>
-          <p className="text-sm text-muted-foreground">Kelola nomor dokumen, tanggal terbit, dan nomor revisi yang digunakan saat membuat formulir.</p>
+          <Button onClick={openCreate}>Buat Master Baru</Button>
         </div>
-        <div>
-          <button className="px-3 py-2 bg-blue-600 text-white rounded" onClick={openCreate}>Buat Master Baru</button>
-        </div>
-      </div>
+      </CardHeader>
 
-      {loading ? <div>Memuat…</div> : <MastersList masters={masters} onActivate={onActivate} onEdit={onEdit} onDelete={onDelete} />}
+      <CardContent>
+        <div className="mb-4 text-sm text-muted-foreground">Kelola nomor dokumen, tanggal terbit, dan nomor revisi yang akan otomatis terisi saat membuat formulir.</div>
+        {loading ? (
+          <div className="text-center py-6">Memuat…</div>
+        ) : (
+          <MastersList masters={masters} onActivate={onActivate} onEdit={onEdit} onDelete={onDelete} />
+        )}
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent>
-          <form onSubmit={onSubmit} className="space-y-3">
-            <div>
-              <label className="block text-sm">Nomor Dokumen</label>
-              <input className="w-full border rounded p-2" value={form.document_number} onChange={(e)=>setForm({...form, document_number: e.target.value})} required />
-            </div>
-            <div>
-              <label className="block text-sm">Tanggal Terbit</label>
-              <input type="date" className="w-full border rounded p-2" value={form.published_at ? form.published_at.slice(0,10) : ''} onChange={(e)=>setForm({...form, published_at: e.target.value})} />
-            </div>
-            <div>
-              <label className="block text-sm">Nomor Revisi</label>
-              <input className="w-full border rounded p-2" value={form.revision_number} onChange={(e)=>setForm({...form, revision_number: e.target.value})} />
-            </div>
-            <div className="flex items-center gap-3">
-              <input type="checkbox" id="is_active" checked={form.is_active} onChange={(e)=>setForm({...form, is_active: e.target.checked})} />
-              <label htmlFor="is_active" className="text-sm">Set aktif (hanya satu boleh aktif)</label>
-            </div>
-            <div className="flex items-center gap-3 justify-end">
-              <button type="button" className="px-3 py-2 border rounded" onClick={()=>setShowCreate(false)}>Batal</button>
-              <button type="submit" className="px-3 py-2 bg-blue-600 text-white rounded">Simpan</button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{form.id ? 'Edit Master' : 'Buat Master Dokumen'}</DialogTitle>
+              <DialogDescription>Isi informasi header dokumen yang akan digunakan saat membuat formulir.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={onSubmit} className="space-y-3 mt-2">
+              <div>
+                <label className="block text-sm">Nomor Dokumen</label>
+                <input className="w-full border rounded p-2" value={form.document_number} onChange={(e)=>setForm({...form, document_number: e.target.value})} required />
+              </div>
+              <div>
+                <label className="block text-sm">Tanggal Terbit</label>
+                <input type="date" className="w-full border rounded p-2" value={form.published_at ? form.published_at.slice(0,10) : ''} onChange={(e)=>setForm({...form, published_at: e.target.value})} />
+              </div>
+              <div>
+                <label className="block text-sm">Nomor Revisi</label>
+                <input className="w-full border rounded p-2" value={form.revision_number} onChange={(e)=>setForm({...form, revision_number: e.target.value})} />
+              </div>
+              <div className="flex items-center gap-3">
+                <input type="checkbox" id="is_active" checked={form.is_active} onChange={(e)=>setForm({...form, is_active: e.target.checked})} />
+                <label htmlFor="is_active" className="text-sm">Set aktif (hanya satu boleh aktif)</label>
+              </div>
+              <DialogFooter>
+                <div className="flex items-center gap-3 justify-end w-full">
+                  <Button variant="outline" onClick={()=>setShowCreate(false)}>Batal</Button>
+                  <Button type="submit">Simpan</Button>
+                </div>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   )
 }

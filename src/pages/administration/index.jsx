@@ -9,7 +9,7 @@ export default function AdministrationPage() {
 
   const tabs = [
     { key: 'clauses', label: 'Klausul', Icon: FileText },
-    { key: 'masters', label: 'Master Dokumen', Icon: FileText },
+    { key: 'masters', label: 'Dokumen Header', Icon: FileText },
   ]
 
   return (
