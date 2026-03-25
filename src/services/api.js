@@ -82,7 +82,7 @@ const extractTokenMeta = (payload) => {
 
 let refreshPromise = null
 
-const performRefresh = async () => {
+export const performRefresh = async () => {
   const refreshToken = getRefreshToken()
   if (!refreshToken) throw new Error('No refresh token available')
 
@@ -118,6 +118,8 @@ const performRefresh = async () => {
   return refreshPromise
 }
 
+
+// Attach access token if available
 // Attach access token if available
 api.interceptors.request.use(async (config) => {
   let token = getAccessToken()
@@ -214,6 +216,8 @@ api.interceptors.response.use(
     try {
       const newAccess = await performRefresh()
       processQueue(null, newAccess)
+      originalRequest.headers = originalRequest.headers || {}
+      originalRequest.headers.Authorization = `Bearer ${newAccess}`
       return api(originalRequest)
     } catch (refreshErr) {
       clearTokens()

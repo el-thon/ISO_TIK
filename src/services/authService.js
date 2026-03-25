@@ -1,4 +1,4 @@
-import api, { setTokens, clearTokens, getRefreshToken } from './api'
+import api, { setTokens, clearTokens, getRefreshToken, performRefresh } from './api'
 import axios from 'axios'
 
 function extractTokensFromResponse(data) {
@@ -185,41 +185,10 @@ export async function refresh() {
     throw new Error('No refresh token available')
   }
 
-  
   try {
-    const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, null, {
-      headers: { Authorization: `Bearer ${refreshToken}` },
-    })
-
-    const responseData = res.data || {}
-    
-    const { access, refresh: newRefresh } = extractTokensFromResponse(responseData)
-    const { access_expires_at, refresh_expires_at } = extractTokenMetaFromResponse(responseData)
-    
-    if (access) {
-      setTokens({ 
-        access_token: access, 
-        refresh_token: newRefresh,
-        access_expires_at,
-        refresh_expires_at,
-      })
-    }
-    
-    // Extract dan update user data jika ada
-    const user = extractUserFromResponse(responseData)
-    if (user) {
-      localStorage.setItem('user_data', JSON.stringify(user))
-    }
-    
-    return {
-      success: responseData.success || true,
-      access_token: access,
-      refresh_token: newRefresh,
-      access_expires_at,
-      refresh_expires_at,
-      user: user
-    }
-    
+    const newAccess = await performRefresh()
+    // performRefresh already set tokens and authorization header
+    return { success: true, access_token: newAccess }
   } catch (error) {
     clearTokens()
     localStorage.removeItem('user_data')
