@@ -808,6 +808,10 @@ export default function CreateTopic() {
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [documentsError, setDocumentsError] = useState(null)
 
+  // Master document auto-fill state
+  const [masterLoaded, setMasterLoaded] = useState(false)
+  const [masterActive, setMasterActive] = useState(false)
+
   const resolvedForumId = selectedForum || forumFromState || forumFromQuery
 
   useEffect(() => {
@@ -922,6 +926,27 @@ export default function CreateTopic() {
 
   // Load dokumen
   useEffect(() => {
+    // Fetch active TopicDocumentMaster for auto-fill
+    const fetchActiveMaster = async () => {
+      try {
+        const res = await api.get('/topic-document-masters/active')
+        const item = res?.data?.data ?? res?.data ?? null
+        if (item) {
+          if (item.document_number) setDocumentNumber(item.document_number)
+          if (item.published_at) setIssuedDate(item.published_at.slice(0,10))
+          if (item.revision_number) setRevisionNumber(item.revision_number)
+          setMasterActive(!!item.is_active)
+        }
+      } catch (e) {
+        // ignore - master may not exist or fetch may fail
+        console.debug('Active master fetch failed', e?.message || e)
+      } finally {
+        setMasterLoaded(true)
+      }
+    }
+
+    fetchActiveMaster()
+
     const loadDocuments = async () => {
       const forumId = resolvedForumId || ''
       if (!forumId) {
@@ -1213,6 +1238,7 @@ export default function CreateTopic() {
                       value={documentNumber}
                       onChange={(e) => setDocumentNumber(e.target.value)}
                       placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
+                      disabled={masterActive}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1224,6 +1250,7 @@ export default function CreateTopic() {
                         value={issuedDate}
                         onChange={(e) => setIssuedDate(e.target.value)}
                         className="pl-9"
+                        disabled={masterActive}
                       />
                     </div>
                   </div>
@@ -1233,7 +1260,11 @@ export default function CreateTopic() {
                       value={revisionNumber}
                       onChange={(e) => setRevisionNumber(e.target.value)}
                       placeholder="Contoh: 0"
+                      disabled={masterActive}
                     />
+                    {masterActive && (
+                      <p className="text-xs text-muted-foreground mt-1">Terisi otomatis dari master dokumen dan tidak dapat diubah.</p>
+                    )}
                   </div>
                 </div>
               </TabsContent>
