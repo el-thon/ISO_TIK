@@ -1177,6 +1177,11 @@ export default function CreateTopic() {
           </CardHeader>
 
           <CardContent className="p-6">
+            {!masterLoaded ? null : (!activeMaster ? (
+              <div className="mb-4 p-3 border-l-4 border-rose-500 bg-rose-50 text-rose-700 rounded">
+                Tidak ada "Dokumen Header" aktif. Jika ingin mengisi otomatis nomor dokumen, tanggal terbit dan nomor revisi, mintalah administrator membuat/mengaktifkan master pada halaman Administrasi → Dokumen Header.
+              </div>
+            ) : null)}
             {/* Tabs Navigation */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
               <TabsList className="grid w-full grid-cols-3">
