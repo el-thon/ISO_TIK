@@ -1177,11 +1177,7 @@ export default function CreateTopic() {
           </CardHeader>
 
           <CardContent className="p-6">
-            {!masterLoaded ? null : (!activeMaster ? (
-              <div className="mb-4 p-3 border-l-4 border-rose-500 bg-rose-50 text-rose-700 rounded">
-                Tidak ada "Dokumen Header" aktif. Jika ingin mengisi otomatis nomor dokumen, tanggal terbit dan nomor revisi, mintalah administrator membuat/mengaktifkan master pada halaman Administrasi → Dokumen Header.
-              </div>
-            ) : null)}
+            {/* When an active master exists the fields below are disabled. If the master exists but a specific field is empty, show inline alert next to that field. */}
             {/* Tabs Navigation */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
               <TabsList className="grid w-full grid-cols-3">
@@ -1255,6 +1251,9 @@ export default function CreateTopic() {
                       placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
                       disabled={masterActive}
                     />
+                    {masterActive && activeMaster && !activeMaster.document_number && (
+                      <p className="text-xs text-destructive mt-1">Data master belum memiliki nomor dokumen.</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">Tanggal Terbit</Label>
@@ -1268,6 +1267,9 @@ export default function CreateTopic() {
                         disabled={masterActive}
                       />
                     </div>
+                    {masterActive && activeMaster && !activeMaster.published_at && (
+                      <p className="text-xs text-destructive mt-1">Data master belum memiliki tanggal terbit.</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">No. Revisi</Label>
@@ -1277,7 +1279,10 @@ export default function CreateTopic() {
                       placeholder="Contoh: 0"
                       disabled={masterActive}
                     />
-                    {masterActive && (
+                    {masterActive && activeMaster && !activeMaster.revision_number && (
+                      <p className="text-xs text-destructive mt-1">Data master belum memiliki nomor revisi.</p>
+                    )}
+                    {masterActive && activeMaster && (activeMaster.revision_number || activeMaster.document_number || activeMaster.published_at) && (
                       <p className="text-xs text-muted-foreground mt-1">Terisi otomatis dari master dokumen dan tidak dapat diubah.</p>
                     )}
                   </div>
