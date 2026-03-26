@@ -811,6 +811,7 @@ export default function CreateTopic() {
   // Master document auto-fill state
   const [masterLoaded, setMasterLoaded] = useState(false)
   const [masterActive, setMasterActive] = useState(false)
+  const [activeMaster, setActiveMaster] = useState(null)
 
   const resolvedForumId = selectedForum || forumFromState || forumFromQuery
 
@@ -932,10 +933,14 @@ export default function CreateTopic() {
         const res = await api.get('/topic-document-masters/active')
         const item = res?.data?.data ?? res?.data ?? null
         if (item) {
+          setActiveMaster(item)
           if (item.document_number) setDocumentNumber(item.document_number)
           if (item.published_at) setIssuedDate(item.published_at.slice(0,10))
           if (item.revision_number) setRevisionNumber(item.revision_number)
           setMasterActive(!!item.is_active)
+        } else {
+          setActiveMaster(null)
+          setMasterActive(false)
         }
       } catch (e) {
         // ignore - master may not exist or fetch may fail
@@ -1052,6 +1057,11 @@ export default function CreateTopic() {
         status: mode === 'publish' ? 'in_review' : 'draft'
       }
             
+      // If an active master exists, include its id as document_master_id so backend can set the FK
+      if (activeMaster && activeMaster.id) {
+        topicPayload.document_master_id = activeMaster.id
+      }
+
       const created = await createTopic.mutateAsync({ 
         forumId: normalizeId(chosenForum), 
         payload: topicPayload
