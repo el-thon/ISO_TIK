@@ -1,24 +1,12 @@
 import api from './api'
-
-const DEFAULT_PAGINATION = {
-	current_page: 1,
-	per_page: 15,
-	total: 0,
-	last_page: 1,
-	from: null,
-	to: null,
-}
-
-const ensureArray = (value) => (Array.isArray(value) ? value : value ? [value] : [])
-
-const unwrap = (response) => response?.data?.data ?? response?.data ?? null
+import { ensureArray, mergePagination, unwrapApiPayload } from './serviceUtils'
 
 export async function listRooms(params = {}) {
 	const res = await api.get('/forums', { params })
-	const payload = unwrap(res) ?? {}
+	const payload = unwrapApiPayload(res) ?? {}
 	return {
 		rooms: ensureArray(payload.forums ?? payload.rooms ?? payload.items ?? []),
-		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+		pagination: mergePagination(payload.pagination),
 		metadata: payload.metadata ?? null,
 	}
 }
@@ -26,13 +14,13 @@ export async function listRooms(params = {}) {
 export async function getRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.get(`/forums/${roomId}`)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function updateRoom(roomId, payload) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.put(`/forums/${roomId}`, payload)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function deleteRoom(roomId) {
@@ -43,37 +31,37 @@ export async function deleteRoom(roomId) {
 
 export async function createRoom(payload) {
 	const res = await api.post('/forums', payload)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function lockRoom(roomId, payload = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/lock`, payload)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function unlockRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/unlock`)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function archiveRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/archive`)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function restoreRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/restore`)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function listParticipants(roomId, params = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.get(`/forums/${roomId}/participants`, { params })
-	const payload = unwrap(res) ?? {}
+	const payload = unwrapApiPayload(res) ?? {}
 	const isUuidLike = (value) => {
 		if (!value) return false
 		const raw = String(value).trim()
@@ -106,20 +94,20 @@ export async function listParticipants(roomId, params = {}) {
 					participant_id: resolvedParticipantId ?? participant?.participant_id,
 				}
 			}),
-		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+		pagination: mergePagination(payload.pagination),
 	}
 }
 
 export async function addParticipant(roomId, payload) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/participants`, payload)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function updateParticipant(roomId, participantId, payload) {
 	if (!roomId || !participantId) throw new Error('roomId and participantId are required')
 	const res = await api.put(`/forums/${roomId}/participants/${participantId}`, payload)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function removeParticipant(roomId, participantId) {
@@ -131,27 +119,27 @@ export async function removeParticipant(roomId, participantId) {
 export async function leaveRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/leave`)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function listTopics(roomId, params = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.get(`/forums/${roomId}/topics`, { params })
-	const payload = unwrap(res) ?? {}
+	const payload = unwrapApiPayload(res) ?? {}
 	return {
 		topics: ensureArray(payload.topics ?? []),
-		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+		pagination: mergePagination(payload.pagination),
 	}
 }
 
 export async function joinForumByCode(payload) {
 	const res = await api.post('/forums/join', payload)
-	return unwrap(res) ?? {}
+	return unwrapApiPayload(res) ?? {}
 }
 
 export async function listAvailableUsers(params = {}) {
 	const res = await api.get(`/users`, { params })
-	const payload = unwrap(res) ?? {}
+	const payload = unwrapApiPayload(res) ?? {}
 	
 	// Handle user data with proper field extraction
 	const users = ensureArray(payload.users ?? payload.items ?? []).map((user) => {
@@ -168,7 +156,7 @@ export async function listAvailableUsers(params = {}) {
 	
 	return {
 		users,
-		pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+		pagination: mergePagination(payload.pagination),
 	}
 }
 

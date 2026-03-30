@@ -1,33 +1,5 @@
 import api from './api'
-
-const DEFAULT_PAGINATION = {
-  current_page: 1,
-  per_page: 15,
-  total: 0,
-  last_page: 1,
-  from: null,
-  to: null,
-}
-
-const ensureArray = (value) => {
-  if (Array.isArray(value)) return value
-  if (value == null) return []
-  return [value]
-}
-
-const unwrap = (response) => {
-  const successPayload = response?.data?.data
-  if (successPayload && typeof successPayload === 'object') {
-    return successPayload
-  }
-
-  const messagePayload = response?.data?.message
-  if (messagePayload && typeof messagePayload === 'object') {
-    return messagePayload
-  }
-
-  return response?.data ?? {}
-}
+import { ensureArray, mergePagination, unwrapApiPayload } from './serviceUtils'
 
 const normalizeStorageUrl = (url) => {
   if (!url || typeof url !== 'string') return null
@@ -43,24 +15,24 @@ const normalizeStorageUrl = (url) => {
 
 export async function listTopics(params = {}) {
   const res = await api.get('/topics', { params })
-  const payload = unwrap(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
   return {
     topics: ensureArray(payload.topics ?? payload.items ?? []),
-    pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+    pagination: mergePagination(payload.pagination),
   }
 }
 
 export async function getTopic(topicId) {
   if (!topicId) throw new Error('topicId is required')
   const res = await api.get(`/topics/${topicId}`)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function getTopicInputItems(topicId, params = {}) {
   if (!topicId) throw new Error('topicId is required to list input items')
   
   const res = await api.get(`/topics/${topicId}/input-items`, { params })
-  const payload = unwrap(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
   const items = ensureArray(payload.items ?? payload.input_items ?? [])
   
   const processedItems = items.map((item, index) => {
@@ -205,7 +177,7 @@ export async function createInputItem(topicId, payload = {}) {
   if (!payload?.type) throw new Error('type is required to create an input item')
 
   const res = await api.post(`/topics/${topicId}/input-items`, payload)
-  const data = unwrap(res) ?? {}
+  const data = unwrapApiPayload(res) ?? {}
 
   // Some responses wrap the item under `item`, others return the whole payload
   const item = data.item || data
@@ -216,7 +188,7 @@ export async function createInputItem(topicId, payload = {}) {
 export async function getTopicLabels(topicId) {
   if (!topicId) throw new Error('topicId is required to list labels')
   const res = await api.get(`/topics/${topicId}/labels`)
-  const payload = unwrap(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
   return {
     labels: ensureArray(payload.labels ?? []),
   }
@@ -226,14 +198,14 @@ export async function attachTopicLabel(topicId, labelId) {
   if (!topicId) throw new Error('topicId is required to attach label')
   if (!labelId) throw new Error('labelId is required to attach label')
   const res = await api.post(`/topics/${topicId}/labels`, { label_id: labelId })
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function detachTopicLabel(topicId, labelId) {
   if (!topicId) throw new Error('topicId is required to detach label')
   if (!labelId) throw new Error('labelId is required to detach label')
   const res = await api.delete(`/topics/${topicId}/labels/${labelId}`)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function createTopic(forumId, payload = {}) {
@@ -255,7 +227,7 @@ export async function createTopic(forumId, payload = {}) {
 export async function updateTopic(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required when updating a topic')
   const res = await api.put(`/topics/${topicId}`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function uploadInputItemAttachment(inputItemId, file, label) {
@@ -270,7 +242,7 @@ export async function uploadInputItemAttachment(inputItemId, file, label) {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 
-  const result = unwrap(res) ?? {};
+  const result = unwrapApiPayload(res) ?? {};
 
   const attachment = result.attachment || result.attachments?.[0] || result;
   const downloadUrl =
@@ -293,7 +265,7 @@ export async function updateInputItem(inputItemId, payload = {}) {
   if (!inputItemId) throw new Error('inputItemId is required to update input item')
 
   const res = await api.put(`/input-items/${inputItemId}`, payload)
-  const data = unwrap(res) ?? {}
+  const data = unwrapApiPayload(res) ?? {}
   const item = data.item || data
   return item
 }
@@ -307,65 +279,65 @@ export async function deleteTopic(topicId, params = {}) {
 export async function publishTopic(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to publish')
   const res = await api.post(`/topics/${topicId}/publish`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function approveTopic(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to approve')
   const res = await api.post(`/topics/${topicId}/approve`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function requestChanges(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to request changes')
   const res = await api.post(`/topics/${topicId}/request-changes`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function closeTopic(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to close')
   const res = await api.post(`/topics/${topicId}/close`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function reopenTopic(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to reopen')
   const res = await api.post(`/topics/${topicId}/reopen`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function restoreTopic(topicId) {
   if (!topicId) throw new Error('topicId is required to restore')
   const res = await api.post(`/topics/${topicId}/restore`)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function freezeTopic(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to freeze')
   const res = await api.post(`/topics/${topicId}/freeze`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function unfreezeTopic(topicId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to unfreeze')
   const res = await api.post(`/topics/${topicId}/unfreeze`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function getTopicTimeline(topicId, params = {}) {
   if (!topicId) throw new Error('topicId is required to get timeline')
   const res = await api.get(`/topics/${topicId}/timeline`, { params })
-  const payload = unwrap(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
   return ensureArray(payload.events ?? [])
 }
 
 export async function getTopicReviews(topicId, params = {}) {
   if (!topicId) throw new Error('topicId is required to get reviews')
   const res = await api.get(`/topics/${topicId}/reviews`, { params })
-  const payload = unwrap(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
   return {
     reviews: ensureArray(payload.reviews ?? payload.items ?? payload.data ?? []),
-    pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+    pagination: mergePagination(payload.pagination),
   }
 }
 
@@ -394,7 +366,7 @@ export async function getCommentById(topicId, commentId, options = {}) {
 
   while (page <= maxPages) {
     const res = await api.get(`/topics/${topicId}/comments`, { params: { page, per_page: perPage } })
-    const payload = unwrap(res) ?? {}
+    const payload = unwrapApiPayload(res) ?? {}
     const comments = ensureArray(payload.comments ?? payload.reviews ?? payload.items ?? [])
 
     const found = findInThread(comments, commentId)
@@ -418,19 +390,19 @@ export async function createTopicReview(topicId, payload = {}) {
     throw new Error('finding_type and finding_description are required to create review')
   }
   const res = await api.post(`/topics/${topicId}/reviews`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function updateTopicReview(topicId, reviewId, payload = {}) {
   if (!topicId || !reviewId) throw new Error('topicId and reviewId are required to update review')
   const res = await api.put(`/topics/${topicId}/reviews/${reviewId}`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function deleteTopicReview(topicId, reviewId, payload = {}) {
   if (!topicId || !reviewId) throw new Error('topicId and reviewId are required to delete review')
   const res = await api.delete(`/topics/${topicId}/reviews/${reviewId}`, { data: payload })
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 // Reply to a topic comment
@@ -439,7 +411,7 @@ export async function replyToComment(commentId, payload = {}) {
   const body = payload?.comment ?? payload?.body
   if (!body) throw new Error('comment body is required to reply')
   const res = await api.post(`/comments/${commentId}/reply`, { body })
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 // Upload attachment for a comment
@@ -455,7 +427,7 @@ export async function uploadCommentAttachment(commentId, file, label) {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 
-  const result = unwrap(res) ?? {}
+  const result = unwrapApiPayload(res) ?? {}
   const attachment = result.attachment || result.attachments?.[0] || result
   const downloadUrl =
     attachment?.download_url ||
@@ -476,7 +448,7 @@ export async function uploadCommentAttachment(commentId, file, label) {
 export async function getAttachment(attachmentId) {
   if (!attachmentId) throw new Error('attachmentId is required to get attachment')
   const res = await api.get(`/attachments/${attachmentId}`)
-  const attachment = unwrap(res) ?? {}
+  const attachment = unwrapApiPayload(res) ?? {}
   
   // Normalize attachment data - extract original filename
   let normalizedAttachment = attachment
@@ -502,7 +474,7 @@ export async function getAttachment(attachmentId) {
 export async function getAttachmentDownloadInfo(attachmentId) {
   if (!attachmentId) throw new Error('attachmentId is required to get download info')
   const res = await api.get(`/attachments/${attachmentId}/download-info`)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export const getAttachmentDownloadUrl = (attachmentId) => {
@@ -565,10 +537,10 @@ export async function downloadAttachment(attachmentId) {
 export async function getTopicVersions(topicId, params = {}) {
   if (!topicId) throw new Error('topicId is required to get versions')
   const res = await api.get(`/topics/${topicId}/versions`, { params })
-  const payload = unwrap(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
   return {
     versions: ensureArray(payload.versions ?? []),
-    pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+    pagination: mergePagination(payload.pagination),
   }
 }
 
@@ -576,14 +548,14 @@ export async function getTopicVersion(topicId, versionId) {
   if (!topicId) throw new Error('topicId is required to get version detail')
   if (!versionId) throw new Error('versionId is required to get version detail')
   const res = await api.get(`/topics/${topicId}/versions/${versionId}`)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export async function revertTopicVersion(topicId, versionId, payload = {}) {
   if (!topicId) throw new Error('topicId is required to revert version')
   if (!versionId) throw new Error('versionId is required to revert version')
   const res = await api.post(`/topics/${topicId}/versions/${versionId}/revert`, payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 // Helper function to manually refresh input items cache
@@ -603,16 +575,16 @@ export const refreshTopicInputItems = async (topicId, queryClient) => {
 export async function createAttachment(payload) {
   if (!payload) throw new Error('payload is required to create attachment')
   const res = await api.post('/attachments', payload)
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 // List all attachments
 export async function listAttachments(params = {}) {
   const res = await api.get('/attachments', { params })
-  const payload = unwrap(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
   return {
     attachments: ensureArray(payload.attachments ?? payload.items ?? []),
-    pagination: { ...DEFAULT_PAGINATION, ...(payload.pagination ?? {}) },
+    pagination: mergePagination(payload.pagination),
   }
 }
 
@@ -631,7 +603,7 @@ export async function uploadAttachment(file, payload = {}) {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 
-  return unwrap(res) ?? {}
+  return unwrapApiPayload(res) ?? {}
 }
 
 export default {
