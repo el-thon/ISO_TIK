@@ -119,215 +119,49 @@ const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = f
   )
 }
 
-const safeGetDate = (item) => {
-  const d =
-    item?.created_at ||
-    item?.createdAt ||
-    item?.createdAtDate ||
-    item?.created ||
-    null
-
-  if (!d) return null
-
-  const parsed = new Date(d)
-  return !Number.isNaN(parsed.getTime()) ? parsed : null
-}
-
-const getWeeksInCurrentMonth = () => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
-
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-
-  const weeks = []
-  const firstDayOfWeek = firstDay.getDay()
-  const daysToFirstMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
-
-  let currentWeekStart = new Date(firstDay)
-  currentWeekStart.setDate(currentWeekStart.getDate() - daysToFirstMonday)
-
-  let weekNumber = 1
-  while (currentWeekStart <= lastDay && weeks.length < 4) {
-    const weekEnd = new Date(currentWeekStart)
-    weekEnd.setDate(weekEnd.getDate() + 6)
-
-    const weekStartInMonth = new Date(Math.max(currentWeekStart, firstDay))
-    const weekEndInMonth = new Date(Math.min(weekEnd, lastDay))
-    const daysInMonth = Math.max(
-      0,
-      Math.ceil((weekEndInMonth - weekStartInMonth) / (1000 * 60 * 60 * 24)) + 1
-    )
-
-    if (daysInMonth >= 3) {
-      weeks.push({
-        start: new Date(currentWeekStart),
-        end: new Date(weekEnd),
-        label: `Minggu ${weekNumber}`,
-      })
-      weekNumber++
-    }
-
-    currentWeekStart.setDate(currentWeekStart.getDate() + 7)
-  }
-
-  return weeks
-}
-
-const getMonths = (monthsCount) => {
-  const now = new Date()
-  const months = []
-
-  for (let i = monthsCount - 1; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const label = date.toLocaleString('id-ID', { month: 'short', year: 'numeric' })
-    months.push({ start: date, label })
-  }
-
-  return months
-}
-
-const OverviewStatsChart = ({ users = [], periods = [], masters = [] }) => {
-  const [selectedRange, setSelectedRange] = useState('3')
-  const [selectedMetric, setSelectedMetric] = useState('users')
-
-  const buckets = useMemo(() => {
-    if (selectedRange === '1') return getWeeksInCurrentMonth()
-    return getMonths(parseInt(selectedRange, 10))
-  }, [selectedRange])
-
+const OverviewStatsChart = ({ statsCards = [] }) => {
   const chartData = useMemo(() => {
-    const usersList = ensureArray(users)
-    const periodsList = ensureArray(periods)
-    const mastersList = ensureArray(masters)
+    const usersCard = statsCards.find((card) => card.title === 'Total Users')
+    const periodsCard = statsCards.find((card) => card.title === 'Periode')
+    const dataMasterCard = statsCards.find((card) => card.title === 'Data Master')
 
-    const isInBucket = (date, bucket) => {
-      if (!date) return false
-      if (selectedRange === '1') {
-        return date >= bucket.start && date <= bucket.end
-      }
-      return (
-        date.getFullYear() === bucket.start.getFullYear() &&
-        date.getMonth() === bucket.start.getMonth()
-      )
+    const findDetailValue = (card, label) => {
+      const found = (card?.details || []).find((detail) => detail.label === label)
+      return Number(found?.value || 0)
     }
 
-    return buckets.map((bucket) => {
-      const bucketUsers = usersList.filter((user) => isInBucket(safeGetDate(user), bucket))
-      const usersActive = bucketUsers.filter(
-        (user) => user?.status === 'active' || user?.status === 'activated'
-      ).length
-      const usersInactive = bucketUsers.length - usersActive
-
-      const bucketPeriods = periodsList.filter((period) => isInBucket(safeGetDate(period), bucket))
-      const childForumTotal = bucketPeriods.reduce(
-        (sum, period) => sum + Number(period?.forums_count || 0),
-        0
-      )
-
-      const bucketMasters = mastersList.filter((master) => isInBucket(safeGetDate(master), bucket))
-      const mastersActive = bucketMasters.filter((master) => Boolean(master?.is_active)).length
-      const mastersInactive = bucketMasters.length - mastersActive
-
-      return {
-        name: bucket.label,
-        usersTotal: bucketUsers.length,
-        usersActive,
-        usersInactive,
-        periodsTotal: bucketPeriods.length,
-        childForumTotal,
-        mastersTotal: bucketMasters.length,
-        mastersActive,
-        mastersInactive,
-      }
-    })
-  }, [users, periods, masters, buckets, selectedRange])
-
-  const metricLabels = {
-    users: 'Total users per periode (aktif + non-aktif)',
-    periods: 'Total periode & total child forum per periode waktu',
-    masters: 'Total data master per periode (aktif + non-aktif)',
-  }
-
-  const renderMetricSeries = () => {
-    if (selectedMetric === 'users') {
-      return (
-        <>
-          <Bar dataKey="usersActive" stackId="users" fill="#06b6d4" name="Users Aktif" />
-          <Bar dataKey="usersInactive" stackId="users" fill="#9ca3af" name="Users Non-aktif" />
-          <Line
-            type="monotone"
-            dataKey="usersTotal"
-            name="Total Users"
-            stroke="#0e7490"
-            strokeWidth={2.5}
-            dot={{ r: 4 }}
-          />
-        </>
-      )
-    }
-
-    if (selectedMetric === 'periods') {
-      return (
-        <>
-          <Bar dataKey="periodsTotal" fill="#7c3aed" name="Total Periode" />
-          <Bar dataKey="childForumTotal" fill="#c084fc" name="Total Child Forum" />
-        </>
-      )
-    }
-
-    return (
-      <>
-        <Bar dataKey="mastersActive" stackId="masters" fill="#f97316" name="Master Aktif" />
-        <Bar dataKey="mastersInactive" stackId="masters" fill="#9a3412" name="Master Non-aktif" />
-        <Line
-          type="monotone"
-          dataKey="mastersTotal"
-          name="Total Data Master"
-          stroke="#ea580c"
-          strokeWidth={2.5}
-          dot={{ r: 4 }}
-        />
-      </>
-    )
-  }
+    return [
+      {
+        name: 'Total',
+        Users: Number(usersCard?.value || 0),
+        Periods: Number(periodsCard?.value || 0),
+        'Data Master': Number(dataMasterCard?.value || 0),
+      },
+      {
+        name: 'Detail 1',
+        Users: findDetailValue(usersCard, 'Pengguna Aktif'),
+        Periods: findDetailValue(periodsCard, 'Total Child Forum'),
+        'Data Master': findDetailValue(dataMasterCard, 'Aktif'),
+      },
+      {
+        name: 'Detail 2',
+        Users: findDetailValue(usersCard, 'Pengguna Non-aktif'),
+        Periods: 0,
+        'Data Master': findDetailValue(dataMasterCard, 'Nonaktif'),
+      },
+    ]
+  }, [statsCards])
 
   return (
     <Card className="border border-gray-200">
-      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <CardHeader>
         <div>
           <CardTitle className="text-md font-semibold">
-            Overview Statistik Berdasarkan Periode Waktu
+            Overview Pengguna / Periode / Data Master (Sinkron dengan Kartu)
           </CardTitle>
           <p className="text-sm text-gray-500 mt-1">
-            Gunakan filter untuk melihat breakdown users, periode + child forum, dan data master.
+            Nilai line chart mengambil data yang sama persis seperti kartu ringkasan di bagian atas.
           </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Select value={selectedMetric} onValueChange={setSelectedMetric}>
-            <SelectTrigger className="w-64">
-              <SelectValue placeholder="Pilih metric" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="users">Users</SelectItem>
-              <SelectItem value="periods">Periode & Child Forum</SelectItem>
-              <SelectItem value="masters">Data Master</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={selectedRange} onValueChange={setSelectedRange}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Pilih periode" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">1 Bulan</SelectItem>
-              <SelectItem value="3">3 Bulan</SelectItem>
-              <SelectItem value="6">6 Bulan</SelectItem>
-              <SelectItem value="12">12 Bulan</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </CardHeader>
 
@@ -337,15 +171,15 @@ const OverviewStatsChart = ({ users = [], periods = [], masters = [] }) => {
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
               data={chartData}
-              margin={{ top: 10, right: 20, left: 10, bottom: selectedRange === '1' ? 20 : 45 }}
+              margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis
                 dataKey="name"
                 tick={{ fill: '#374151', fontSize: 12 }}
-                angle={selectedRange === '1' ? 0 : -45}
-                textAnchor={selectedRange === '1' ? 'middle' : 'end'}
-                height={selectedRange === '1' ? 40 : 60}
+                angle={0}
+                textAnchor="middle"
+                height={40}
               />
               <YAxis tick={{ fill: '#374151', fontSize: 12 }} allowDecimals={false} />
               <Tooltip />
@@ -581,7 +415,6 @@ const PeriodChildForumChart = ({ periods = [] }) => {
 
 export default function Dashboard() {
   const {
-    usersData,
     userStats,
     statsData,
     periodsArray,
@@ -674,11 +507,7 @@ export default function Dashboard() {
         </div>
 
         <div className="mb-6">
-          <OverviewStatsChart
-            users={usersData}
-            periods={periodsArray}
-            masters={documentMasterArray}
-          />
+          <OverviewStatsChart statsCards={statsCards} />
         </div>
 
         <div className="mb-6">
