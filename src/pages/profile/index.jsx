@@ -3,7 +3,7 @@ import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Edit3, User, Briefcase, Shield, FileText, Upload, Trash2, RefreshCcw } from 'lucide-react'
+import { User, Briefcase, Shield, FileText, Upload, Trash2, RefreshCcw } from 'lucide-react'
 import Overview from './Overview'
 import PersonalData from './PersonalData'
 import Employment from './Employment'
@@ -11,6 +11,7 @@ import Security from './Security'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDeleteProfilePhoto, useProfile, useUploadProfilePhoto } from '@/services/profileHooks'
 
+// ============ CONFIGURATION ============
 const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
 const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?.*$/, '') : ''
 const proxyTarget = (import.meta.env.VITE_PROXY_TARGET || '').trim()
@@ -20,31 +21,94 @@ const runtimeFallback = typeof window !== 'undefined' ? window.location.origin :
 const STORAGE_BASE = (explicitStorageBase || apiOrigin || proxyTarget || (import.meta.env.DEV ? 'http://localhost:8000' : runtimeFallback)).replace(/\/$/, '')
 
 const PHOTO_OVERRIDE_KEY = 'iso_tik_profile_photo_override'
+const PHOTO_VERSION_KEY = 'iso_tik_photo_version'
 
-const resolvePhotoUrl = (path) => {
+/**
+ * Convert stored path to full URL
+ * Handles various path formats:
+ * - Full URL: http://localhost:8000/storage/...
+ * - Absolute server path: /mnt/windows/.../public/storage/...
+ * - Relative path: profile-photos/xxx/xxx.jpg
+ */
+const resolvePhotoUrl = (path, bypassCache = false) => {
   if (!path) return null
   
-  if (path.startsWith('http')) {
-    // Cache busting untuk mencegah browser menggunakan cached image
-    return `${path}${path.includes('?') ? '&' : '?'}_=${Date.now()}`
+  // Get timestamp for cache busting
+  let timestamp = Date.now()
+  if (!bypassCache) {
+    try {
+      const storedVersion = localStorage.getItem(PHOTO_VERSION_KEY)
+      if (storedVersion) {
+        timestamp = storedVersion
+      }
+    } catch {
+      // ignore
+    }
   }
   
-  const base = STORAGE_BASE
-  if (!base) {
-    return path.startsWith('/') ? `${path}?_=${Date.now()}` : `/${path}?_=${Date.now()}`
+  // Case 1: Already a full URL (http:// or https://)
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return `${path}${path.includes('?') ? '&' : '?'}_t=${timestamp}`
   }
   
-  // Tambahkan timestamp untuk cache busting
-  const separator = path.includes('?') ? '&' : '?'
-  return `${base}${path.startsWith('/') ? path : `/${path}`}${separator}_=${Date.now()}`
+  // Case 2: Absolute server path (Linux/macOS/Windows)
+  const isAbsolutePath = path.startsWith('/mnt/') || 
+                         path.startsWith('/home/') || 
+                         path.startsWith('C:/') || 
+                         path.startsWith('D:/') ||
+                         path.startsWith('/Users/')
+  
+  if (isAbsolutePath) {
+    // Extract relative path after 'public/storage/'
+    const storageIndex = path.indexOf('public/storage/')
+    if (storageIndex !== -1) {
+      const relativePath = path.substring(storageIndex + 'public/storage/'.length)
+      const base = STORAGE_BASE
+      const fullUrl = `${base}/storage/${relativePath}`
+      return `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}_t=${timestamp}`
+    }
+    // Fallback: try to extract filename from absolute path
+    const parts = path.split('/')
+    const filename = parts[parts.length - 1]
+    const folder = parts[parts.length - 2]
+    if (filename && folder) {
+      const fullUrl = `${STORAGE_BASE}/storage/profile-photos/${folder}/${filename}`
+      return `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}_t=${timestamp}`
+    }
+  }
+  
+  // Case 3: Relative path (profile-photos/xxx/xxx.jpg)
+  // Remove leading slash if exists
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path
+  
+  // Build full URL
+  let fullUrl
+  if (cleanPath.startsWith('storage/')) {
+    fullUrl = `${STORAGE_BASE}/${cleanPath}`
+  } else if (cleanPath.startsWith('profile-photos/')) {
+    fullUrl = `${STORAGE_BASE}/storage/${cleanPath}`
+  } else {
+    fullUrl = `${STORAGE_BASE}/storage/${cleanPath}`
+  }
+  
+  // Add cache busting
+  return `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}_t=${timestamp}`
 }
 
+/**
+ * Extract photo path from API response
+ * Handles different response structures
+ */
 const extractPhotoPath = (payload) => {
   if (!payload) return null
+  
+  // Try different possible locations of photo_url
   if (payload.photo_url) return payload.photo_url
-  if (payload.profile && payload.profile.photo_url) return payload.profile.photo_url
+  if (payload.profile?.photo_url) return payload.profile.photo_url
   if (payload.data?.photo_url) return payload.data.photo_url
   if (payload.data?.profile?.photo_url) return payload.data.profile.photo_url
+  if (payload.user?.photo_url) return payload.user.photo_url
+  
   return null
 }
 
@@ -64,35 +128,66 @@ export default function ProfilePage() {
   const navigate = useNavigate()
   const fileInputRef = useRef(null)
   const previewUrlRef = useRef(null)
-  const pendingServerPhotoRef = useRef(null)
   const [photoMessage, setPhotoMessage] = useState(null)
   const [avatarError, setAvatarError] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState(null)
   const [photoOverride, setPhotoOverride] = useState(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [photoVersion, setPhotoVersion] = useState(() => {
+    try {
+      return localStorage.getItem(PHOTO_VERSION_KEY) || Date.now().toString()
+    } catch {
+      return Date.now().toString()
+    }
+  })
 
   const { data: profileData, isLoading, isError, refetch } = useProfile()
+  
+  const updatePhotoVersion = () => {
+    const newVersion = Date.now().toString()
+    setPhotoVersion(newVersion)
+    try {
+      localStorage.setItem(PHOTO_VERSION_KEY, newVersion)
+    } catch {
+      // ignore
+    }
+  }
+  
   const uploadPhotoMutation = useUploadProfilePhoto({
     onSuccess: (data) => {
-      const uploadedPath = extractPhotoPath(data)
+      const uploadedPath = data?.photo_url || data?.data?.photo_url
+      
       if (uploadedPath) {
         setPhotoOverride(uploadedPath)
+        updatePhotoVersion()
         try {
           localStorage.setItem(PHOTO_OVERRIDE_KEY, uploadedPath)
         } catch {
-          // ignore storage errors
+          // ignore
         }
       }
       setPhotoMessage('Foto profil berhasil diperbarui')
-      // Set timeout untuk memberi waktu server memproses file
+      
+      setTimeout(() => {
+        setPhotoMessage(null)
+      }, 3000)
+      
       setTimeout(() => {
         refetch()
+        setTimeout(() => {
+          resetPreview()
+        }, 500)
       }, 1000)
     },
     onError: (error) => {
       const message = error?.response?.data?.message || 'Gagal mengunggah foto'
       setPhotoMessage(message)
       setIsUploading(false)
+      resetPreview()
+      
+      setTimeout(() => {
+        setPhotoMessage(null)
+      }, 3000)
     },
   })
   
@@ -100,16 +195,26 @@ export default function ProfilePage() {
     onSuccess: () => {
       setPhotoMessage('Foto profil dihapus')
       setPhotoOverride(null)
+      updatePhotoVersion()
       try {
         localStorage.removeItem(PHOTO_OVERRIDE_KEY)
       } catch {
-        // ignore storage errors
+        // ignore
       }
       refetch()
+      resetPreview()
+      
+      setTimeout(() => {
+        setPhotoMessage(null)
+      }, 3000)
     },
     onError: (error) => {
       const message = error?.response?.data?.message || 'Gagal menghapus foto'
       setPhotoMessage(message)
+      
+      setTimeout(() => {
+        setPhotoMessage(null)
+      }, 3000)
     },
   })
 
@@ -128,34 +233,27 @@ export default function ProfilePage() {
     }
   }, [location.pathname, location.search, navigate])
 
-  const currentPhotoPath = extractPhotoPath(profileData)
-  const resolvedPhoto = resolvePhotoUrl(currentPhotoPath)
-  const resolvedOverride = resolvePhotoUrl(photoOverride)
+  // Extract photo path from profile data
+  const currentPhotoPath = useMemo(() => {
+    if (!profileData) return null
+    return extractPhotoPath(profileData)
+  }, [profileData])
   
-  // Urutan prioritas: avatarPreview > photoOverride (local) > resolvedPhoto (API)
-  const avatarSrc = avatarPreview || resolvedOverride || resolvedPhoto
+  // Build avatar source with proper priority
+  const avatarSrc = useMemo(() => {
+    // 1. Preview lokal (saat upload)
+    if (avatarPreview) return avatarPreview
+    
+    // 2. Photo override (setelah upload sukses)
+    if (photoOverride) return resolvePhotoUrl(photoOverride, true)
+    
+    // 3. Photo dari server
+    if (currentPhotoPath) return resolvePhotoUrl(currentPhotoPath, false)
+    
+    return null
+  }, [avatarPreview, photoOverride, currentPhotoPath, photoVersion])
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(PHOTO_OVERRIDE_KEY)
-      if (stored) {
-        setPhotoOverride(stored)
-      }
-    } catch {
-      // ignore storage errors
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!currentPhotoPath) return
-    setPhotoOverride(null)
-    try {
-      localStorage.removeItem(PHOTO_OVERRIDE_KEY)
-    } catch {
-      // ignore storage errors
-    }
-  }, [currentPhotoPath])
-
+  // Compute display name
   const displayName = useMemo(() => {
     return (
       profileData?.profile?.full_name ||
@@ -165,20 +263,40 @@ export default function ProfilePage() {
     )
   }, [profileData])
 
-  const faculty =
-    profileData?.employment?.faculty ||
-    profileData?.employment?.department ||
-    profileData?.profile?.department ||
-    'Unknown unit'
+  // Compute faculty
+  const faculty = useMemo(() => {
+    return (
+      profileData?.employment?.faculty ||
+      profileData?.employment?.department ||
+      profileData?.profile?.department ||
+      'Unknown unit'
+    )
+  }, [profileData])
 
-  // Reset error ketika source berubah
+  // Load photo override from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PHOTO_OVERRIDE_KEY)
+      const storedVersion = localStorage.getItem(PHOTO_VERSION_KEY)
+      if (stored) {
+        setPhotoOverride(stored)
+      }
+      if (storedVersion) {
+        setPhotoVersion(storedVersion)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  // Reset error when source changes
   useEffect(() => {
     if (avatarSrc) {
       setAvatarError(false)
     }
   }, [avatarSrc])
 
-  // Cleanup object URL
+  // Cleanup object URL on unmount
   useEffect(() => {
     return () => {
       if (previewUrlRef.current) {
@@ -195,7 +313,15 @@ export default function ProfilePage() {
     }
     setAvatarPreview(null)
     setAvatarError(false)
-    setPhotoOverride(null)
+  }
+
+  const forceRefreshPhoto = async () => {
+    setPhotoMessage('Memuat ulang foto...')
+    updatePhotoVersion()
+    await refetch()
+    setTimeout(() => {
+      setPhotoMessage(null)
+    }, 2000)
   }
 
   const handleSelectFile = () => {
@@ -212,10 +338,8 @@ export default function ProfilePage() {
     setPhotoMessage(null)
     setIsUploading(true)
     
-    // 1. Buat preview dari file lokal
     const objectUrl = URL.createObjectURL(file)
     
-    // Cleanup preview sebelumnya
     if (previewUrlRef.current) {
       URL.revokeObjectURL(previewUrlRef.current)
     }
@@ -223,29 +347,25 @@ export default function ProfilePage() {
     previewUrlRef.current = objectUrl
     setAvatarPreview(objectUrl)
     setAvatarError(false)
-    setPhotoOverride(null)
     
     try {
       await uploadPhotoMutation.mutateAsync(file)
-      
-    } catch {
-
+    } catch (error) {
+      console.error('Upload error:', error)
     } finally {
       setIsUploading(false)
     }
   }
 
   const handleDeletePhoto = async () => {
-    if (!extractPhotoPath(profileData)) return
+    if (!currentPhotoPath && !photoOverride) return
     
     setPhotoMessage(null)
     
     try {
       await deletePhotoMutation.mutateAsync()
-      resetPreview()
-      pendingServerPhotoRef.current = null
-    } catch {
-      // ignore delete error
+    } catch (error) {
+      console.error('Delete error:', error)
     }
   }
 
@@ -274,7 +394,7 @@ export default function ProfilePage() {
       <div>
         {tab === 'overview' && <Overview profileData={profileData} />}
         {tab === 'personal' && <PersonalData profileData={profileData} />}
-  {tab === 'employment' && <Employment userId={profileData?.id} employment={profileData?.employment} />}
+        {tab === 'employment' && <Employment userId={profileData?.id} employment={profileData?.employment} />}
         {tab === 'security' && <Security preferences={profileData?.preferences} />}
       </div>
     )
@@ -292,27 +412,24 @@ export default function ProfilePage() {
                   <Avatar className="w-20 h-20">
                     {avatarSrc && !avatarError ? (
                       <AvatarImage
+                        key={`avatar-${photoVersion}-${avatarSrc}`}
                         src={avatarSrc}
                         alt={displayName}
-                        onError={(e) => {
-                          setAvatarError(true)
-                          // Fallback ke initials jika gambar gagal load
-                          e.target.style.display = 'none'
-                        }}
-                        onLoad={() => {
-                          setAvatarError(false)
-                        }}
+                        onError={() => setAvatarError(true)}
+                        onLoad={() => setAvatarError(false)}
                         className="object-cover"
                       />
                     ) : null}
-                    <AvatarFallback className="bg-slate-100">
+                    <AvatarFallback className="bg-slate-100 text-slate-600">
                       {getInitials(displayName)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="text-lg font-medium text-center line-clamp-2">{displayName}</div>
                   <div className="text-sm text-muted-foreground text-center">{faculty}</div>
                   <div className="mt-2">
-                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full capitalize">{profileData?.status || 'active'}</span>
+                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full capitalize">
+                      {profileData?.status || 'active'}
+                    </span>
                   </div>
                   <div className="flex flex-col gap-2 mt-4 w-full">
                     <input
@@ -336,15 +453,24 @@ export default function ProfilePage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="flex items-center gap-2 justify-center text-red-600"
+                      className="flex items-center gap-2 justify-center text-red-600 hover:text-red-700"
                       onClick={handleDeletePhoto}
-                      disabled={!extractPhotoPath(profileData) || deletePhotoMutation.isPending}
+                      disabled={(!currentPhotoPath && !photoOverride) || deletePhotoMutation.isPending}
                     >
                       <Trash2 className="w-4 h-4" />
                       {deletePhotoMutation.isPending ? 'Menghapus...' : 'Hapus foto'}
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex items-center gap-2 justify-center"
+                      onClick={forceRefreshPhoto}
+                    >
+                      <RefreshCcw className="w-4 h-4" />
+                      Refresh foto
+                    </Button>
                     {photoMessage && (
-                      <p className={`text-xs ${photoMessage.includes('berhasil') ? 'text-green-600' : 'text-red-600'}`}>
+                      <p className={`text-xs ${photoMessage.includes('berhasil') || photoMessage.includes('Memuat') ? 'text-green-600' : 'text-red-600'}`}>
                         {photoMessage}
                       </p>
                     )}

@@ -1,8 +1,13 @@
 import React from 'react'
 import { TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
-import { useArchiveRoom, useLockRoom, useRestoreRoom, useUnlockRoom } from '@/services/roomHooks'
+import { useArchiveRoom, useLockRoom, useRestoreRoom, useUnlockRoom, useUpdateRoom } from '@/services/roomHooks'
+import { useQueryClient } from '@tanstack/react-query'
+import { useForm } from 'react-hook-form'
+import { toast } from '@/components/ui/use-toast'
 
 export default function SettingsTab({ room }) {
   const roomId = room?.id
@@ -56,6 +61,12 @@ export default function SettingsTab({ room }) {
   return (
     <TabsContent value="settings" className="mt-4 space-y-6">
       <div>
+        <h3 className="font-semibold text-lg">Ubah Nama Forum</h3>
+        <div className="mt-3 p-4 border rounded-md bg-white">
+          <UpdateRoomNameForm room={room} />
+        </div>
+      </div>
+      <div>
         <h3 className="font-semibold text-lg">Informasi Ruangan</h3>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           {infoItems.map((item) => (
@@ -98,5 +109,97 @@ export default function SettingsTab({ room }) {
         )}
       </div>
     </TabsContent>
+  )
+}
+
+function UpdateRoomNameForm({ room }) {
+  const roomId = room?.id
+  const periodId = room?.forum_period_id
+  const queryClient = useQueryClient()
+
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({ defaultValues: { name: room?.name || '' } })
+
+  React.useEffect(() => {
+    reset({ name: room?.name || '' })
+  }, [room?.name, reset])
+
+  const updateMutation = useUpdateRoom(roomId, {
+    // optimistic update: update single-room cache and any forum-periods forum lists
+    onMutate: async (variables) => {
+      if (!roomId) return {}
+      await queryClient.cancelQueries({ queryKey: ['rooms', roomId] })
+      const previousRoom = queryClient.getQueryData(['rooms', roomId])
+
+      // optimistically update the room's cache
+      queryClient.setQueryData(['rooms', roomId], (old) => ({ ...(old ?? {}), ...previousRoom, name: variables.name }))
+
+      // update any forum-periods forums list that include this room
+      if (periodId) {
+        const matching = queryClient.getQueriesData({ queryKey: ['forum-periods', periodId, 'forums'], exact: false })
+        matching.forEach(([key, data]) => {
+          if (!data) return
+          queryClient.setQueryData(key, (old) => {
+            if (!old || !old.forums) return old
+            const updated = { ...old }
+            updated.forums = (Array.isArray(old.forums) ? old.forums : []).map((f) => (f?.id === roomId ? { ...f, name: variables.name } : f))
+            return updated
+          })
+        })
+      }
+
+      return { previousRoom }
+    },
+    onError: (err, variables, context) => {
+      // rollback
+      if (context?.previousRoom) {
+        queryClient.setQueryData(['rooms', roomId], context.previousRoom)
+      }
+      const message = err?.response?.data?.message || err?.message || 'Gagal memperbarui nama forum.'
+      toast({ variant: 'destructive', title: 'Gagal', description: message })
+      if (typeof updateMutation?.onError === 'function') {
+        // noop, left for parity
+      }
+    },
+    onSettled: () => {
+      // refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['rooms', roomId] })
+      if (periodId) {
+        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId] })
+      }
+    },
+    onSuccess: (data) => {
+      toast({ title: 'Berhasil', description: 'Nama forum diperbarui.' })
+      reset({ name: data?.name || '' })
+    },
+  })
+
+  const onSubmit = (vals) => {
+    if (!vals?.name || vals.name.trim().length < 3) return
+    updateMutation.mutate({ name: vals.name.trim() })
+  }
+
+  const handleCancel = () => {
+    reset({ name: room?.name || '' })
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+        <div className="md:col-span-2">
+          <Label>Nama Forum</Label>
+          <Input {...register('name', { required: true, minLength: 3 })} className="mt-2" />
+          {errors.name && <p className="text-xs text-rose-600 mt-1">{errors.name.message || 'Nama minimal 3 karakter'}</p>}
+        </div>
+        <div className="flex gap-2 md:justify-end mt-2 md:mt-0">
+          <Button type="button" variant="outline" onClick={handleCancel} disabled={updateMutation.isPending}>
+            Batal
+          </Button>
+          <Button type="submit" disabled={updateMutation.isPending}>
+            {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Simpan
+          </Button>
+        </div>
+      </div>
+    </form>
   )
 }

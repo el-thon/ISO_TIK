@@ -1,365 +1,691 @@
-import React, { useCallback, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
 import MainLayout from '@/layout/MainLayout'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { useDashboardSummary, useMyAssignments, useTopicsNeedingAttention, useUpcomingDeadlines, useDashboardStatistics } from '@/services/dashboardHooks'
-import { useMe } from '@/services/authHooks'
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectValue,
+  SelectItem,
+} from '@/components/ui/select'
+import { Users, Calendar, Database, TrendingUp } from 'lucide-react'
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  LabelList,
+} from 'recharts'
+import { motion } from 'framer-motion'
+import { useDashboardData } from '@/services/dashboardHooks'
 
-const SUMMARY_CARDS = [
-  { key: 'active_assignments', label: 'Tugas Aktif', accent: 'bg-blue-50 text-blue-900' },
-  { key: 'topics_needing_attention', label: 'Perlu Perhatian', accent: 'bg-yellow-50 text-yellow-900' },
-  { key: 'upcoming_deadlines', label: 'Deadline 7 Hari', accent: 'bg-orange-50 text-orange-900' },
-  { key: 'unread_notifications', label: 'Notifikasi Belum Dibaca', accent: 'bg-red-50 text-red-900' },
-  { key: 'recent_activity', label: 'Aktivitas 30 Hari', accent: 'bg-green-50 text-green-900' },
-]
+const ensureArray = (data) => {
+  if (!data) return []
+  if (Array.isArray(data)) return data
+  if (data.data && Array.isArray(data.data)) return data.data
+  if (data.items && Array.isArray(data.items)) return data.items
+  return []
+}
 
-const STATS_CARDS = [
-  { key: 'total_assignments', label: 'Total Penugasan' },
-  { key: 'completed_assignments', label: 'Selesai' },
-  { key: 'active_assignments', label: 'Sedang Berjalan' },
-  { key: 'completion_rate', label: 'Completion Rate', suffix: '%' },
-  { key: 'on_time_completion_rate', label: 'On-time Rate', suffix: '%' },
-  { key: 'average_completion_days', label: 'Rata-rata Hari' },
-  { key: 'topics_created', label: 'Topik Dibuat' },
-  { key: 'comments_made', label: 'Komentar Dibuat' },
-  { key: 'rooms_participated', label: 'Ruang Kolaborasi' },
-]
+const CHART_COLORS = {
+  Users: '#06b6d4',
+  Periods: '#7c3aed',
+  'Data Master': '#f97316',
+  ChildForum: '#7c3aed',
+}
 
-const dateTimeFormatter = new Intl.DateTimeFormat('id-ID', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
+const formatDateLabel = (value) => {
+  if (!value) return '-'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '-'
 
-// PERBAIKAN: Memoized SectionState component
-const SectionState = React.memo(({ 
-  isLoading, 
-  isError, 
-  error, 
-  emptyText, 
-  children, 
-  onRetry, 
-  hasContent 
-}) => {
-  // Gunakan useCallback untuk handler
-  const handleRetry = useCallback(() => {
-    if (onRetry) {
-      onRetry()
-    }
-  }, [onRetry])
-
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        <Skeleton className="h-14 w-full" />
-        <Skeleton className="h-14 w-full" />
-        <Skeleton className="h-14 w-2/3" />
-      </div>
-    )
-  }
-
-  if (isError) {
-    return (
-      <div className="flex flex-col gap-2 items-start">
-        <p className="text-sm text-destructive">{error?.response?.data?.message || 'Gagal memuat data.'}</p>
-        {handleRetry && (
-          <Button size="sm" variant="outline" onClick={handleRetry}>
-            Coba lagi
-          </Button>
-        )}
-      </div>
-    )
-  }
-
-  if (!hasContent) {
-    return <p className="text-sm text-muted-foreground">{emptyText}</p>
-  }
-
-  return children
-})
-
-// PERBAIKAN: Dashboard component dengan optimasi
-export default function Dashboard() {
-
-  const formatDate = useCallback((value) => {
-  if (!value) return 'Belum ada'
-  try {
-    return dateTimeFormatter.format(new Date(value))
-  } catch (error) {
-    return value
-  }
-}, [])
-
-  // PERBAIKAN: Tambahkan options untuk mencegah refetch berlebihan
-  const { data: meData } = useMe({ 
-    staleTime: 1000 * 60 * 5, // 5 menit
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    retry: 1
+  return parsed.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
   })
-  
-  const user = meData?.data?.user
+}
 
-  // PERBAIKAN: Tambahkan options untuk semua query
-  const queryOptions = {
-    staleTime: 1000 * 60 * 2, // 2 menit
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    retry: 1
+const getPeriodDisplayName = (period, index) => {
+  return period?.name || period?.title || `Periode ${index + 1}`
+}
+
+const safeGetDate = (item) => {
+  const d =
+    item?.created_at ||
+    item?.createdAt ||
+    item?.createdAtDate ||
+    item?.created ||
+    null
+
+  if (!d) return null
+
+  const parsed = new Date(d)
+  return !Number.isNaN(parsed.getTime()) ? parsed : null
+}
+
+const getWeeksInCurrentMonth = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+
+  const firstDay = new Date(year, month, 1)
+  const lastDay = new Date(year, month + 1, 0)
+
+  const weeks = []
+  const firstDayOfWeek = firstDay.getDay()
+  const daysToFirstMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
+
+  let currentWeekStart = new Date(firstDay)
+  currentWeekStart.setDate(currentWeekStart.getDate() - daysToFirstMonday)
+
+  let weekNumber = 1
+  while (currentWeekStart <= lastDay && weeks.length < 4) {
+    const weekEnd = new Date(currentWeekStart)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+
+    const weekStartInMonth = new Date(Math.max(currentWeekStart, firstDay))
+    const weekEndInMonth = new Date(Math.min(weekEnd, lastDay))
+    const daysInMonth = Math.max(
+      0,
+      Math.ceil((weekEndInMonth - weekStartInMonth) / (1000 * 60 * 60 * 24)) + 1
+    )
+
+    if (daysInMonth >= 3) {
+      weeks.push({
+        start: new Date(currentWeekStart),
+        end: new Date(weekEnd),
+        label: `Minggu ${weekNumber}`,
+      })
+      weekNumber++
+    }
+
+    currentWeekStart.setDate(currentWeekStart.getDate() + 7)
   }
 
-  const summaryQuery = useDashboardSummary(queryOptions)
-  const assignmentsQuery = useMyAssignments(queryOptions)
-  const topicsQuery = useTopicsNeedingAttention(queryOptions)
-  const deadlinesQuery = useUpcomingDeadlines(queryOptions)
-  const statsQuery = useDashboardStatistics(queryOptions)
+  return weeks
+}
 
-  // PERBAIKAN: useCallback untuk handler
-  const handleRefresh = useCallback(() => {
-    summaryQuery.refetch()
-    assignmentsQuery.refetch()
-    topicsQuery.refetch()
-    deadlinesQuery.refetch()
-    statsQuery.refetch()
-  }, [summaryQuery, assignmentsQuery, topicsQuery, deadlinesQuery, statsQuery])
+const getMonths = (monthsCount) => {
+  const now = new Date()
+  const months = []
 
-  // PERBAIKAN: Memoized data dengan useMemo
-  const summaryData = useMemo(() => summaryQuery.data || {}, [summaryQuery.data])
-  const assignments = useMemo(() => assignmentsQuery.data || [], [assignmentsQuery.data])
-  const topics = useMemo(() => topicsQuery.data || [], [topicsQuery.data])
-  const deadlines = useMemo(() => deadlinesQuery.data || [], [deadlinesQuery.data])
-  const stats = useMemo(() => statsQuery.data || {}, [statsQuery.data])
+  for (let i = monthsCount - 1; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const label = date.toLocaleString('id-ID', { month: 'short', year: 'numeric' })
+    months.push({ start: date, label })
+  }
 
-  // PERBAIKAN: Memoized cards
-  const summaryCards = useMemo(() => {
-    return SUMMARY_CARDS.map((card) => (
-      <Card key={card.key} className={card.accent}>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground/80">{card.label}</CardTitle>
-          {summaryQuery.isLoading ? (
-            <Skeleton className="h-8 w-16" />
-          ) : summaryQuery.isError ? (
-            <CardDescription className="text-destructive text-lg">—</CardDescription>
-          ) : (
-            <CardDescription className="text-3xl font-semibold text-foreground">
-              {summaryData[card.key] ?? 0}
-            </CardDescription>
-          )}
-        </CardHeader>
-      </Card>
-    ))
-  }, [summaryQuery.isLoading, summaryQuery.isError, summaryData])
+  return months
+}
 
-  const statsCards = useMemo(() => {
-    if (statsQuery.isLoading) {
-      return (
-        <div className="space-y-3">
-          <Skeleton className="h-6 w-3/4" />
-          <Skeleton className="h-6 w-full" />
-          <Skeleton className="h-6 w-2/3" />
-        </div>
-      )
-    }
+const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = false }) => {
+  return (
+    <motion.div
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      transition={{ duration: 0.2 }}
+      className="h-full"
+    >
+      <Card
+        className={`border transition-all h-full ${
+          isAlt
+            ? 'bg-black border-gray-800 text-white hover:shadow-lg'
+            : 'bg-white border-gray-200 text-gray-900 hover:shadow-md'
+        }`}
+      >
+        <CardContent className="p-6 h-full flex flex-col">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className={`text-sm font-medium mb-1 ${isAlt ? 'text-gray-300' : 'text-gray-600'}`}>
+                {title}
+              </p>
 
-    if (statsQuery.isError) {
-      return (
-        <SectionState
-          isLoading={false}
-          isError
-          error={statsQuery.error}
-          onRetry={statsQuery.refetch}
-          emptyText=""
-          hasContent={false}
-        />
-      )
-    }
+              {loading ? (
+                <div className="h-8 w-24 bg-gray-200 animate-pulse rounded" />
+              ) : (
+                <p className={`text-3xl font-bold ${isAlt ? 'text-white' : 'text-gray-900'}`}>
+                  {value?.toLocaleString() || 0}
+                </p>
+              )}
 
-    return (
-      <dl className="grid grid-cols-1 gap-3">
-        {STATS_CARDS.map((card) => (
-          <div key={card.key} className="rounded-lg border p-3">
-            <dt className="text-xs text-muted-foreground">{card.label}</dt>
-            <dd className="text-lg font-semibold">
-              {stats[card.key] ?? '—'}
-              {card.suffix && stats[card.key] !== null && stats[card.key] !== undefined ? card.suffix : ''}
-            </dd>
+              {details && (
+                <div className="mt-3 space-y-1">
+                  {details.map((detail, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs">
+                      <span className={isAlt ? 'text-gray-400' : 'text-gray-500'}>
+                        {detail.label}
+                      </span>
+                      <span className={`font-medium ${isAlt ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {detail.value?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {trend && (
+                <p className={`text-xs mt-2 flex items-center gap-1 ${isAlt ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <TrendingUp className="w-3 h-3" />
+                  {trend}
+                </p>
+              )}
+            </div>
+
+            <div className={`p-3 rounded-full ${isAlt ? 'bg-white/10' : 'bg-gray-100'}`}>
+              <Icon className={`w-6 h-6 ${isAlt ? 'text-white' : 'text-gray-700'}`} />
+            </div>
           </div>
-        ))}
-      </dl>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+const OverviewStatsChart = ({ users = [], periods = [], masters = [] }) => {
+  const [selectedRange, setSelectedRange] = useState('3')
+
+  const buckets = useMemo(() => {
+    if (selectedRange === '1') return getWeeksInCurrentMonth()
+    return getMonths(parseInt(selectedRange, 10))
+  }, [selectedRange])
+
+  const userCounts = useMemo(() => {
+    const arr = ensureArray(users)
+
+    return buckets.map((bucket) => {
+      let count = 0
+
+      for (const user of arr) {
+        const d = safeGetDate(user)
+        if (!d) continue
+
+        if (selectedRange === '1') {
+          if (d >= bucket.start && d <= bucket.end) count++
+        } else {
+          if (
+            d.getFullYear() === bucket.start.getFullYear() &&
+            d.getMonth() === bucket.start.getMonth()
+          ) {
+            count++
+          }
+        }
+      }
+
+      return count
+    })
+  }, [users, buckets, selectedRange])
+
+  const periodCounts = useMemo(() => {
+    const arr = ensureArray(periods)
+
+    return buckets.map((bucket) => {
+      let count = 0
+
+      for (const period of arr) {
+        const d = safeGetDate(period)
+        if (!d) continue
+
+        if (selectedRange === '1') {
+          if (d >= bucket.start && d <= bucket.end) count++
+        } else {
+          if (
+            d.getFullYear() === bucket.start.getFullYear() &&
+            d.getMonth() === bucket.start.getMonth()
+          ) {
+            count++
+          }
+        }
+      }
+
+      return count
+    })
+  }, [periods, buckets, selectedRange])
+
+  const masterCounts = useMemo(() => {
+    const arr = ensureArray(masters)
+
+    return buckets.map((bucket) => {
+      let count = 0
+
+      for (const item of arr) {
+        const d = safeGetDate(item)
+        if (!d) continue
+
+        if (selectedRange === '1') {
+          if (d >= bucket.start && d <= bucket.end) count++
+        } else {
+          if (
+            d.getFullYear() === bucket.start.getFullYear() &&
+            d.getMonth() === bucket.start.getMonth()
+          ) {
+            count++
+          }
+        }
+      }
+
+      return count
+    })
+  }, [masters, buckets, selectedRange])
+
+  const chartData = buckets.map((bucket, index) => ({
+    name: bucket.label,
+    Users: userCounts[index] || 0,
+    Periods: periodCounts[index] || 0,
+    'Data Master': masterCounts[index] || 0,
+  }))
+
+  const isWeekly = selectedRange === '1'
+
+  return (
+    <Card className="border border-gray-200">
+      <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <CardTitle className="text-md font-semibold">
+            Overview Pengguna / Periode / Data Master
+          </CardTitle>
+          <p className="text-sm text-gray-500 mt-1">
+            Menampilkan jumlah data berdasarkan tanggal pembuatan dalam rentang waktu yang dipilih.
+          </p>
+        </div>
+
+        <Select value={selectedRange} onValueChange={setSelectedRange}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="Pilih periode" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="1">1 Bulan</SelectItem>
+            <SelectItem value="3">3 Bulan</SelectItem>
+            <SelectItem value="6">6 Bulan</SelectItem>
+            <SelectItem value="12">12 Bulan</SelectItem>
+          </SelectContent>
+        </Select>
+      </CardHeader>
+
+      <CardContent>
+        <div style={{ height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={chartData}
+              margin={{ top: 10, right: 20, left: 10, bottom: isWeekly ? 30 : 50 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+              <XAxis
+                dataKey="name"
+                tick={{ fill: '#374151', fontSize: 12 }}
+                angle={isWeekly ? 0 : -45}
+                textAnchor={isWeekly ? 'middle' : 'end'}
+                height={isWeekly ? 40 : 60}
+              />
+              <YAxis tick={{ fill: '#374151', fontSize: 12 }} allowDecimals={false} />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="Users"
+                name="Pengguna"
+                stroke={CHART_COLORS.Users}
+                strokeWidth={2.5}
+                dot={{ r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Periods"
+                name="Periode"
+                stroke={CHART_COLORS.Periods}
+                strokeWidth={2.5}
+                dot={{ r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="Data Master"
+                name="Data Master"
+                stroke={CHART_COLORS['Data Master']}
+                strokeWidth={2.5}
+                dot={{ r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+const PeriodChildForumTooltip = ({ active, payload }) => {
+  if (!active || !payload || !payload.length) return null
+
+  const item = payload[0]?.payload
+  if (!item) return null
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2">
+      <div className="text-sm font-semibold text-gray-900">{item.periodName}</div>
+      <div className="text-xs text-gray-500 mt-1">Created: {item.createdLabel}</div>
+      <div className="text-sm text-gray-700 mt-1">
+        Total Child Forum: <span className="font-semibold">{item.totalChildForum}</span>
+      </div>
+    </div>
+  )
+}
+
+const PeriodChildForumChart = ({ periods = [] }) => {
+  const [sortBy, setSortBy] = useState('newest')
+  const [pageSize, setPageSize] = useState('10')
+  const [page, setPage] = useState(1)
+
+  const normalizedData = useMemo(() => {
+    return ensureArray(periods).map((period, index) => {
+      const createdAt = period?.created_at || period?.createdAt || null
+      const createdDate = createdAt ? new Date(createdAt) : null
+      const createdTime =
+        createdDate && !Number.isNaN(createdDate.getTime())
+          ? createdDate.getTime()
+          : 0
+
+      const forums = ensureArray(period?.forums)
+      const totalChildForum = Number(period?.forums_count || forums.length || 0)
+
+      return {
+        id: period?.id || index,
+        periodName: getPeriodDisplayName(period, index),
+        createdAt,
+        createdTime,
+        createdLabel: formatDateLabel(createdAt),
+        totalChildForum,
+      }
+    })
+  }, [periods])
+
+  const sortedData = useMemo(() => {
+    const cloned = [...normalizedData]
+
+    switch (sortBy) {
+      case 'oldest':
+        cloned.sort((a, b) => a.createdTime - b.createdTime)
+        break
+      case 'highest':
+        cloned.sort((a, b) => b.totalChildForum - a.totalChildForum)
+        break
+      case 'lowest':
+        cloned.sort((a, b) => a.totalChildForum - b.totalChildForum)
+        break
+      case 'newest':
+      default:
+        cloned.sort((a, b) => b.createdTime - a.createdTime)
+        break
+    }
+
+    return cloned
+  }, [normalizedData, sortBy])
+
+  const pageSizeNumber = Number(pageSize)
+  const totalPages = Math.max(1, Math.ceil(sortedData.length / pageSizeNumber))
+  const safePage = Math.min(page, totalPages)
+
+  const pagedData = useMemo(() => {
+    const start = (safePage - 1) * pageSizeNumber
+    const end = start + pageSizeNumber
+    return sortedData.slice(start, end)
+  }, [sortedData, safePage, pageSizeNumber])
+
+  const chartData = useMemo(() => {
+    return pagedData.map((item) => ({
+      ...item,
+      label: `${item.periodName} • ${item.createdLabel}`,
+    }))
+  }, [pagedData])
+
+  useEffect(() => {
+    setPage(1)
+  }, [sortBy, pageSize, periods])
+
+  if (!normalizedData.length) {
+    return (
+      <Card className="border border-gray-200">
+        <CardHeader>
+          <CardTitle className="text-md font-semibold">
+            Total Child Forum per Forum Periode
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[320px] flex items-center justify-center text-sm text-gray-500">
+            Data forum periode belum tersedia
+          </div>
+        </CardContent>
+      </Card>
     )
-  }, [statsQuery.isLoading, statsQuery.isError, statsQuery.error, statsQuery.refetch, stats])
+  }
+
+  return (
+    <Card className="border border-gray-200">
+      <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <CardTitle className="text-md font-semibold">
+            Total Child Forum per Forum Periode
+          </CardTitle>
+          <p className="text-sm text-gray-500 mt-1">
+            Ditampilkan per halaman agar tetap rapi saat jumlah periode bertambah.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Urutkan</span>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Pilih urutan" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Terbaru</SelectItem>
+                <SelectItem value="oldest">Terlama</SelectItem>
+                <SelectItem value="highest">Child terbanyak</SelectItem>
+                <SelectItem value="lowest">Child tersedikit</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Tampil</span>
+            <Select value={pageSize} onValueChange={setPageSize}>
+              <SelectTrigger className="w-24">
+                <SelectValue placeholder="Jumlah" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="15">15</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <div style={{ height: Math.max(320, chartData.length * 48) }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={chartData}
+              layout="vertical"
+              margin={{ top: 10, right: 30, left: 90, bottom: 10 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+              <XAxis
+                type="number"
+                tick={{ fill: '#374151', fontSize: 12 }}
+                allowDecimals={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="label"
+                tick={{ fill: '#374151', fontSize: 12 }}
+                width={220}
+              />
+              <Tooltip content={<PeriodChildForumTooltip />} />
+              <Bar
+                dataKey="totalChildForum"
+                fill={CHART_COLORS.ChildForum}
+                radius={[0, 6, 6, 0]}
+              >
+                <LabelList
+                  dataKey="totalChildForum"
+                  position="right"
+                  style={{ fill: '#374151', fontSize: 12 }}
+                />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p className="text-sm text-gray-500">
+            Menampilkan {(safePage - 1) * pageSizeNumber + 1} -
+            {Math.min(safePage * pageSizeNumber, sortedData.length)} dari {sortedData.length} periode
+          </p>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage <= 1}
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            >
+              Sebelumnya
+            </Button>
+
+            <span className="text-sm text-gray-600">
+              Halaman {safePage} / {totalPages}
+            </span>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+            >
+              Berikutnya
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+export default function Dashboard() {
+  const {
+    usersData,
+    userStats,
+    statsData,
+    periodsArray,
+    documentMasterArray,
+    isLoading,
+    error,
+  } = useDashboardData()
+
+  const statsCards = [
+    {
+      title: 'Total Users',
+      value: userStats?.total || 0,
+      icon: Users,
+      details: [
+        { label: 'Pengguna Aktif', value: userStats?.active || 0 },
+        { label: 'Pengguna Non-aktif', value: userStats?.inactive || 0 },
+      ],
+      trend: statsData?.user_growth ? `+${statsData.user_growth}% growth` : null,
+    },
+    {
+      title: 'Periode',
+      value: ensureArray(periodsArray).length,
+      icon: Calendar,
+      details: [
+        { label: 'Total Periode', value: ensureArray(periodsArray).length },
+        {
+          label: 'Total Child Forum',
+          value: ensureArray(periodsArray).reduce(
+            (sum, period) => sum + Number(period?.forums_count || 0),
+            0
+          ),
+        },
+      ],
+    },
+    {
+      title: 'Data Master',
+      value: ensureArray(documentMasterArray).length,
+      icon: Database,
+      details: [
+        {
+          label: 'Aktif',
+          value: ensureArray(documentMasterArray).filter((d) => d?.is_active).length,
+        },
+        {
+          label: 'Nonaktif',
+          value: ensureArray(documentMasterArray).filter((d) => !d?.is_active).length,
+        },
+      ],
+    },
+  ]
+
+  if (error) {
+    return (
+      <MainLayout>
+        <div className="p-6 bg-white min-h-screen">
+          <Card className="border border-red-200 bg-red-50">
+            <CardContent className="p-6 text-center">
+              <p className="text-red-600">Terjadi kesalahan saat memuat data beranda</p>
+              <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+                Segarkan Halaman
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </MainLayout>
+    )
+  }
 
   return (
     <MainLayout>
-      <div className="max-w-full mx-auto space-y-6">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-heading-2 font-semibold">Selamat Datang, {user?.name || user?.username || 'Pengguna'}</h1>
-            <p className="text-body-md text-muted-foreground">Ringkasan aktivitas & penugasan terbaru Anda.</p>
-          </div>
-          <Button onClick={handleRefresh} variant="outline" disabled={summaryQuery.isLoading || assignmentsQuery.isLoading}>
-            Muat ulang data
-          </Button>
-        </header>
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900">Beranda</h1>
+          <p className="text-gray-500 mt-1">Ikhtisar statistik sistem dan aktivitas forum</p>
+        </div>
 
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {summaryCards}
-        </section>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          {statsCards.map((stat, index) => (
+            <StatCard
+              key={index}
+              title={stat.title}
+              value={stat.value}
+              icon={stat.icon}
+              details={stat.details}
+              trend={stat.trend}
+              loading={isLoading}
+              isAlt={index % 2 === 0}
+            />
+          ))}
+        </div>
 
-        <section>
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Pintasan untuk kolaborasi yang sering dilakukan.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  to="/forum"
-                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-10 px-4 bg-navy text-white hover:opacity-95 no-underline"
-                >
-                  + Buat Forum
-                </Link>
-                <Link
-                  to="/formulir/buat"
-                  className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all h-10 px-4 bg-navy text-white hover:opacity-95 no-underline"
-                >
-                  + Buat Formulir Laporan
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
+        <div className="mb-6">
+          <OverviewStatsChart
+            users={usersData}
+            periods={periodsArray}
+            masters={documentMasterArray}
+          />
+        </div>
 
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>My Assignments</CardTitle>
-              <CardDescription>Penugasan aktif yang membutuhkan tindakan.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SectionState
-                isLoading={assignmentsQuery.isLoading}
-                isError={assignmentsQuery.isError}
-                error={assignmentsQuery.error}
-                onRetry={assignmentsQuery.refetch}
-                emptyText="Tidak ada penugasan aktif."
-                hasContent={assignments.length > 0}
-              >
-                <ul className="flex flex-col gap-3">
-                  {assignments.map((assignment) => (
-                    <li key={assignment.id} className="p-4 border rounded-lg bg-white/80">
-                      <div className="flex flex-col gap-1">
-                        <p className="text-base font-semibold">{assignment.topic?.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {assignment.topic?.forum?.name || assignment.topic?.room?.name
-                            ? `Ruang: ${assignment.topic?.forum?.name || assignment.topic?.room?.name}`
-                            : 'Tanpa ruang'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Ditugaskan oleh {assignment.assigned_by?.name || 'Sistem'} pada {formatDate(assignment.assigned_at)}
-                        </p>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          Deadline: {assignment.deadline_at ? formatDate(assignment.deadline_at) : 'Tidak ditentukan'}
-                        </span>
-                        {assignment.priority && (
-                          <span className="text-xs font-semibold uppercase tracking-wide text-navy">{assignment.priority}</span>
-                        )}
-                      </div>
-                      {assignment.notes && (
-                        <p className="mt-2 text-sm text-muted-foreground">Catatan: {assignment.notes}</p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </SectionState>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Topics Needing Attention</CardTitle>
-              <CardDescription>Topik aktif yang masih menunggu Anda.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SectionState
-                isLoading={topicsQuery.isLoading}
-                isError={topicsQuery.isError}
-                error={topicsQuery.error}
-                onRetry={topicsQuery.refetch}
-                emptyText="Tidak ada topik yang membutuhkan perhatian."
-                hasContent={topics.length > 0}
-              >
-                <ul className="flex flex-col gap-3">
-                  {topics.map((topic) => (
-                    <li key={topic.id} className="p-3 rounded-lg bg-slate-50">
-                      <p className="text-sm font-semibold">{topic.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Ruang: {topic.forum?.name || topic.room?.name || 'Tidak tersedia'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Dibuat oleh {topic.assigned_by?.name || 'Sistem'} • {topic.deadline_at ? `Deadline ${formatDate(topic.deadline_at)}` : 'Tanpa deadline'}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </SectionState>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Upcoming Deadlines (7 Hari)</CardTitle>
-              <CardDescription>Topik dengan batas waktu terdekat.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SectionState
-                isLoading={deadlinesQuery.isLoading}
-                isError={deadlinesQuery.isError}
-                error={deadlinesQuery.error}
-                onRetry={deadlinesQuery.refetch}
-                emptyText="Tidak ada deadline dalam 7 hari."
-                hasContent={deadlines.length > 0}
-              >
-                <ul className="flex flex-col gap-3">
-                  {deadlines.map((deadline) => (
-                    <li key={deadline.id} className="p-4 border rounded-lg">
-                      <div className="flex flex-col gap-1">
-                        <p className="text-sm font-semibold">{deadline.title}</p>
-                        <p className="text-xs text-muted-foreground">Ruang: {deadline.room?.name || 'Tidak tersedia'}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Deadline: {deadline.deadline_at ? formatDate(deadline.deadline_at) : 'Tidak ditentukan'}
-                        </p>
-                      </div>
-                      {typeof deadline.days_until_deadline === 'number' && (
-                        <p className="mt-2 text-xs font-medium text-orange-600">
-                          {deadline.days_until_deadline >= 0 ? `${deadline.days_until_deadline} hari lagi` : `${Math.abs(deadline.days_until_deadline)} hari lewat`}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </SectionState>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Personal Statistics</CardTitle>
-              <CardDescription>Metrix produktivitas Anda.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {statsCards}
-            </CardContent>
-          </Card>
-        </section>
+        <div className="mb-6">
+          <PeriodChildForumChart periods={periodsArray} />
+        </div>
       </div>
     </MainLayout>
   )

@@ -4,11 +4,33 @@ const ensureArray = (value) => (Array.isArray(value) ? value : value ? [value] :
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? null
 
+const pickArrayData = (...sources) => {
+  for (const source of sources) {
+    if (!source) continue
+    if (Array.isArray(source)) return source
+    if (Array.isArray(source?.data)) return source.data
+    if (Array.isArray(source?.items)) return source.items
+    if (Array.isArray(source?.results)) return source.results
+    if (Array.isArray(source?.list)) return source.list
+  }
+  return []
+}
+
 export async function listForumPeriods(params = {}) {
   const res = await api.get('/forum-periods', { params })
   const payload = unwrap(res) ?? {}
+
   return {
-    periods: ensureArray(payload.periods ?? payload.items ?? payload.data ?? []),
+    periods: ensureArray(
+      pickArrayData(
+        payload?.periods,
+        payload?.items,
+        payload?.data,
+        payload?.results,
+        payload?.list,
+        payload
+      )
+    ),
   }
 }
 
@@ -31,12 +53,32 @@ export async function updateForumPeriod(periodId, payload) {
 
 export async function listForumPeriodForums(periodId, params = {}) {
   if (!periodId) throw new Error('periodId is required')
+
   const res = await api.get(`/forum-periods/${periodId}/forums`, { params })
   const payload = unwrap(res) ?? {}
+
+  const forums = ensureArray(
+    pickArrayData(
+      payload?.forums,
+      payload?.items,
+      payload?.data,
+      payload?.results,
+      payload?.list,
+      payload?.period?.forums,
+      payload?.forum_period?.forums,
+      payload
+    )
+  )
+
   return {
-    forums: ensureArray(payload.forums ?? []),
-    period: payload.period ?? null,
-    pagination: payload.pagination ?? null,
+    forums,
+    period:
+      payload?.period ??
+      payload?.forum_period ??
+      payload?.forumPeriod ??
+      null,
+    pagination: payload?.pagination ?? null,
+    raw: payload,
   }
 }
 
@@ -46,16 +88,33 @@ export async function createForumPeriodForum(periodId, payload) {
   return unwrap(res) ?? {}
 }
 
+export async function updateForumPeriodForum(periodId, forumId, payload) {
+  if (!periodId) throw new Error('periodId is required')
+  if (!forumId) throw new Error('forumId is required')
+  const res = await api.put(`/forum-periods/${periodId}/forums/${forumId}`, payload)
+  return unwrap(res) ?? {}
+}
+
 export async function listForumPeriodForumTopics(periodId, forumId, params = {}) {
   if (!periodId) throw new Error('periodId is required')
   if (!forumId) throw new Error('forumId is required')
   const res = await api.get(`/forum-periods/${periodId}/forums/${forumId}/topics`, { params })
   const payload = unwrap(res) ?? {}
+
   return {
-    topics: ensureArray(payload.topics ?? []),
-    forum: payload.forum ?? null,
-    period: payload.period ?? null,
-    pagination: payload.pagination ?? null,
+    topics: ensureArray(
+      pickArrayData(
+        payload?.topics,
+        payload?.items,
+        payload?.data,
+        payload?.results,
+        payload?.list,
+        payload
+      )
+    ),
+    forum: payload?.forum ?? null,
+    period: payload?.period ?? null,
+    pagination: payload?.pagination ?? null,
   }
 }
 
@@ -78,6 +137,7 @@ export default {
   updateForumPeriod,
   listForumPeriodForums,
   createForumPeriodForum,
+  updateForumPeriodForum,
   listForumPeriodForumTopics,
   createForumPeriodForumTopic,
   joinForumPeriodByCode,

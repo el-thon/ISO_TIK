@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { name: 'Beranda', to: '/beranda', icon: Home, section: 'main' },
   { name: 'Pengguna', to: '/pengguna', icon: User, section: 'management', adminOnly: true },
   { name: 'Forum', to: '/forum', icon: Columns, section: 'management' },
-  { name: 'Administrasi', to: '/klausul', icon: Settings, section: 'management', adminOnly: true },
+  { name: 'Administrasi', to: '/administrasi', icon: Settings, section: 'management', adminOnly: true },
 ]
 
 const SECTION_TITLES = {

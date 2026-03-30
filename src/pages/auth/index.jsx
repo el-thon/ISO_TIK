@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import React, { useEffect, useRef, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { Label } from '@/components/ui/label'
+import { toast } from '@/components/ui/use-toast'
 import AuthLayout from './AuthLayout'
 import { useLogin, useResendLoginOtp } from '@/services/authHooks'
 
@@ -70,11 +71,8 @@ function Login() {
       setResendCooldown(60)
     },
     onError: (error) => {
-      setOtpError(
-        error?.response?.data?.message ||
-          error?.message ||
-          'Gagal mengirim ulang OTP. Coba lagi nanti.'
-      )
+      const message = error?.response?.data?.message || error?.message || 'Gagal mengirim ulang OTP. Coba lagi nanti.'
+      toast({ variant: 'destructive', title: 'Gagal Kirim Ulang OTP', description: message })
     },
   })
 
@@ -108,6 +106,10 @@ function Login() {
     if (loginError && otpTransitioning) {
       setOtpTransitioning(false)
       setOtpStep(false)
+    }
+    if (loginError) {
+      const message = loginError?.response?.data?.message || loginError?.message || 'Gagal masuk. Periksa kembali username dan password Anda.'
+      toast({ variant: 'destructive', title: 'Autentikasi Gagal', description: message })
     }
   }, [loginError])
 
@@ -309,14 +311,7 @@ function Login() {
               </div>
             )}
 
-            {(loginError || otpError) && (
-              <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
-                {otpError ||
-                  loginError?.response?.data?.message ||
-                  loginError?.message ||
-                  'Gagal masuk. Periksa kembali username dan password Anda.'}
-              </div>
-            )}
+            {/* Errors are shown via toasts (toast system). Inline OTP validation messages remain above. */}
 
             <Button
               type="submit"

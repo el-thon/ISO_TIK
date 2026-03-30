@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import api from '@/services/api'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -50,6 +51,7 @@ export default function TopicDocumentMasters() {
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ document_number: '', published_at: '', revision_number: '', is_active: false, id: null })
+  const queryClient = useQueryClient()
 
   const fetchMasters = async () => {
     setLoading(true)
@@ -68,11 +70,17 @@ export default function TopicDocumentMasters() {
   const onSubmit = async (e) => {
     e.preventDefault()
     try {
+      let res
       if (form.id) {
-        await api.put(`/admin/topic-document-masters/${form.id}`, form)
+        res = await api.put(`/admin/topic-document-masters/${form.id}`, form)
       } else {
-        await api.post('/admin/topic-document-masters', form)
+        res = await api.post('/admin/topic-document-masters', form)
       }
+      // invalidate active master so other components refresh immediately
+      try { 
+        queryClient.invalidateQueries({ queryKey: ['topicDocumentMaster', 'active'] }) 
+        queryClient.invalidateQueries({ queryKey: ['adminTopicDocumentMasters'] })
+      } catch (e) { /* ignore */ }
       setShowCreate(false)
       fetchMasters()
     } catch (err) { console.error(err) }
@@ -81,6 +89,10 @@ export default function TopicDocumentMasters() {
   const onActivate = async (m) => {
     try {
       await api.put(`/admin/topic-document-masters/${m.id}`, { ...m, is_active: !m.is_active })
+      try { 
+        queryClient.invalidateQueries({ queryKey: ['topicDocumentMaster', 'active'] }) 
+        queryClient.invalidateQueries({ queryKey: ['adminTopicDocumentMasters'] })
+      } catch (e) { }
       fetchMasters()
     } catch (e) { console.error(e) }
   }
@@ -94,6 +106,10 @@ export default function TopicDocumentMasters() {
     if (!confirm('Hapus master ini? Tindakan ini tidak dapat dibatalkan.')) return
     try {
       await api.delete(`/admin/topic-document-masters/${m.id}`)
+      try { 
+        queryClient.invalidateQueries({ queryKey: ['topicDocumentMaster', 'active'] }) 
+        queryClient.invalidateQueries({ queryKey: ['adminTopicDocumentMasters'] })
+      } catch (e) { }
       fetchMasters()
     } catch (e) { console.error(e) }
   }

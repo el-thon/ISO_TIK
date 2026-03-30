@@ -103,6 +103,37 @@ export default function RoomsPage() {
 
   const emptyState = !periodsLoading && periods.length === 0
 
+  // Editing child forum from the period list is disabled — editing is available in the room detail Settings tab for owners.
+
+  // Inline EditPeriodDialog used on period cards to edit period name/type/dates
+  const EditPeriodDialog = ({ period }) => {
+    const [open, setOpen] = useState(false)
+
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button
+            size="xs"
+            variant="outline"
+            className="px-2 py-1"
+            onClick={(e) => {
+              e.stopPropagation()
+            }}
+          >
+            Ubah
+          </Button>
+        </DialogTrigger>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ubah Periode Forum</DialogTitle>
+            <DialogDescription>Perbarui nama, tipe, atau deadline periode.</DialogDescription>
+          </DialogHeader>
+          <UpdatePeriodForm period={period} onSuccess={() => setOpen(false)} />
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <MainLayout>
       <div className="max-w-full mx-auto px-6 py-6">
@@ -135,33 +166,17 @@ export default function RoomsPage() {
                 </DialogContent>
               </Dialog>
             ) : (
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    className="bg-blue hover:bg-blue-light text-white flex items-center gap-2 px-4 py-2"
-                    disabled={!canManageSelectedPeriod}
-                  >
-                    <Plus className="w-4 h-4" /> Tambah Forum
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle>Buat Forum Child</DialogTitle>
-                    <DialogDescription>Isi formulir berikut untuk membuat forum child di periode ini.</DialogDescription>
-                  </DialogHeader>
-                  <CreateRoomForm
-                    selectedPeriodId={selectedPeriodId}
-                    onSuccess={() => {
-                      setDialogOpen(false)
-                      refetchChildForums()
-                    }}
-                  />
-                  {isPeriodDeadlinePassed && (
-                    <p className="text-xs text-amber-600 mt-2">Deadline forum period sudah lewat. Forum child hanya bisa dibaca.</p>
-                  )}
-                </DialogContent>
-              </Dialog>
+              <Button
+                size="sm"
+                variant="outline"
+                className="px-4 py-2"
+                onClick={() => {
+                  setSelectedPeriodId('')
+                  setPeriodDetailId('')
+                }}
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" /> Kembali
+              </Button>
             )}
             <Dialog open={joinPeriodDialogOpen} onOpenChange={setJoinPeriodDialogOpen}>
               <DialogContent className="max-w-md">
@@ -196,6 +211,8 @@ export default function RoomsPage() {
             </Dialog>
           </div>
         </div>
+
+  {/* Editing child forum on the card has been moved to the room Settings tab (owners only). */}
 
         {periodDetailId && (
           <div className="mb-6 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -249,59 +266,69 @@ export default function RoomsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {periods.map((period) => {
+                  {periods.map((period) => {
                 const isDisabled = period?.is_related === false
                 return (
-                  <Card
-                    key={period.id}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      if (isDisabled) {
-                        setAccessDeniedName(period?.name || '')
-                        setAccessDeniedOpen(true)
-                        return
-                      }
-                      setSelectedPeriodId(String(period.id))
-                      setPeriodDetailId(String(period.id))
-                      setChildForumPage(1)
-                    }}
-                  >
-                    <CardContent className="pt-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="font-semibold text-lg wrap-break-word">{period.name}</div>
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 whitespace-nowrap">
-                              {period.member_count ?? 0} anggota
-                            </span>
-                            {isDisabled && (
-                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 whitespace-nowrap">
-                                Belum bergabung
+                    <Card
+                      key={period.id}
+                      className="cursor-pointer relative"
+                      onClick={() => {
+                        if (isDisabled) {
+                          setAccessDeniedName(period?.name || '')
+                          setAccessDeniedOpen(true)
+                          return
+                        }
+                        setSelectedPeriodId(String(period.id))
+                        setPeriodDetailId(String(period.id))
+                        setChildForumPage(1)
+                      }}
+                    >
+                      <CardContent className="pt-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="font-semibold text-lg wrap-break-word">{period.name}</div>
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 whitespace-nowrap">
+                                {period.member_count ?? 0} anggota
                               </span>
-                            )}
+                              {isDisabled && (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 whitespace-nowrap">
+                                  Belum bergabung
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-2 line-clamp-2">
+                              Tipe: {period.period_type || '-'}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-3">
+                              Deadline: {formatDate(period.end_date)}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-2">
+                              Dibuat oleh: {(
+                                period.owner?.name || period.owner?.profile?.full_name || period.created_by?.name || period.created_by?.profile?.full_name || period.created_by_username || period.created_by || '—'
+                              )}
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground mt-2 line-clamp-2">
-                            Tipe: {period.period_type || '-'}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-3">
-                            Deadline: {formatDate(period.end_date)}
-                          </div>
+                          {isDisabled && (
+                            <Button
+                              size="xs"
+                              className="px-3 py-1 bg-emerald-600 text-white hover:bg-emerald-700"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setJoinPeriodDialogOpen(true)
+                              }}
+                            >
+                              <LogIn className="w-4 h-4 mr-1" /> Join
+                            </Button>
+                          )}
                         </div>
-                        {isDisabled && (
-                          <Button
-                            size="xs"
-                            className="px-3 py-1 bg-emerald-600 text-white hover:bg-emerald-700"
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              setJoinPeriodDialogOpen(true)
-                            }}
-                          >
-                            <LogIn className="w-4 h-4 mr-1" /> Join
-                          </Button>
+                        {period?.current_user_role === 'owner' && (
+                          <div className="absolute top-3 right-3">
+                            <EditPeriodDialog period={period} />
+                          </div>
                         )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
                 )
               })}
             </div>
@@ -325,17 +352,33 @@ export default function RoomsPage() {
                       <h2 className="text-lg font-semibold text-slate-800">Forum</h2>
                       <p className="text-xs text-muted-foreground">Daftar forum dalam periode ini.</p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="px-4 py-2"
-                      onClick={() => {
-                        setSelectedPeriodId('')
-                        setPeriodDetailId('')
-                      }}
-                    >
-                      <ArrowLeft className="w-4 h-4 mr-2" /> Kembali
-                    </Button>
+                    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button
+                          size="sm"
+                          className="bg-blue hover:bg-blue-light text-white flex items-center gap-2"
+                          disabled={!canManageSelectedPeriod}
+                        >
+                          <Plus className="w-4 h-4" /> Tambah Forum
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                          <DialogTitle>Buat Forum Child</DialogTitle>
+                          <DialogDescription>Isi formulir berikut untuk membuat forum child di periode ini.</DialogDescription>
+                        </DialogHeader>
+                        <CreateRoomForm
+                          selectedPeriodId={selectedPeriodId}
+                          onSuccess={() => {
+                            setDialogOpen(false)
+                            refetchChildForums()
+                          }}
+                        />
+                        {isPeriodDeadlinePassed && (
+                          <p className="text-xs text-amber-600 mt-2">Deadline forum period sudah lewat. Forum child hanya bisa dibaca.</p>
+                        )}
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 {childForumsError && (
                   <div className="p-4 mb-6 rounded-md bg-rose-50 border border-rose-100 text-sm text-rose-700 flex items-center justify-between">
@@ -354,33 +397,42 @@ export default function RoomsPage() {
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {childForums.map((room) => (
-                          <Card key={room.id} className={`transition-shadow hover:shadow-md ${room.is_archived ? 'opacity-80' : ''}`}>
-                            <Link to={`/forum/${room.id}`} className="block no-underline text-inherit">
-                              <CardContent className="pt-5">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex-1">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <div className="font-semibold text-lg text-slate-800">{room.name}</div>
-                                      {room.is_locked && (
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Locked</span>
-                                      )}
-                                      {room.is_archived && (
-                                        <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Archived</span>
-                                      )}
+                        {childForums.map((room) => {
+                          // prefer structured owner.name, then created_by (string), then username fallback
+                          const createdBy = room?.owner?.name || room?.created_by || room?.created_by_username || room?.responsible_user_id || '-'
+                          const canEdit = periodDetail?.current_user_role === 'owner' || room?.current_user_role === 'owner'
+                          return (
+                            <Card key={room.id} className={`transition-shadow hover:shadow-md ${room.is_archived ? 'opacity-80' : ''}`}>
+                              <div className="relative">
+                                <Link to={`/forum/${room.id}`} className="block no-underline text-inherit">
+                                  <CardContent className="pt-5">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="flex-1">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <div className="font-semibold text-lg text-slate-800">{room.name}</div>
+                                          {room.is_locked && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Locked</span>
+                                          )}
+                                          {room.is_archived && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Archived</span>
+                                          )}
+                                        </div>
+                                        <div className="text-sm text-muted-foreground mt-3 line-clamp-3">{room.description || 'Belum ada deskripsi'}</div>
+                                        <div className="flex items-center justify-between gap-2 mt-4 text-xs">
+                                          <div className="flex items-center gap-2">
+                                            <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">{room.participant_count ?? 0} peserta</span>
+                                            <span className="text-xs text-muted-foreground">Dibuat oleh: {createdBy}</span>
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="text-sm text-muted-foreground mt-3 line-clamp-3">{room.description || 'Belum ada deskripsi'}</div>
-                                    <div className="flex flex-wrap gap-2 mt-4 text-xs">
-                                      <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">
-                                        {room.participant_count ?? 0} peserta
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Link>
-                          </Card>
-                        ))}
+                                  </CardContent>
+                                </Link>
+                                {/* Editing moved to Settings tab */}
+                              </div>
+                            </Card>
+                          )
+                        })}
                       </div>
                       {totalChildForumPages > 1 && (
                         <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
@@ -409,6 +461,7 @@ export default function RoomsPage() {
                       )}
                     </div>
                   )}
+                  
                 </div>
               </TabsContent>
 

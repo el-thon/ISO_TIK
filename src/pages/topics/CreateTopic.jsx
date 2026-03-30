@@ -24,10 +24,12 @@ import {
 } from '@/components/ui/dialog'
 import { useRooms, useRoomParticipants } from '@/services/roomHooks'
 import { useCreateTopic, useCreateInputItem } from '@/services/topicHooks'
+import { useActiveDocumentMaster } from '@/services/activeMasterHooks'
 import * as forumAttachmentService from '@/services/forumAttachmentService'
 import * as topicService from '@/services/topicService'
 import { cn } from '@/lib/utils'
 import { useAdminClauses } from '@/services/adminClauseHooks'
+import { useMe } from '@/services/authHooks'
 
 const FINDING_TYPES = [
   { value: 'minor', label: 'Minor', color: 'bg-yellow-100 text-yellow-800', description: 'Ketidaksesuaian ringan' },
@@ -782,13 +784,19 @@ export default function CreateTopic() {
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState('audit-info')
   const [serverError, setServerError] = useState(null)
+  const [masterValidationError, setMasterValidationError] = useState(null)
 
   const [auditCode, setAuditCode] = useState('')
   const [auditedUnit, setAuditedUnit] = useState('')
   const [auditDate, setAuditDate] = useState('')
   const [documentNumber, setDocumentNumber] = useState('')
-  const [issuedDate, setIssuedDate] = useState(new Date().toISOString().split('T')[0])
+  // Start empty to avoid UI flicker; we'll sync from activeMaster when available
+  const [issuedDate, setIssuedDate] = useState('')
   const [revisionNumber, setRevisionNumber] = useState('0')
+  // Track whether user manually edited fields; if user edited, don't overwrite from master
+  const [docTouched, setDocTouched] = useState(false)
+  const [issuedTouched, setIssuedTouched] = useState(false)
+  const [revTouched, setRevTouched] = useState(false)
   const [auditorName, setAuditorName] = useState('')
   const [auditorNip, setAuditorNip] = useState('')
   const [auditeeName, setAuditeeName] = useState('')
@@ -808,10 +816,20 @@ export default function CreateTopic() {
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [documentsError, setDocumentsError] = useState(null)
 
-  // Master document auto-fill state
-  const [masterLoaded, setMasterLoaded] = useState(false)
-  const [masterActive, setMasterActive] = useState(false)
-  const [activeMaster, setActiveMaster] = useState(null)
+  // Master document auto-fill state (use dedicated query hook)
+  const { data: activeMaster, isLoading: activeMasterLoading, refetch: refetchActiveMaster } = useActiveDocumentMaster({ enabled: true })
+
+  const { data: me } = useMe({ enabled: true })
+  const isAdminUser = !!(me && ((me.roles && me.roles.includes && me.roles.includes('admin')) || me.is_admin))
+
+  // Sync active master into form fields when it becomes available, but don't overwrite user edits
+  useEffect(() => {
+    if (!activeMasterLoading && activeMaster) {
+      if (!docTouched && activeMaster.document_number) setDocumentNumber(activeMaster.document_number)
+      if (!issuedTouched && activeMaster.published_at) setIssuedDate(activeMaster.published_at.slice(0,10))
+      if (!revTouched && activeMaster.revision_number) setRevisionNumber(activeMaster.revision_number)
+    }
+  }, [activeMaster, activeMasterLoading, docTouched, issuedTouched, revTouched])
 
   const resolvedForumId = selectedForum || forumFromState || forumFromQuery
 
@@ -928,29 +946,12 @@ export default function CreateTopic() {
   // Load dokumen
   useEffect(() => {
     // Fetch active TopicDocumentMaster for auto-fill
-    const fetchActiveMaster = async () => {
-      try {
-        const res = await api.get('/topic-document-masters/active')
-        const item = res?.data?.data ?? res?.data ?? null
-        if (item) {
-          setActiveMaster(item)
-          if (item.document_number) setDocumentNumber(item.document_number)
-          if (item.published_at) setIssuedDate(item.published_at.slice(0,10))
-          if (item.revision_number) setRevisionNumber(item.revision_number)
-          setMasterActive(!!item.is_active)
-        } else {
-          setActiveMaster(null)
-          setMasterActive(false)
-        }
-      } catch (e) {
-        // ignore - master may not exist or fetch may fail
-        console.debug('Active master fetch failed', e?.message || e)
-      } finally {
-        setMasterLoaded(true)
-      }
+    // Prefill only when active master exists and fields are still empty
+    if (activeMaster) {
+      if (!documentNumber && activeMaster.document_number) setDocumentNumber(activeMaster.document_number)
+      if ((!issuedDate || issuedDate === '') && activeMaster.published_at) setIssuedDate(activeMaster.published_at.slice(0,10))
+      if ((!revisionNumber || revisionNumber === '') && activeMaster.revision_number) setRevisionNumber(activeMaster.revision_number)
     }
-
-    fetchActiveMaster()
 
     const loadDocuments = async () => {
       const forumId = resolvedForumId || ''
@@ -1034,8 +1035,9 @@ export default function CreateTopic() {
   }
 
   const handleSubmit = async (mode) => {
-    // Reset server error
+    // Reset server and master validation errors
     setServerError(null)
+    setMasterValidationError(null)
     
     const { ok, chosenForum } = validatePhase1()
     if (!ok) {
@@ -1047,6 +1049,19 @@ export default function CreateTopic() {
       return
     }
     
+    // Validation: if there is no active master, ensure the 3 master fields are present
+    if (!activeMaster) {
+      const docEmpty = !documentNumber || !documentNumber.trim()
+      const issuedEmpty = !issuedDate || !issuedDate.trim()
+      const revEmpty = !revisionNumber || !revisionNumber.trim()
+      if (docEmpty && issuedEmpty && revEmpty) {
+        setMasterValidationError('Simpan diblokir: nomor dokumen, tanggal terbit, dan nomor revisi harus diisi atau siapkan master dokumen aktif di Administrasi.')
+        // Ensure user sees the audit-info tab
+        setActiveTab('audit-info')
+        return
+      }
+    }
+
     setSubmitting(true)
     
     try {
@@ -1178,6 +1193,11 @@ export default function CreateTopic() {
 
           <CardContent className="p-6">
             {/* When an active master exists the fields below are disabled. If the master exists but a specific field is empty, show inline alert next to that field. */}
+            {masterValidationError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription className="text-sm">{masterValidationError}</AlertDescription>
+              </Alert>
+            )}
             {/* Tabs Navigation */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
               <TabsList className="grid w-full grid-cols-3">
@@ -1245,14 +1265,23 @@ export default function CreateTopic() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">No. Dokumen</Label>
-                    <Input
-                      value={documentNumber}
-                      onChange={(e) => setDocumentNumber(e.target.value)}
-                      placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
-                      disabled={masterActive}
-                    />
-                    {masterActive && activeMaster && !activeMaster.document_number && (
-                      <p className="text-xs text-destructive mt-1">Data master belum memiliki nomor dokumen.</p>
+                    <div className="relative">
+                      <Input
+                        value={documentNumber}
+                        onChange={(e) => { setDocumentNumber(e.target.value); setDocTouched(true) }}
+                        placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
+                        disabled={!!activeMaster || activeMasterLoading}
+                      />
+                      {activeMasterLoading && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    {activeMaster && !activeMaster.document_number && (
+                      <p className="text-xs text-destructive mt-1 flex items-center justify-between">
+                        <span>Data master belum memiliki nomor dokumen.</span>
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -1262,27 +1291,41 @@ export default function CreateTopic() {
                       <Input
                         type="date"
                         value={issuedDate}
-                        onChange={(e) => setIssuedDate(e.target.value)}
+                        onChange={(e) => { setIssuedDate(e.target.value); setIssuedTouched(true) }}
                         className="pl-9"
-                        disabled={masterActive}
+                        disabled={!!activeMaster || activeMasterLoading}
                       />
+                      {activeMasterLoading && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
                     </div>
-                    {masterActive && activeMaster && !activeMaster.published_at && (
+                    {activeMaster && !activeMaster.published_at && (
                       <p className="text-xs text-destructive mt-1">Data master belum memiliki tanggal terbit.</p>
                     )}
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">No. Revisi</Label>
-                    <Input
-                      value={revisionNumber}
-                      onChange={(e) => setRevisionNumber(e.target.value)}
-                      placeholder="Contoh: 0"
-                      disabled={masterActive}
-                    />
-                    {masterActive && activeMaster && !activeMaster.revision_number && (
-                      <p className="text-xs text-destructive mt-1">Data master belum memiliki nomor revisi.</p>
+                    <div className="relative">
+                      <Input
+                        value={revisionNumber}
+                        onChange={(e) => { setRevisionNumber(e.target.value); setRevTouched(true) }}
+                        placeholder="Contoh: 0"
+                        disabled={!!activeMaster || activeMasterLoading}
+                      />
+                      {activeMasterLoading && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    {activeMaster && !activeMaster.revision_number && (
+                      <p className="text-xs text-destructive mt-1 flex items-center justify-between">
+                        <span>Data master belum memiliki nomor revisi.</span>
+                      </p>
                     )}
-                    {masterActive && activeMaster && (activeMaster.revision_number || activeMaster.document_number || activeMaster.published_at) && (
+                    {activeMaster && (activeMaster.revision_number || activeMaster.document_number || activeMaster.published_at) && (
                       <p className="text-xs text-muted-foreground mt-1">Terisi otomatis dari master dokumen dan tidak dapat diubah.</p>
                     )}
                   </div>

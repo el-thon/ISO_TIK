@@ -89,6 +89,21 @@ export function useCreateForumPeriodForum(periodId, options = {}) {
   })
 }
 
+export function useUpdateForumPeriodForum(periodId, forumId, options = {}) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload) => forumPeriodService.updateForumPeriodForum(periodId, forumId, payload),
+    onSuccess: (data, variables, context) => {
+      if (periodId && forumId) {
+        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId] })
+      }
+      if (options.onSuccess) options.onSuccess(data, variables, context)
+    },
+    ...options,
+  })
+}
+
 export function useJoinForumPeriod(options = {}) {
   const queryClient = useQueryClient()
   return useMutation({

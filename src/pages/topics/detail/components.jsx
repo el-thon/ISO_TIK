@@ -14,6 +14,7 @@ import {
   Download,
   File,
   AlertCircle,
+  Tag,
   Undo2,
   Paperclip,
   ListChecks,
