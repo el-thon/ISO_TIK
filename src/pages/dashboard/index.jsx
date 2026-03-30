@@ -41,6 +41,12 @@ const CHART_COLORS = {
   ChildForum: '#7c3aed',
 }
 
+const METRIC_LABELS = {
+  users: 'Total users per periode (aktif + non-aktif)',
+  periods: 'Total periode & total child forum per periode waktu',
+  masters: 'Total data master per periode (aktif + non-aktif)',
+}
+
 const formatDateLabel = (value) => {
   if (!value) return '-'
   const parsed = new Date(value)
