@@ -12,7 +12,7 @@ import {
 import { Users, Calendar, Database, TrendingUp } from 'lucide-react'
 import {
   ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   Line,
   CartesianGrid,
   XAxis,
@@ -41,6 +41,12 @@ const CHART_COLORS = {
   ChildForum: '#7c3aed',
 }
 
+const METRIC_LABELS = {
+  users: 'Total users per periode (aktif + non-aktif)',
+  periods: 'Total periode & total child forum per periode waktu',
+  masters: 'Total data master per periode (aktif + non-aktif)',
+}
+
 const formatDateLabel = (value) => {
   if (!value) return '-'
   const parsed = new Date(value)
@@ -55,6 +61,68 @@ const formatDateLabel = (value) => {
 
 const getPeriodDisplayName = (period, index) => {
   return period?.name || period?.title || `Periode ${index + 1}`
+}
+
+const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = false }) => {
+  return (
+    <motion.div
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      transition={{ duration: 0.2 }}
+      className="h-full"
+    >
+      <Card
+        className={`border transition-all h-full ${
+          isAlt
+            ? 'bg-black border-gray-800 text-white hover:shadow-lg'
+            : 'bg-white border-gray-200 text-gray-900 hover:shadow-md'
+        }`}
+      >
+        <CardContent className="p-6 h-full flex flex-col">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <p className={`text-sm font-medium mb-1 ${isAlt ? 'text-gray-300' : 'text-gray-600'}`}>
+                {title}
+              </p>
+
+              {loading ? (
+                <div className="h-8 w-24 bg-gray-200 animate-pulse rounded" />
+              ) : (
+                <p className={`text-3xl font-bold ${isAlt ? 'text-white' : 'text-gray-900'}`}>
+                  {value?.toLocaleString() || 0}
+                </p>
+              )}
+
+              {details && (
+                <div className="mt-3 space-y-1">
+                  {details.map((detail, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs">
+                      <span className={isAlt ? 'text-gray-400' : 'text-gray-500'}>
+                        {detail.label}
+                      </span>
+                      <span className={`font-medium ${isAlt ? 'text-gray-300' : 'text-gray-700'}`}>
+                        {detail.value?.toLocaleString() || 0}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {trend && (
+                <p className={`text-xs mt-2 flex items-center gap-1 ${isAlt ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <TrendingUp className="w-3 h-3" />
+                  {trend}
+                </p>
+              )}
+            </div>
+
+            <div className={`p-3 rounded-full ${isAlt ? 'bg-white/10' : 'bg-gray-100'}`}>
+              <Icon className={`w-6 h-6 ${isAlt ? 'text-white' : 'text-gray-700'}`} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
 }
 
 const safeGetDate = (item) => {
@@ -126,234 +194,164 @@ const getMonths = (monthsCount) => {
   return months
 }
 
-const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = false }) => {
-  return (
-    <motion.div
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      transition={{ duration: 0.2 }}
-      className="h-full"
-    >
-      <Card
-        className={`border transition-all h-full ${
-          isAlt
-            ? 'bg-black border-gray-800 text-white hover:shadow-lg'
-            : 'bg-white border-gray-200 text-gray-900 hover:shadow-md'
-        }`}
-      >
-        <CardContent className="p-6 h-full flex flex-col">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <p className={`text-sm font-medium mb-1 ${isAlt ? 'text-gray-300' : 'text-gray-600'}`}>
-                {title}
-              </p>
-
-              {loading ? (
-                <div className="h-8 w-24 bg-gray-200 animate-pulse rounded" />
-              ) : (
-                <p className={`text-3xl font-bold ${isAlt ? 'text-white' : 'text-gray-900'}`}>
-                  {value?.toLocaleString() || 0}
-                </p>
-              )}
-
-              {details && (
-                <div className="mt-3 space-y-1">
-                  {details.map((detail, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs">
-                      <span className={isAlt ? 'text-gray-400' : 'text-gray-500'}>
-                        {detail.label}
-                      </span>
-                      <span className={`font-medium ${isAlt ? 'text-gray-300' : 'text-gray-700'}`}>
-                        {detail.value?.toLocaleString() || 0}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {trend && (
-                <p className={`text-xs mt-2 flex items-center gap-1 ${isAlt ? 'text-gray-400' : 'text-gray-500'}`}>
-                  <TrendingUp className="w-3 h-3" />
-                  {trend}
-                </p>
-              )}
-            </div>
-
-            <div className={`p-3 rounded-full ${isAlt ? 'bg-white/10' : 'bg-gray-100'}`}>
-              <Icon className={`w-6 h-6 ${isAlt ? 'text-white' : 'text-gray-700'}`} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  )
-}
-
 const OverviewStatsChart = ({ users = [], periods = [], masters = [] }) => {
   const [selectedRange, setSelectedRange] = useState('3')
+  const [selectedMetric, setSelectedMetric] = useState('users')
 
   const buckets = useMemo(() => {
     if (selectedRange === '1') return getWeeksInCurrentMonth()
     return getMonths(parseInt(selectedRange, 10))
   }, [selectedRange])
 
-  const userCounts = useMemo(() => {
-    const arr = ensureArray(users)
+  const chartData = useMemo(() => {
+    const usersList = ensureArray(users)
+    const periodsList = ensureArray(periods)
+    const mastersList = ensureArray(masters)
+
+    const isInBucket = (date, bucket) => {
+      if (!date) return false
+      if (selectedRange === '1') {
+        return date >= bucket.start && date <= bucket.end
+      }
+      return (
+        date.getFullYear() === bucket.start.getFullYear() &&
+        date.getMonth() === bucket.start.getMonth()
+      )
+    }
 
     return buckets.map((bucket) => {
-      let count = 0
+      const bucketUsers = usersList.filter((user) => isInBucket(safeGetDate(user), bucket))
+      const usersActive = bucketUsers.filter(
+        (user) => user?.status === 'active' || user?.status === 'activated'
+      ).length
+      const usersInactive = bucketUsers.length - usersActive
 
-      for (const user of arr) {
-        const d = safeGetDate(user)
-        if (!d) continue
+      const bucketPeriods = periodsList.filter((period) => isInBucket(safeGetDate(period), bucket))
+      const childForumTotal = bucketPeriods.reduce(
+        (sum, period) => sum + Number(period?.forums_count || 0),
+        0
+      )
 
-        if (selectedRange === '1') {
-          if (d >= bucket.start && d <= bucket.end) count++
-        } else {
-          if (
-            d.getFullYear() === bucket.start.getFullYear() &&
-            d.getMonth() === bucket.start.getMonth()
-          ) {
-            count++
-          }
-        }
+      const bucketMasters = mastersList.filter((master) => isInBucket(safeGetDate(master), bucket))
+      const mastersActive = bucketMasters.filter((master) => Boolean(master?.is_active)).length
+      const mastersInactive = bucketMasters.length - mastersActive
+
+      return {
+        name: bucket.label,
+        usersTotal: bucketUsers.length,
+        usersActive,
+        usersInactive,
+        periodsTotal: bucketPeriods.length,
+        childForumTotal,
+        mastersTotal: bucketMasters.length,
+        mastersActive,
+        mastersInactive,
       }
-
-      return count
     })
-  }, [users, buckets, selectedRange])
+  }, [users, periods, masters, buckets, selectedRange])
 
-  const periodCounts = useMemo(() => {
-    const arr = ensureArray(periods)
+  const renderMetricSeries = () => {
+    if (selectedMetric === 'users') {
+      return (
+        <>
+          <Bar dataKey="usersActive" stackId="users" fill="#06b6d4" name="Users Aktif" />
+          <Bar dataKey="usersInactive" stackId="users" fill="#9ca3af" name="Users Non-aktif" />
+          <Line
+            type="monotone"
+            dataKey="usersTotal"
+            name="Total Users"
+            stroke="#0e7490"
+            strokeWidth={2.5}
+            dot={{ r: 4 }}
+          />
+        </>
+      )
+    }
 
-    return buckets.map((bucket) => {
-      let count = 0
+    if (selectedMetric === 'periods') {
+      return (
+        <>
+          <Bar dataKey="periodsTotal" fill="#7c3aed" name="Total Periode" />
+          <Bar dataKey="childForumTotal" fill="#c084fc" name="Total Child Forum" />
+        </>
+      )
+    }
 
-      for (const period of arr) {
-        const d = safeGetDate(period)
-        if (!d) continue
-
-        if (selectedRange === '1') {
-          if (d >= bucket.start && d <= bucket.end) count++
-        } else {
-          if (
-            d.getFullYear() === bucket.start.getFullYear() &&
-            d.getMonth() === bucket.start.getMonth()
-          ) {
-            count++
-          }
-        }
-      }
-
-      return count
-    })
-  }, [periods, buckets, selectedRange])
-
-  const masterCounts = useMemo(() => {
-    const arr = ensureArray(masters)
-
-    return buckets.map((bucket) => {
-      let count = 0
-
-      for (const item of arr) {
-        const d = safeGetDate(item)
-        if (!d) continue
-
-        if (selectedRange === '1') {
-          if (d >= bucket.start && d <= bucket.end) count++
-        } else {
-          if (
-            d.getFullYear() === bucket.start.getFullYear() &&
-            d.getMonth() === bucket.start.getMonth()
-          ) {
-            count++
-          }
-        }
-      }
-
-      return count
-    })
-  }, [masters, buckets, selectedRange])
-
-  const chartData = buckets.map((bucket, index) => ({
-    name: bucket.label,
-    Users: userCounts[index] || 0,
-    Periods: periodCounts[index] || 0,
-    'Data Master': masterCounts[index] || 0,
-  }))
-
-  const isWeekly = selectedRange === '1'
+    return (
+      <>
+        <Bar dataKey="mastersActive" stackId="masters" fill="#f97316" name="Master Aktif" />
+        <Bar dataKey="mastersInactive" stackId="masters" fill="#9a3412" name="Master Non-aktif" />
+        <Line
+          type="monotone"
+          dataKey="mastersTotal"
+          name="Total Data Master"
+          stroke="#ea580c"
+          strokeWidth={2.5}
+          dot={{ r: 4 }}
+        />
+      </>
+    )
+  }
 
   return (
     <Card className="border border-gray-200">
       <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <CardTitle className="text-md font-semibold">
-            Overview Pengguna / Periode / Data Master
+            Overview Statistik Berdasarkan Periode Waktu
           </CardTitle>
           <p className="text-sm text-gray-500 mt-1">
-            Menampilkan jumlah data berdasarkan tanggal pembuatan dalam rentang waktu yang dipilih.
+            Gunakan filter untuk melihat breakdown users, periode + child forum, dan data master.
           </p>
         </div>
 
-        <Select value={selectedRange} onValueChange={setSelectedRange}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="Pilih periode" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="1">1 Bulan</SelectItem>
-            <SelectItem value="3">3 Bulan</SelectItem>
-            <SelectItem value="6">6 Bulan</SelectItem>
-            <SelectItem value="12">12 Bulan</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Pilih metric" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="users">Users</SelectItem>
+              <SelectItem value="periods">Periode & Child Forum</SelectItem>
+              <SelectItem value="masters">Data Master</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedRange} onValueChange={setSelectedRange}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Pilih periode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1 Bulan</SelectItem>
+              <SelectItem value="3">3 Bulan</SelectItem>
+              <SelectItem value="6">6 Bulan</SelectItem>
+              <SelectItem value="12">12 Bulan</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
 
       <CardContent>
+        <p className="text-xs text-gray-500 mb-3">{METRIC_LABELS[selectedMetric] || '-'}</p>
         <div style={{ height: 320 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
+            <ComposedChart
               data={chartData}
-              margin={{ top: 10, right: 20, left: 10, bottom: isWeekly ? 30 : 50 }}
+              margin={{ top: 10, right: 20, left: 10, bottom: selectedRange === '1' ? 20 : 45 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
               <XAxis
                 dataKey="name"
                 tick={{ fill: '#374151', fontSize: 12 }}
-                angle={isWeekly ? 0 : -45}
-                textAnchor={isWeekly ? 'middle' : 'end'}
-                height={isWeekly ? 40 : 60}
+                angle={selectedRange === '1' ? 0 : -45}
+                textAnchor={selectedRange === '1' ? 'middle' : 'end'}
+                height={selectedRange === '1' ? 40 : 60}
               />
               <YAxis tick={{ fill: '#374151', fontSize: 12 }} allowDecimals={false} />
               <Tooltip />
               <Legend />
-              <Line
-                type="monotone"
-                dataKey="Users"
-                name="Pengguna"
-                stroke={CHART_COLORS.Users}
-                strokeWidth={2.5}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="Periods"
-                name="Periode"
-                stroke={CHART_COLORS.Periods}
-                strokeWidth={2.5}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="Data Master"
-                name="Data Master"
-                stroke={CHART_COLORS['Data Master']}
-                strokeWidth={2.5}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
+              {renderMetricSeries()}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
