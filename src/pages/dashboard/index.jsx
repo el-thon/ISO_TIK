@@ -12,7 +12,7 @@ import {
 import { Users, Calendar, Database, TrendingUp } from 'lucide-react'
 import {
   ResponsiveContainer,
-  LineChart,
+  ComposedChart,
   Line,
   CartesianGrid,
   XAxis,
@@ -166,9 +166,10 @@ const OverviewStatsChart = ({ statsCards = [] }) => {
       </CardHeader>
 
       <CardContent>
+        <p className="text-xs text-gray-500 mb-3">{metricLabels[selectedMetric]}</p>
         <div style={{ height: 320 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart
+            <ComposedChart
               data={chartData}
               margin={{ top: 10, right: 20, left: 10, bottom: 20 }}
             >
@@ -183,34 +184,8 @@ const OverviewStatsChart = ({ statsCards = [] }) => {
               <YAxis tick={{ fill: '#374151', fontSize: 12 }} allowDecimals={false} />
               <Tooltip />
               <Legend />
-              <Line
-                type="monotone"
-                dataKey="Users"
-                name="Pengguna"
-                stroke={CHART_COLORS.Users}
-                strokeWidth={2.5}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="Periods"
-                name="Periode"
-                stroke={CHART_COLORS.Periods}
-                strokeWidth={2.5}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="Data Master"
-                name="Data Master"
-                stroke={CHART_COLORS['Data Master']}
-                strokeWidth={2.5}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
+              {renderMetricSeries()}
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </CardContent>
