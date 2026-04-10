@@ -1,104 +1,151 @@
-# ISO-TIK Frontend (Vite + React)
+# ISO-TIK Frontend v2
 
-Front-end untuk Sistem TIK Internal. Ditulis dengan React 19, Vite, React Query, dan Tailwind. Mendukung workflow topik (draft/review/approve), assignment, dan rich-text tinjauan.
+Frontend aplikasi **Sistem Formulir Ketidaksesuaian ISO-TIK** berbasis React + Vite.
 
-## Arsitektur Singkat
+## Ringkasan Sistem
 
-- **React + Vite**: SPA dengan routing di `src/router.client.jsx` dan `src/routes.jsx`.
-- **State/data**: TanStack React Query di `src/services/*Hooks.js` untuk fetch & caching.
-- **UI**: Komponen di `src/components/ui` dan layout di `src/layout/MainLayout.jsx`.
-- **Topik & Tinjauan**: Lihat `src/pages/topics/detail.jsx` dan `src/services/topicService.js`.
+Sistem ini mengelola hierarki data berikut:
 
-## Prasyarat
+1. **Ruangan** (periode/ruang kerja utama)
+2. **Forum** (bagian diskusi/kerja di dalam ruangan)
+3. **Formulir Ketidaksesuaian** (entri formulir di dalam forum)
+
+Struktur akses bersifat bertingkat: akses ke forum dan formulir mengikuti keanggotaan user pada ruangan/forum.
+
+## Role Global
+
+Sistem memiliki 3 role global:
+
+- **member**
+- **admin**
+- **product_owner**
+
+### Matriks Hak Akses Utama
+
+| Fitur / Aksi | member | admin | product_owner |
+| --- | --- | --- | --- |
+| Lihat daftar ruangan | ✅ | ✅ | ✅ |
+| Buat ruangan | ✅ | ✅ | ❌ |
+| Ubah ruangan (jika owner/creator) | ✅ | ✅ | ❌ |
+| Lihat detail ruangan (list forum) | Terbatas sesuai keanggotaan | Terbatas sesuai keanggotaan | ✅ |
+| Lihat detail forum (list formulir ketidaksesuaian) | Hanya forum yang menjadi bagiannya | Hanya forum yang menjadi bagiannya | ✅ |
+| Dashboard ringkasan | ✅ | ✅ | ✅ |
+| CRUD Dokumen Header formulir | ❌ | ✅ | Read-only di UI |
+| CRUD Pengguna (role lain) | ❌ | ✅ | ❌ |
+| CRUD Klausul | ❌ | ✅ | ❌ |
+
+> Catatan: rule final tetap ditentukan backend authorization. README ini mendokumentasikan alur sistem yang saat ini digunakan pada frontend.
+
+## Alur Akses yang Diimplementasikan
+
+1. **User non-member ruangan**
+   - Bisa melihat daftar seluruh ruangan (tanpa akses penuh ke rincian tertentu).
+   - Bisa bergabung ke ruangan menggunakan **join code** dari owner ruangan.
+
+2. **User member ruangan**
+   - Tidak otomatis bisa membaca semua forum.
+   - Hanya bisa mengakses forum yang memang menjadi bagiannya.
+
+3. **Join forum (invite)**
+   - User harus diundang oleh owner/pengelola forum agar menjadi bagian forum.
+
+4. **Dashboard lintas role**
+   - Dapat diakses semua role (member/admin/product_owner).
+   - Menampilkan statistik agregat, termasuk total forum pada ruangan dan total formulir ketidaksesuaian pada forum.
+
+## Modul Utama Frontend
+
+- **Autentikasi**: login, refresh session, profile.
+- **Ruangan**: list, create, detail, update, join by code.
+- **Forum**: list forum yang relevan dengan user, detail forum, peserta forum.
+- **Formulir Ketidaksesuaian**: list, detail, pembuatan, assignment, attachment, workflow.
+- **Dashboard**: statistik pengguna, ruangan/forum, formulir.
+- **Administrasi**:
+  - Klausul (`/admin/system/clauses`)
+  - Dokumen Header (`/admin/topic-document-masters`)
+  - Manajemen Pengguna (`/admin/users`)
+
+## Rute Halaman Utama
+
+- `/beranda` → Dashboard
+- `/ruangan` → Manajemen Ruangan
+- `/forum` → Daftar Forum
+- `/forum/:id` → Detail Forum
+- `/formulir/:id` → Detail Formulir
+- `/formulir/buat` → Buat Formulir
+- `/administrasi` → Modul Administrasi
+- `/profil` → Profil Pengguna
+
+## Teknologi
+
+- React 19
+- Vite
+- React Router
+- TanStack React Query
+- Tailwind CSS
+- Radix UI
+- Axios
+
+## Persiapan Development
+
+### Prasyarat
 
 - Node.js 20+
 - npm 10+
 
-## Menjalankan Secara Lokal
+### Menjalankan Lokal
 
 ```bash
 npm install --legacy-peer-deps
 npm run dev
-# buka http://localhost:5173
 ```
 
-## Build Produksi Lokal
+Akses: `http://localhost:5173`
+
+### Environment
+
+Buat file `.env` (opsional) dari `.env.example`.
+
+Contoh variabel:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000/api/v1
+VITE_FEATURE_RICH_TEXT=true
+```
+
+## Build & Deploy
+
+### Build lokal
 
 ```bash
 npm run build
 npm run preview
-# buka http://localhost:4173
 ```
 
-## Menjalankan dengan Docker
-
-Pastikan Docker terpasang.
-
-### Build & Run (single service)
+### Docker (single service)
 
 ```bash
 docker build -t iso-tik-fe .
 docker run -d -p 5173:80 --name iso-tik-fe iso-tik-fe
-# buka http://localhost:5173
 ```
 
-### Dengan docker-compose
+### Docker Compose
 
 ```bash
 docker-compose up --build -d
-# buka http://localhost:5173
 ```
 
-### Struktur Docker
+## Script NPM
 
-- `Dockerfile`: multi-stage (deps → build → nginx static serve)
-- `docker/nginx.conf`: SPA routing ke `index.html`
-- `docker-compose.yml`: mapping port 5173→80
-
-## Konfigurasi Lingkungan
-
-- Vite env file: `.env` (opsional). Contoh variabel umum:
-  - `VITE_API_BASE_URL=http://localhost:8000/api/v1`
-  - `VITE_FEATURE_RICH_TEXT=true`
-
-## Titik Masuk Kode Utama
-
-- `src/main.jsx`: bootstrap aplikasi
-- `src/App.jsx`: shell utama
-- `src/routes.jsx`: definisi rute
-- `src/services/api.js`: konfigurasi axios + token
-- `src/services/topicService.js`: layanan topik & tinjauan
-- `src/pages/topics/detail.jsx`: tampilan detail topik, workflow, versi, tinjauan (rich text)
-
-## Skema Skrip npm
-
-- `npm run dev` — dev server Vite
+- `npm run dev` — jalankan mode development
 - `npm run build` — build produksi
 - `npm run preview` — preview hasil build
-- `npm run lint` — linting (eslint)
+- `npm run lint` — linting ESLint
 
-## Catatan Deployment
+## Struktur Folder Inti
 
-- Output build ada di `dist/`, disajikan oleh Nginx di image Docker.
-- SPA routing sudah dikonfigurasi lewat `docker/nginx.conf` (fallback ke `index.html`).
-
-## Troubleshooting
-
-- **Port bentrok**: ganti mapping di `docker-compose.yml` (mis. `8080:80`).
-- **CORS/API**: pastikan `VITE_API_BASE_URL` sesuai host backend.
-- **Peer deps**: gunakan `npm install --legacy-peer-deps` bila ada konflik.# React + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- `src/pages` → halaman utama aplikasi
+- `src/services` → API services + hooks React Query
+- `src/routes` → route guard dan proteksi akses
+- `src/components` → komponen UI dan komponen fitur
+- `src/layout` → layout aplikasi
