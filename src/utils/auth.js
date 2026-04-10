@@ -46,6 +46,22 @@ export const getUserData = () => {
   return null
 }
 
+export const getUserRoles = (userData = null) => {
+  const source = userData || getUserData()
+  const roles =
+    source?.roles ||
+    source?.data?.roles ||
+    source?.data?.user?.roles ||
+    []
+
+  if (!Array.isArray(roles)) return []
+  return roles.map((role) => String(role).toLowerCase().replace(/\s+/g, '_'))
+}
+
+export const isProductOwnerUser = (userData = null) => {
+  return getUserRoles(userData).includes('product_owner')
+}
+
 export const isAuthenticated = () => {
   return !!getAccessToken()
 }
@@ -80,6 +96,8 @@ export { getAccessToken, getRefreshToken, setTokens, clearTokens } from '@/servi
 export default {
   getCurrentUserId,
   getUserData,
+  getUserRoles,
+  isProductOwnerUser,
   isAuthenticated,
   saveUserData,
   clearUserData,

@@ -126,6 +126,12 @@ function toast({
     },
   })
 
+  if (typeof props.duration === 'number' && props.duration > 0) {
+    setTimeout(() => {
+      dismiss()
+    }, props.duration)
+  }
+
   return {
     id: id,
     dismiss,

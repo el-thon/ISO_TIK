@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import api from './api'
-import { listUsers, getStatistics as getUserStatistics } from './adminUsersService'
 import { listForumPeriods, listForumPeriodForums } from './forumPeriodService'
 import { listTopics } from './topicService'
 
@@ -26,10 +25,10 @@ export const useDashboardStats = () => {
 
 export const useForumPeriods = () => {
   return useQuery({
-    queryKey: ['forum-periods'],
+    queryKey: ['ruangan'],
     queryFn: async () => {
-      const response = await api.get('/forum-periods')
-      return response.data?.data || []
+      const response = await listForumPeriods({ per_page: 1000 })
+      return response?.periods || []
     },
     staleTime: 5 * 60 * 1000,
   })
@@ -51,13 +50,19 @@ export const useChildForumDetails = (childId) => {
 export const useDashboardData = () => {
   const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['users', 'list', 'dashboard'],
-    queryFn: () => listUsers({ per_page: 1000 }),
+    queryFn: async () => {
+      const res = await api.get('/users', { params: { per_page: 1000 } })
+      return res.data?.data || res.data || {}
+    },
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: statsData, isLoading: statsLoading, error: statsError } = useQuery({
-    queryKey: ['users', 'statistics', 'dashboard'],
-    queryFn: () => getUserStatistics(),
+    queryKey: ['dashboard', 'statistics', 'dashboard'],
+    queryFn: async () => {
+      const res = await api.get('/dashboard/statistics')
+      return res.data?.data || {}
+    },
     staleTime: 5 * 60 * 1000,
   })
 
@@ -86,7 +91,10 @@ export const useDashboardData = () => {
               forums_count: forums.length,
             }
           } catch (error) {
-            console.error(`Gagal mengambil forum untuk period ${period.id}`, error)
+            const status = error?.response?.status
+            if (status !== 401 && status !== 403) {
+              console.error(`Gagal mengambil forum untuk period ${period.id}`, error)
+            }
 
             return {
               ...period,
@@ -105,15 +113,34 @@ export const useDashboardData = () => {
 
   const { data: topicsData, isLoading: topicsLoading, error: topicsError } = useQuery({
     queryKey: ['topics', 'list', 'dashboard'],
-    queryFn: () => listTopics({ per_page: 1000 }),
+    queryFn: async () => {
+      try {
+        return await listTopics({ per_page: 1000 })
+      } catch (error) {
+        const status = error?.response?.status
+        if (status === 401 || status === 403) {
+          return { topics: [] }
+        }
+        throw error
+      }
+    },
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: adminMasters, isLoading: adminMastersLoading, error: adminMastersError } = useQuery({
     queryKey: ['adminTopicDocumentMasters', 'dashboard'],
     queryFn: async () => {
-      const res = await api.get('/admin/topic-document-masters')
-      return res.data?.data || res.data || []
+      try {
+        const res = await api.get('/admin/topic-document-masters')
+        return res.data?.data || res.data || []
+      } catch (error) {
+        // Endpoint ini memang khusus admin/product_owner; untuk member dashboard tetap harus bisa tampil.
+        const status = error?.response?.status
+        if (status === 401 || status === 403) {
+          return []
+        }
+        throw error
+      }
     },
     staleTime: 5 * 60 * 1000,
   })
@@ -122,15 +149,59 @@ export const useDashboardData = () => {
   const topicsArray = ensureArray(topicsData?.topics)
   const periodsRaw = ensureArray(periodsResp?.periods)
   const documentMasterArray = ensureArray(adminMasters)
+  const statsForumsPerRoom = ensureArray(statsData?.statistics?.forums_per_room)
+  const statsDiscrepancyFormsPerForum = ensureArray(statsData?.statistics?.discrepancy_forms_per_forum)
+
+  const discrepancyFormsPerForumArray = statsDiscrepancyFormsPerForum.map((item, index) => ({
+    id: item?.forum_id || `forum-${index}`,
+    forum_id: item?.forum_id || null,
+    forum_name: item?.forum_name || `Forum ${index + 1}`,
+    room_id: item?.room_id || null,
+    room_name: item?.room_name || 'Tanpa Ruangan',
+    forum_created_at: item?.forum_created_at || null,
+    total_discrepancy_forms: Number(item?.total_discrepancy_forms || 0),
+  }))
+
+  const statsForumsPerRoomMap = new Map(
+    statsForumsPerRoom
+      .filter((item) => item?.room_id)
+      .map((item) => [String(item.room_id), Number(item?.total_forum || 0)])
+  )
+
+  const statsForumsByRoomMap = statsDiscrepancyFormsPerForum.reduce((acc, item) => {
+    const roomId = item?.room_id ? String(item.room_id) : null
+    if (!roomId) return acc
+
+    const roomForums = acc.get(roomId) || []
+    roomForums.push({
+      id: item?.forum_id,
+      name: item?.forum_name || 'Forum',
+      created_at: item?.forum_created_at || null,
+      topics_count: Number(item?.total_discrepancy_forms || 0),
+      formulir_count: Number(item?.total_discrepancy_forms || 0),
+      total_discrepancy_forms: Number(item?.total_discrepancy_forms || 0),
+    })
+    acc.set(roomId, roomForums)
+    return acc
+  }, new Map())
+
+  const usersSummaryFromStats = statsData?.statistics?.users || statsData?.users || null
+
+  const normalizeUserStatus = (user) =>
+    String(user?.status || user?.user?.status || 'active')
+      .toLowerCase()
+      .trim()
+
+  const isActiveStatus = (status) => ['active', 'activated'].includes(status)
 
   const userStats = {
-    total: usersArray.length,
-    active: usersArray.filter(
-      (u) => u.status === 'active' || u.status === 'activated'
-    ).length,
-    inactive: usersArray.filter(
-      (u) => u.status !== 'active' && u.status !== 'activated'
-    ).length,
+    total: Number(usersSummaryFromStats?.total ?? usersArray.length),
+    active: Number(
+      usersSummaryFromStats?.active ?? usersArray.filter((u) => isActiveStatus(normalizeUserStatus(u))).length
+    ),
+    inactive: Number(
+      usersSummaryFromStats?.inactive ?? usersArray.filter((u) => !isActiveStatus(normalizeUserStatus(u))).length
+    ),
   }
 
   const topicsByPeriod = topicsArray.reduce((acc, topic) => {
@@ -149,11 +220,46 @@ export const useDashboardData = () => {
     return acc
   }, {})
 
+  const topicsByForum = topicsArray.reduce((acc, topic) => {
+    const forumId =
+      topic?.forum_id ||
+      topic?.forumId ||
+      topic?.forum?.id ||
+      null
+
+    if (!forumId) return acc
+    if (!acc[forumId]) acc[forumId] = []
+    acc[forumId].push(topic)
+    return acc
+  }, {})
+
   const periodsArray = periodsRaw.map((period) => {
-    const childForums = ensureArray(period?.forums)
+    const periodId = period?.id ? String(period.id) : null
+    const childForumsRaw = ensureArray(period?.forums)
+    const childForumsFromStats = periodId ? (statsForumsByRoomMap.get(periodId) || []) : []
+    const childForumsSource = childForumsFromStats.length > 0 ? childForumsFromStats : childForumsRaw
+
+    const childForums = childForumsSource.map((forum) => {
+      const forumTopics = topicsByForum[forum?.id] || []
+      const countedFromStats = Number(forum?.total_discrepancy_forms || 0)
+      const countedFromForum = Number(forum?.topics_count || forum?.formulir_count || forum?.document_count || 0)
+      const countedFromTopics = forumTopics.length
+      const resolvedCount = Math.max(countedFromStats, countedFromForum, countedFromTopics)
+
+      return {
+        ...forum,
+        created_at: forum?.created_at || forum?.createdAt || null,
+        formulir_count: resolvedCount,
+        topics_count: resolvedCount,
+      }
+    })
     const topicsForPeriod = topicsByPeriod[period.id] || []
 
-    const totalChildForums = Number(period?.forums_count || childForums.length || 0)
+    const statsTotalChildForums = periodId ? statsForumsPerRoomMap.get(periodId) : undefined
+
+    const totalChildForums = Number.isFinite(statsTotalChildForums)
+      ? Number(statsTotalChildForums)
+      : Number(period?.forums_count || childForums.length || 0)
 
     const totalFormulirFromForums = childForums.reduce((sum, forum) => {
       return sum + Number(forum?.topics_count || forum?.formulir_count || 0)
@@ -167,6 +273,8 @@ export const useDashboardData = () => {
       name: period?.name,
       description: period?.description || null,
       status: period?.status,
+      start_date: period?.start_date || null,
+      end_date: period?.end_date || null,
       created_at: period?.created_at || period?.createdAt || null,
       forums_count: totalChildForums,
       formulir_count: totalFormulir,
@@ -193,6 +301,7 @@ export const useDashboardData = () => {
     userStats,
     statsData,
     periodsArray,
+    discrepancyFormsPerForumArray,
     documentMasterArray,
     isLoading,
     error,

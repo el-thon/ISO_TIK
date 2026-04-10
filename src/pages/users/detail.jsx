@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Loader2 } from 'lucide-react'
 import { useAdminUser, useDeleteAdminUser, useUpdateAdminUser } from '@/services/adminUsersHooks'
 import { useAuditLogs } from '@/services/auditLogsHooks'
+import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 export default function UserDetail() {
   const { id } = useParams()
@@ -43,6 +44,7 @@ export default function UserDetail() {
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ full_name: '', email: '', status: 'active', username: '' })
   const auditLogs = auditData?.logs ?? []
+  const isProductOwner = isProductOwnerUser(getUserData())
 
   useEffect(() => {
     if (user) {
@@ -82,6 +84,7 @@ export default function UserDetail() {
 
   function handleEditSubmit(e) {
     e.preventDefault()
+    if (isProductOwner) return
     if (!id) return
     updateMutation.mutate({
       userId: id,
@@ -95,6 +98,7 @@ export default function UserDetail() {
   }
 
   function handleDeleteConfirm() {
+    if (isProductOwner) return
     if (!id) return
     deleteMutation.mutate({ userId: id, reason: 'Deleted via UI' })
   }
@@ -110,14 +114,16 @@ export default function UserDetail() {
 
             <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => navigate(-1)}>Back</Button>
-            <Button className="bg-amber-500 text-white" onClick={() => setEditOpen(true)} disabled={isLoading || !user}>
+            <Button className="bg-amber-500 text-white" onClick={() => setEditOpen(true)} disabled={isProductOwner || isLoading || !user}>
               {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Edit'}
             </Button>
-            <Button variant="outline" onClick={() => setDeleteOpen(true)} className="text-red-600" disabled={isLoading || deleteMutation.isPending || !user}>
+            <Button variant="outline" onClick={() => setDeleteOpen(true)} className="text-red-600" disabled={isProductOwner || isLoading || deleteMutation.isPending || !user}>
               {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
             </Button>
           </div>
         </div>
+
+        {/* product_owner read-only banner removed per request; edit/delete controls are disabled for product_owner */}
 
         <Card>
           <CardContent>
@@ -281,7 +287,7 @@ export default function UserDetail() {
             )}
           </CardContent>
         </Card>
-        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+  <Dialog open={!isProductOwner && editOpen} onOpenChange={setEditOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Pengguna</DialogTitle>
@@ -317,7 +323,7 @@ export default function UserDetail() {
             </form>
           </DialogContent>
         </Dialog>
-        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+  <Dialog open={!isProductOwner && deleteOpen} onOpenChange={setDeleteOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Hapus Pengguna</DialogTitle>

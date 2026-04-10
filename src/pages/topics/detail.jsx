@@ -36,7 +36,6 @@ import {
   TopicVersionsHeader,
   WorkflowStates,
   Routings,
-  Labels,
   TopicDetailSkeleton,
   InputItemsSkeleton,
   VersionsSkeleton,
@@ -460,6 +459,15 @@ export default function TopicDetail() {
   const handleExportPdf = useCallback(async () => {
     if (!printRef.current) return
 
+    if (!findingData) {
+      toast({
+        variant: 'destructive',
+        title: 'Data temuan belum tersedia',
+        description: 'Silakan isi data temuan terlebih dahulu sebelum ekspor PDF.',
+      })
+      return
+    }
+
     if (isExporting || isPreviewing) return
 
     try {
@@ -516,6 +524,15 @@ export default function TopicDetail() {
   const handlePreviewPdf = useCallback(async () => {
     if (!printRef.current) return
 
+    if (!findingData) {
+      toast({
+        variant: 'destructive',
+        title: 'Data temuan belum tersedia',
+        description: 'Silakan isi data temuan terlebih dahulu sebelum preview PDF.',
+      })
+      return
+    }
+
     if (isExporting || isPreviewing) return
 
     try {
@@ -564,6 +581,8 @@ export default function TopicDetail() {
     toDataUrl,
     setSignatureDataUrl,
     ensureImagesLoaded,
+  findingData,
+  findingData,
     isExporting,
     isPreviewing,
     resolveSignatures
@@ -831,15 +850,6 @@ export default function TopicDetail() {
                 versionDisplay={versionDisplay}
               />
 
-              {/* Labels Section */}
-              {topic.labels && topic.labels.length > 0 && (
-                <Card>
-                  <CardContent className="pt-6">
-                    <Labels labels={topic.labels} />
-                  </CardContent>
-                </Card>
-              )}
-
               {/* Finding Section - Form Daftar Temuan */}
               <Card>
                 <CardContent className="pt-6">
@@ -850,7 +860,7 @@ export default function TopicDetail() {
                         variant="outline"
                         size="sm"
                         onClick={handlePreviewPdf}
-                        disabled={!findingData || isExporting || isPreviewing}
+                        disabled={isExporting || isPreviewing}
                       >
                         {isPreviewing ? (
                           <span className="inline-flex items-center gap-2">
@@ -862,10 +872,10 @@ export default function TopicDetail() {
                         )}
                       </Button>
                       <Button
-                        variant="secondary"
+                        variant="outline"
                         size="sm"
                         onClick={handleExportPdf}
-                        disabled={!findingData || isExporting}
+                        disabled={isExporting || isPreviewing}
                       >
                         {isExporting ? (
                           <span className="inline-flex items-center gap-2">

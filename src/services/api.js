@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { toast } from '@/components/ui/use-toast'
 
 // In development we prefer a relative API path so Vite can proxy /api to the backend
 const apiBaseEnv = (import.meta.env.VITE_API_BASE_URL || '').trim()
@@ -39,6 +40,53 @@ export function clearTokens() {
   localStorage.removeItem(ACCESS_EXPIRES_KEY)
   localStorage.removeItem(REFRESH_EXPIRES_KEY)
   localStorage.removeItem('user_data')
+}
+
+const getStoredUserData = () => {
+  try {
+    const raw = localStorage.getItem('user_data')
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+const getUserRoles = (userData) => {
+  const roles =
+    userData?.roles ||
+    userData?.data?.roles ||
+    userData?.data?.user?.roles ||
+    []
+
+  return Array.isArray(roles) ? roles.map((role) => String(role).toLowerCase()) : []
+}
+
+const isProductOwnerUser = (userData) => getUserRoles(userData).includes('product_owner')
+
+const isReadOnlyMethod = (method = 'GET') => ['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())
+const DEADLINE_ERROR_MESSAGE_ID = 'Deadline forum period sudah lewat'
+const DEADLINE_ERROR_MESSAGE_EN = 'Forum period deadline has passed'
+
+let lastDeadlineToastAt = 0
+
+const maybeShowDeadlinePassedToast = (error) => {
+  const message = error?.response?.data?.message || error?.message || ''
+  const normalized = String(message).toLowerCase()
+  const isDeadlineMessage =
+    normalized.includes(DEADLINE_ERROR_MESSAGE_ID.toLowerCase()) ||
+    normalized.includes(DEADLINE_ERROR_MESSAGE_EN.toLowerCase())
+
+  if (!isDeadlineMessage) return
+
+  const now = Date.now()
+  if (now - lastDeadlineToastAt < 1500) return
+  lastDeadlineToastAt = now
+
+  toast({
+    variant: 'destructive',
+    title: 'Deadline ruangan telah lewat',
+    description: 'Deadline forum period sudah lewat. Akses tersedia dalam mode baca.',
+  })
 }
 
 // Hard redirect ke halaman login ketika sesi kadaluarsa
@@ -151,6 +199,25 @@ api.interceptors.request.use(async (config) => {
     config.headers = config.headers || {}
     config.headers.Authorization = `Bearer ${token}`
   }
+
+  const currentUser = getStoredUserData()
+  if (isProductOwnerUser(currentUser) && !isReadOnlyMethod(config.method)) {
+    // Suppress verbose message for product_owner write attempts so UI doesn't show it.
+    // We still reject with 403 so callers can handle it, but hide description.
+    const error = new Error('Akses ditolak. Role product_owner hanya dapat melakukan operasi baca (GET).')
+    error.response = {
+      status: 403,
+      data: {
+        success: false,
+        // Empty message to avoid surfacing this sentence in UI toasts.
+        message: '',
+        // hint for UI if it needs to suppress generic error toasts
+        _silent: true,
+      },
+    }
+    return Promise.reject(error)
+  }
+
   return config
 })
 
@@ -173,6 +240,8 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     const originalRequest = err?.config
+
+    maybeShowDeadlinePassedToast(err)
 
     // If no response or not 401 return immediately
     if (!err.response || err.response.status !== 401) {

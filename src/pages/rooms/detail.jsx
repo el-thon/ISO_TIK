@@ -20,6 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useRoom, useRoomParticipants } from '@/services/roomHooks'
 import { useMe } from '@/services/authHooks'
 import { getAccessToken, getCurrentUserId, getUserData } from '@/utils/auth'
+import { toast } from '@/components/ui/use-toast'
 
 const formatDateTime = (value) => {
   if (!value) return '-'
@@ -135,6 +136,25 @@ export default function RoomDetail() {
     normalizedResponsibleUserId && 
     normalizedCurrentUserId === normalizedResponsibleUserId
   )
+  const deadlineToastShownRef = React.useRef(false)
+
+  useEffect(() => {
+    if (!isPeriodClosed || deadlineToastShownRef.current) return
+
+    const t = toast({
+      variant: 'destructive',
+      title: 'Deadline ruangan telah lewat',
+      description: 'Tombol buat formulir dinonaktifkan karena deadline sudah lewat.',
+    })
+
+    const timer = setTimeout(() => {
+      t.dismiss()
+    }, 5000)
+
+    deadlineToastShownRef.current = true
+
+    return () => clearTimeout(timer)
+  }, [isPeriodClosed])
 
   return (
     <MainLayout>
@@ -216,12 +236,22 @@ export default function RoomDetail() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3">
-                    {canCreateTopic && (
+                    {canCreateTopic && !isPeriodClosed && (
                       <Link to="/formulir/buat" state={{ roomId: room.id, roomTitle: room.name }}>
-                        <Button size="sm" className="bg-blue-600 text-white px-4 py-2" disabled={isPeriodClosed}>
+                        <Button size="sm" className="bg-blue-600 text-white px-4 py-2">
                           + Buat Formulir
                         </Button>
                       </Link>
+                    )}
+                    {canCreateTopic && isPeriodClosed && (
+                      <Button
+                        size="sm"
+                        className="bg-slate-300 text-slate-600 px-4 py-2 cursor-not-allowed"
+                        disabled
+                        title="Deadline forum period sudah lewat, formulir baru tidak dapat dibuat"
+                      >
+                        + Buat Formulir
+                      </Button>
                     )}
                   </div>
                 </div>

@@ -4,13 +4,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 function formatDate(d) {
   if (!d) return ''
   try { return new Date(d).toISOString().slice(0,10) } catch(e) { return d }
 }
 
-function MastersList({ masters, onActivate, onEdit, onDelete }) {
+function MastersList({ masters, onActivate, onEdit, onDelete, readOnly = false }) {
   if (!masters || masters.length === 0) {
     return <div className="text-sm text-muted-foreground">Belum ada master dibuat.</div>
   }
@@ -33,11 +34,11 @@ function MastersList({ masters, onActivate, onEdit, onDelete }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => onActivate(m)}>
+              <Button variant="outline" size="sm" onClick={() => onActivate(m)} disabled={readOnly}>
                 {m.is_active ? 'Nonaktifkan' : 'Aktifkan'}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => onEdit(m)}>Edit</Button>
-              <Button variant="destructive" size="sm" onClick={() => onDelete(m)}>Hapus</Button>
+              <Button variant="ghost" size="sm" onClick={() => onEdit(m)} disabled={readOnly}>Edit</Button>
+              <Button variant="destructive" size="sm" onClick={() => onDelete(m)} disabled={readOnly}>Hapus</Button>
             </div>
           </div>
         </div>
@@ -52,6 +53,7 @@ export default function TopicDocumentMasters() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ document_number: '', published_at: '', revision_number: '', is_active: false, id: null })
   const queryClient = useQueryClient()
+  const isProductOwner = isProductOwnerUser(getUserData())
 
   const fetchMasters = async () => {
     setLoading(true)
@@ -69,6 +71,7 @@ export default function TopicDocumentMasters() {
 
   const onSubmit = async (e) => {
     e.preventDefault()
+    if (isProductOwner) return
     try {
       let res
       if (form.id) {
@@ -87,6 +90,7 @@ export default function TopicDocumentMasters() {
   }
 
   const onActivate = async (m) => {
+    if (isProductOwner) return
     try {
       await api.put(`/admin/topic-document-masters/${m.id}`, { ...m, is_active: !m.is_active })
       try { 
@@ -98,11 +102,13 @@ export default function TopicDocumentMasters() {
   }
 
   const onEdit = (m) => {
+    if (isProductOwner) return
     setForm({ id: m.id, document_number: m.document_number || '', published_at: m.published_at || '', revision_number: m.revision_number || '', is_active: !!m.is_active })
     setShowCreate(true)
   }
 
   const onDelete = async (m) => {
+    if (isProductOwner) return
     if (!confirm('Hapus master ini? Tindakan ini tidak dapat dibatalkan.')) return
     try {
       await api.delete(`/admin/topic-document-masters/${m.id}`)
@@ -118,20 +124,23 @@ export default function TopicDocumentMasters() {
     <Card>
       <CardHeader className="flex items-center justify-between">
         <CardTitle>Dokumen Header</CardTitle>
-        <div>
-          <Button onClick={openCreate}>Buat Master Baru</Button>
-        </div>
+        {!isProductOwner && (
+          <div>
+            <Button onClick={openCreate}>Buat Master Baru</Button>
+          </div>
+        )}
       </CardHeader>
 
       <CardContent>
         <div className="mb-4 text-sm text-muted-foreground">Kelola nomor dokumen, tanggal terbit, dan nomor revisi yang akan otomatis terisi saat membuat formulir.</div>
+        {/* Visual read-only banner intentionally removed for product_owner per UX request. */}
         {loading ? (
           <div className="text-center py-6">Memuat…</div>
         ) : (
-          <MastersList masters={masters} onActivate={onActivate} onEdit={onEdit} onDelete={onDelete} />
+          <MastersList masters={masters} onActivate={onActivate} onEdit={onEdit} onDelete={onDelete} readOnly={isProductOwner} />
         )}
 
-        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <Dialog open={!isProductOwner && showCreate} onOpenChange={setShowCreate}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{form.id ? 'Edit Master' : 'Buat Master Dokumen'}</DialogTitle>
@@ -140,24 +149,24 @@ export default function TopicDocumentMasters() {
             <form onSubmit={onSubmit} className="space-y-3 mt-2">
               <div>
                 <label className="block text-sm">Nomor Dokumen</label>
-                <input className="w-full border rounded p-2" value={form.document_number} onChange={(e)=>setForm({...form, document_number: e.target.value})} required />
+                <input className="w-full border rounded p-2" value={form.document_number} onChange={(e)=>setForm({...form, document_number: e.target.value})} required disabled={isProductOwner} />
               </div>
               <div>
                 <label className="block text-sm">Tanggal Terbit</label>
-                <input type="date" className="w-full border rounded p-2" value={form.published_at ? form.published_at.slice(0,10) : ''} onChange={(e)=>setForm({...form, published_at: e.target.value})} />
+                <input type="date" className="w-full border rounded p-2" value={form.published_at ? form.published_at.slice(0,10) : ''} onChange={(e)=>setForm({...form, published_at: e.target.value})} disabled={isProductOwner} />
               </div>
               <div>
                 <label className="block text-sm">Nomor Revisi</label>
-                <input className="w-full border rounded p-2" value={form.revision_number} onChange={(e)=>setForm({...form, revision_number: e.target.value})} />
+                <input className="w-full border rounded p-2" value={form.revision_number} onChange={(e)=>setForm({...form, revision_number: e.target.value})} disabled={isProductOwner} />
               </div>
               <div className="flex items-center gap-3">
-                <input type="checkbox" id="is_active" checked={form.is_active} onChange={(e)=>setForm({...form, is_active: e.target.checked})} />
+                <input type="checkbox" id="is_active" checked={form.is_active} onChange={(e)=>setForm({...form, is_active: e.target.checked})} disabled={isProductOwner} />
                 <label htmlFor="is_active" className="text-sm">Set aktif (hanya satu boleh aktif)</label>
               </div>
               <DialogFooter>
                 <div className="flex items-center gap-3 justify-end w-full">
                   <Button variant="outline" onClick={()=>setShowCreate(false)}>Batal</Button>
-                  <Button type="submit">Simpan</Button>
+                  <Button type="submit" disabled={isProductOwner}>Simpan</Button>
                 </div>
               </DialogFooter>
             </form>

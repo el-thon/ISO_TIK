@@ -11,6 +11,7 @@ import * as forumAttachmentService from '@/services/forumAttachmentService';
 import * as topicService from '@/services/topicService';
 import { getAccessToken } from '@/services/api';
 import { useBootstrapSession } from '../../services/authHooks';
+import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 // Constants
 const ITEMS_PER_PAGE = 20;
@@ -171,6 +172,8 @@ export default function AttachmentsTab({ roomId }) {
     page,
     search: search.trim() || undefined,
   }), [page, search]);
+
+  const isProductOwner = isProductOwnerUser(getUserData())
 
   // Load documents
   const loadDocuments = useCallback(async () => {
@@ -399,7 +402,7 @@ export default function AttachmentsTab({ roomId }) {
                 type="file"
                 onChange={handleFileChange}
                 accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                disabled={uploading}
+                disabled={uploading || isProductOwner}
               />
               
               {selectedFile && (
@@ -429,8 +432,9 @@ export default function AttachmentsTab({ roomId }) {
 
             <Button
               onClick={handleUpload}
-              disabled={!selectedFile || uploading}
+              disabled={isProductOwner || !selectedFile || uploading}
               className="w-full"
+              title={isProductOwner ? 'Role product_owner hanya bisa melihat lampiran (read-only)' : undefined}
             >
               {uploading ? (
                 <>

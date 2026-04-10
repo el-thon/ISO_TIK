@@ -3,13 +3,15 @@ import { getAccessToken } from './api'
 import * as forumPeriodService from './forumPeriodService'
 
 const hasToken = () => Boolean(getAccessToken())
+const RUANGAN_KEY = 'ruangan'
+const LEGACY_FORUM_PERIODS_KEY = 'forum-periods'
 
 const withEnabled = (options = {}, guard = true) => Boolean((options.enabled ?? true) && guard && hasToken())
 
 export function useForumPeriods(params = {}, options = {}) {
   const { enabled, ...rest } = options
   return useQuery({
-    queryKey: ['forum-periods', params],
+    queryKey: [RUANGAN_KEY, params],
     queryFn: () => forumPeriodService.listForumPeriods(params),
     staleTime: 60_000,
     ...rest,
@@ -20,7 +22,7 @@ export function useForumPeriods(params = {}, options = {}) {
 export function useForumPeriod(periodId, options = {}) {
   const { enabled, ...rest } = options
   return useQuery({
-    queryKey: ['forum-periods', periodId],
+    queryKey: [RUANGAN_KEY, periodId],
     queryFn: () => forumPeriodService.getForumPeriod(periodId),
     ...rest,
     enabled: withEnabled({ enabled }, Boolean(periodId)),
@@ -34,7 +36,7 @@ export function useCreateForumPeriod(options = {}) {
     onSuccess: (data, variables, context) => {
       const createdPeriod = data?.period ?? data?.data?.period ?? null
       if (createdPeriod) {
-        queryClient.setQueriesData({ queryKey: ['forum-periods'] }, (oldData) => {
+        queryClient.setQueriesData({ queryKey: [RUANGAN_KEY] }, (oldData) => {
           const existing = oldData?.periods ?? []
           const normalized = Array.isArray(existing) ? existing : []
           return {
@@ -43,7 +45,8 @@ export function useCreateForumPeriod(options = {}) {
           }
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['forum-periods'] })
+      queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY] })
+      queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY] })
       if (onSuccess) onSuccess(data, variables, context)
     },
     ...rest,
@@ -55,9 +58,11 @@ export function useUpdateForumPeriod(periodId, options = {}) {
   return useMutation({
     mutationFn: (payload) => forumPeriodService.updateForumPeriod(periodId, payload),
     onSuccess: (data, variables, context) => {
-      queryClient.invalidateQueries({ queryKey: ['forum-periods'] })
+      queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY] })
+      queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY] })
       if (periodId) {
-        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId] })
+        queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY, periodId] })
+        queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY, periodId] })
       }
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
@@ -68,7 +73,7 @@ export function useUpdateForumPeriod(periodId, options = {}) {
 export function useForumPeriodForums(periodId, params = {}, options = {}) {
   const { enabled, ...rest } = options
   return useQuery({
-    queryKey: ['forum-periods', periodId, 'forums', params],
+    queryKey: [RUANGAN_KEY, periodId, 'forums', params],
     queryFn: () => forumPeriodService.listForumPeriodForums(periodId, params),
     ...rest,
     enabled: withEnabled({ enabled }, Boolean(periodId)),
@@ -81,7 +86,8 @@ export function useCreateForumPeriodForum(periodId, options = {}) {
     mutationFn: (payload) => forumPeriodService.createForumPeriodForum(periodId, payload),
     onSuccess: (data, variables, context) => {
       if (periodId) {
-        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY, periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY, periodId, 'forums'] })
       }
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
@@ -95,8 +101,10 @@ export function useUpdateForumPeriodForum(periodId, forumId, options = {}) {
     mutationFn: (payload) => forumPeriodService.updateForumPeriodForum(periodId, forumId, payload),
     onSuccess: (data, variables, context) => {
       if (periodId && forumId) {
-        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId, 'forums'] })
-        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId] })
+        queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY, periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY, periodId] })
+        queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY, periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY, periodId] })
       }
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
@@ -109,7 +117,8 @@ export function useJoinForumPeriod(options = {}) {
   return useMutation({
     mutationFn: (payload) => forumPeriodService.joinForumPeriodByCode(payload),
     onSuccess: (data, variables, context) => {
-      queryClient.invalidateQueries({ queryKey: ['forum-periods'] })
+      queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY] })
+      queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY] })
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
     ...options,
@@ -119,7 +128,7 @@ export function useJoinForumPeriod(options = {}) {
 export function useForumPeriodForumTopics(periodId, forumId, params = {}, options = {}) {
   const { enabled, ...rest } = options
   return useQuery({
-    queryKey: ['forum-periods', periodId, 'forums', forumId, 'topics', params],
+    queryKey: [RUANGAN_KEY, periodId, 'forums', forumId, 'topics', params],
     queryFn: () => forumPeriodService.listForumPeriodForumTopics(periodId, forumId, params),
     ...rest,
     enabled: withEnabled({ enabled }, Boolean(periodId) && Boolean(forumId)),
@@ -132,7 +141,8 @@ export function useCreateForumPeriodForumTopic(periodId, forumId, options = {}) 
     mutationFn: (payload) => forumPeriodService.createForumPeriodForumTopic(periodId, forumId, payload),
     onSuccess: (data, variables, context) => {
       if (periodId && forumId) {
-        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId, 'forums', forumId, 'topics'] })
+        queryClient.invalidateQueries({ queryKey: [RUANGAN_KEY, periodId, 'forums', forumId, 'topics'] })
+        queryClient.invalidateQueries({ queryKey: [LEGACY_FORUM_PERIODS_KEY, periodId, 'forums', forumId, 'topics'] })
       }
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },

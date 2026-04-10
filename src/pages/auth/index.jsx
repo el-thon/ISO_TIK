@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import React, { useEffect, useRef, useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/use-toast'
 import AuthLayout from './AuthLayout'
@@ -20,6 +20,7 @@ import { useLogin, useResendLoginOtp } from '@/services/authHooks'
 function Login() {
   const REMEMBER_KEY = import.meta.env.VITE_REMEMBER_KEY || 'iso_tik_remember_me'
   const REMEMBER_USERNAME_KEY = import.meta.env.VITE_REMEMBER_USERNAME_KEY || 'iso_tik_remember_username'
+  const LOGIN_ONCE_KEY = 'iso_tik_has_logged_in_once'
 
   const [remember, setRemember] = useState(() => localStorage.getItem(REMEMBER_KEY) === 'true')
   const [username, setUsername] = useState(() => localStorage.getItem(REMEMBER_USERNAME_KEY) || '')
@@ -50,6 +51,22 @@ function Login() {
         setOtpMaxAttempts(data?.otp_max_attempts ?? null)
         return
       }
+
+      const userName =
+        data?.user?.name ||
+        data?.user?.full_name ||
+        data?.user?.username ||
+        username ||
+        'Pengguna'
+
+      const hasLoggedInBefore = localStorage.getItem(LOGIN_ONCE_KEY) === 'true'
+      const welcomeMessage = hasLoggedInBefore
+        ? `Selamat datang kembali ${userName}`
+        : `Selamat datang ${userName}`
+
+      sessionStorage.setItem('iso_tik_login_welcome_message', welcomeMessage)
+      localStorage.setItem(LOGIN_ONCE_KEY, 'true')
+
       // Gunakan setTimeout untuk memastikan semua state ter-update
       setTimeout(() => {
         navigate('/beranda', {
@@ -108,7 +125,13 @@ function Login() {
       setOtpStep(false)
     }
     if (loginError) {
-      const message = loginError?.response?.data?.message || loginError?.message || 'Gagal masuk. Periksa kembali username dan password Anda.'
+      const rawMessage = loginError?.response?.data?.message || loginError?.message || 'Gagal masuk. Periksa kembali username dan password Anda.'
+      const lowerRawMessage = String(rawMessage).toLowerCase()
+      const message =
+        lowerRawMessage.includes('invalid credentials') ||
+        lowerRawMessage.includes('invalid credential')
+          ? 'Kredensial tidak sesuai.'
+          : rawMessage
       toast({ variant: 'destructive', title: 'Autentikasi Gagal', description: message })
     }
   }, [loginError])
@@ -275,6 +298,23 @@ function Login() {
                 {otpError && (
                   <p className="text-xs text-destructive">{otpError}</p>
                 )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    setOtpStep(false)
+                    setOtpTransitioning(false)
+                    setOtp('')
+                    setOtpError('')
+                    setOtpInfo('')
+                    setOtpAttemptsRemaining(null)
+                    setOtpMaxAttempts(null)
+                  }}
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Kembali ke Login
+                </Button>
                 <div className="flex flex-col items-center gap-2 text-xs">
                   <button
                     type="button"

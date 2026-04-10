@@ -61,9 +61,9 @@ export default function SettingsTab({ room }) {
   return (
     <TabsContent value="settings" className="mt-4 space-y-6">
       <div>
-        <h3 className="font-semibold text-lg">Ubah Nama Forum</h3>
+        <h3 className="font-semibold text-lg">Ubah Detail Forum</h3>
         <div className="mt-3 p-4 border rounded-md bg-white">
-          <UpdateRoomNameForm room={room} />
+          <UpdateRoomDetailsForm room={room} />
         </div>
       </div>
       <div>
@@ -112,16 +112,32 @@ export default function SettingsTab({ room }) {
   )
 }
 
-function UpdateRoomNameForm({ room }) {
+function UpdateRoomDetailsForm({ room }) {
   const roomId = room?.id
   const periodId = room?.forum_period_id
   const queryClient = useQueryClient()
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm({ defaultValues: { name: room?.name || '' } })
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm({
+    defaultValues: {
+      name: room?.name || '',
+      description: room?.description || '',
+    },
+  })
 
   React.useEffect(() => {
-    reset({ name: room?.name || '' })
-  }, [room?.name, reset])
+    reset({
+      name: room?.name || '',
+      description: room?.description || '',
+    })
+  }, [room?.name, room?.description, reset])
+
+  const watchedDescription = watch('description') || ''
 
   const updateMutation = useUpdateRoom(roomId, {
     // optimistic update: update single-room cache and any forum-periods forum lists
@@ -131,18 +147,38 @@ function UpdateRoomNameForm({ room }) {
       const previousRoom = queryClient.getQueryData(['rooms', roomId])
 
       // optimistically update the room's cache
-      queryClient.setQueryData(['rooms', roomId], (old) => ({ ...(old ?? {}), ...previousRoom, name: variables.name }))
+      queryClient.setQueryData(['rooms', roomId], (old) => ({
+        ...(old ?? {}),
+        ...previousRoom,
+        name: variables.name,
+        description: variables.description,
+      }))
 
-      // update any forum-periods forums list that include this room
+      // update any ruangan/forums list (and legacy forum-periods list) that include this room
       if (periodId) {
-        const matching = queryClient.getQueriesData({ queryKey: ['forum-periods', periodId, 'forums'], exact: false })
-        matching.forEach(([key, data]) => {
-          if (!data) return
-          queryClient.setQueryData(key, (old) => {
-            if (!old || !old.forums) return old
-            const updated = { ...old }
-            updated.forums = (Array.isArray(old.forums) ? old.forums : []).map((f) => (f?.id === roomId ? { ...f, name: variables.name } : f))
-            return updated
+        const keyPrefixes = [
+          ['ruangan', periodId, 'forums'],
+          ['forum-periods', periodId, 'forums'],
+        ]
+
+        keyPrefixes.forEach((prefix) => {
+          const matching = queryClient.getQueriesData({ queryKey: prefix, exact: false })
+          matching.forEach(([key, data]) => {
+            if (!data) return
+            queryClient.setQueryData(key, (old) => {
+              if (!old || !old.forums) return old
+              const updated = { ...old }
+              updated.forums = (Array.isArray(old.forums) ? old.forums : []).map((f) =>
+                f?.id === roomId
+                  ? {
+                      ...f,
+                      name: variables.name,
+                      description: variables.description,
+                    }
+                  : f
+              )
+              return updated
+            })
           })
         })
       }
@@ -154,7 +190,7 @@ function UpdateRoomNameForm({ room }) {
       if (context?.previousRoom) {
         queryClient.setQueryData(['rooms', roomId], context.previousRoom)
       }
-      const message = err?.response?.data?.message || err?.message || 'Gagal memperbarui nama forum.'
+      const message = err?.response?.data?.message || err?.message || 'Gagal memperbarui detail forum.'
       toast({ variant: 'destructive', title: 'Gagal', description: message })
       if (typeof updateMutation?.onError === 'function') {
         // noop, left for parity
@@ -164,41 +200,87 @@ function UpdateRoomNameForm({ room }) {
       // refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: ['rooms', roomId] })
       if (periodId) {
+        queryClient.invalidateQueries({ queryKey: ['ruangan', periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: ['ruangan', periodId] })
         queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId, 'forums'] })
         queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId] })
       }
     },
     onSuccess: (data) => {
-      toast({ title: 'Berhasil', description: 'Nama forum diperbarui.' })
-      reset({ name: data?.name || '' })
+      const resolvedName = data?.name ?? room?.name ?? ''
+      const resolvedDescription = data?.description ?? room?.description ?? ''
+      toast({ title: 'Berhasil', description: 'Detail forum berhasil diperbarui.' })
+      reset({
+        name: resolvedName,
+        description: resolvedDescription,
+      })
     },
   })
 
   const onSubmit = (vals) => {
     if (!vals?.name || vals.name.trim().length < 3) return
-    updateMutation.mutate({ name: vals.name.trim() })
+    const normalizedDescription = (vals?.description || '').trim()
+    if (normalizedDescription.length > 1000) return
+
+    updateMutation.mutate({
+      name: vals.name.trim(),
+      description: normalizedDescription || null,
+    })
   }
 
   const handleCancel = () => {
-    reset({ name: room?.name || '' })
+    reset({
+      name: room?.name || '',
+      description: room?.description || '',
+    })
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-        <div className="md:col-span-2">
-          <Label>Nama Forum</Label>
-          <Input {...register('name', { required: true, minLength: 3 })} className="mt-2" />
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
+        <p className="text-sm text-slate-700">
+          Perbarui informasi forum agar anggota ruangan lebih mudah memahami konteks forum.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        <div>
+          <Label htmlFor="settings-room-name">Nama Forum</Label>
+          <Input
+            id="settings-room-name"
+            {...register('name', { required: true, minLength: 3 })}
+            className="mt-2"
+            placeholder="Contoh: General Discussion"
+          />
           {errors.name && <p className="text-xs text-rose-600 mt-1">{errors.name.message || 'Nama minimal 3 karakter'}</p>}
         </div>
-        <div className="flex gap-2 md:justify-end mt-2 md:mt-0">
-          <Button type="button" variant="outline" onClick={handleCancel} disabled={updateMutation.isPending}>
-            Batal
-          </Button>
-          <Button type="submit" disabled={updateMutation.isPending}>
-            {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Simpan
-          </Button>
+
+        <div>
+          <Label htmlFor="settings-room-description">Deskripsi Forum</Label>
+          <textarea
+            id="settings-room-description"
+            {...register('description', { maxLength: 1000 })}
+            rows={4}
+            className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            placeholder="Jelaskan tujuan forum ini, cakupan diskusi, atau panduan singkat untuk peserta..."
+          />
+          <div className="mt-1 flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">Opsional, maksimal 1000 karakter.</p>
+            <p className="text-xs text-muted-foreground">{watchedDescription.length}/1000</p>
+          </div>
+          {errors.description && (
+            <p className="text-xs text-rose-600 mt-1">{errors.description.message || 'Deskripsi maksimal 1000 karakter'}</p>
+          )}
         </div>
+      </div>
+
+      <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+        <Button type="button" variant="outline" onClick={handleCancel} disabled={updateMutation.isPending}>
+          Reset
+        </Button>
+        <Button type="submit" disabled={updateMutation.isPending}>
+          {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Simpan Perubahan
+        </Button>
       </div>
     </form>
   )

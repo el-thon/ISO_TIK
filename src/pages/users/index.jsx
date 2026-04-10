@@ -25,6 +25,7 @@ import {
   useResetUserPassword,
   useAdminUser,
 } from '@/services/adminUsersHooks'
+import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 const DEFAULT_CREATE = { username: '', email: '', password: '', status: 'active', full_name: '' }
 const DEFAULT_EDIT = { username: '', email: '', status: 'active', full_name: '' }
@@ -36,6 +37,11 @@ const DEFAULT_BULK = { status: 'inactive', reason: '' }
 export default function UsersPage() {
   const queryClient = useQueryClient()
   const { data: meData } = useMe({ staleTime: 60_000 })
+  const isProductOwner = useMemo(() => {
+    const serverUser = meData?.data?.user ?? meData ?? null
+    const localUser = getUserData()
+    return isProductOwnerUser(serverUser) || isProductOwnerUser(localUser)
+  }, [meData])
   const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
@@ -160,6 +166,7 @@ export default function UsersPage() {
   const allSelected = filtered.length > 0 && filtered.every((u) => selectedIds.has(u.id))
 
   function toggleSelect(userId) {
+    if (isProductOwner) return
     setSelectedIds((prev) => {
       const next = new Set(prev)
       if (next.has(userId)) {
@@ -172,6 +179,7 @@ export default function UsersPage() {
   }
 
   function toggleSelectAll(checked) {
+    if (isProductOwner) return
     if (checked) {
       setSelectedIds(new Set(filtered.map((u) => u.id)))
     } else {
@@ -181,6 +189,7 @@ export default function UsersPage() {
 
   function handleCreateSubmit(e) {
     e.preventDefault()
+    if (isProductOwner) return
     createMutation.mutate({
       username: createForm.username,
       password: createForm.password,
@@ -192,6 +201,7 @@ export default function UsersPage() {
 
   function handleEditSubmit(e) {
     e.preventDefault()
+    if (isProductOwner) return
     if (!editingId) return
     const payload = {
       username: editForm.username,
@@ -203,6 +213,7 @@ export default function UsersPage() {
   }
 
   function handleDelete() {
+    if (isProductOwner) return
     if (!deleteForm.userId) return
     // Optimistic remove
     patchAdminUserLists((old) => {
@@ -217,6 +228,7 @@ export default function UsersPage() {
 
   function handleBulkSubmit(e) {
     e.preventDefault()
+    if (isProductOwner) return
     if (!selectedIds.size) return
     const ids = new Set(selectedIds)
     patchAdminUserLists((old) => ({
@@ -232,6 +244,7 @@ export default function UsersPage() {
 
   function handleAssignRole(e) {
     e.preventDefault()
+    if (isProductOwner) return
     if (!roleUserId || !roleForm.roleId) return
     const normalizedRoleId = /^\d+$/.test(roleForm.roleId) ? Number(roleForm.roleId) : roleForm.roleId
     assignRoleMutation.mutate({ userId: roleUserId, roleId: normalizedRoleId, reason: roleForm.reason || null })
@@ -239,6 +252,7 @@ export default function UsersPage() {
 
   function handlePasswordSubmit(e) {
     e.preventDefault()
+    if (isProductOwner) return
     if (!passwordUserId) return
     passwordMutation.mutate({
       userId: passwordUserId,
@@ -247,6 +261,7 @@ export default function UsersPage() {
   }
 
   function handleStatusToggle(user) {
+    if (isProductOwner) return
     if (user.status === 'active') {
       patchAdminUserLists((old) => ({
         ...old,
@@ -270,48 +285,50 @@ export default function UsersPage() {
 
   return (
     <MainLayout>
-      <div className="w-full mx-auto">
+      <div className="w-full mx-auto px-4 sm:px-6 py-4">
         <div className="flex flex-col gap-4 mb-6">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
               <h2 className="text-heading-2 font-semibold">Manajemen Pengguna</h2>
               <p className="text-body-md text-muted-foreground">Integrasi penuh dengan Admin User Management API.</p>
             </div>
-            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto ">
+            {/* product_owner read-only banner removed per request; actions remain disabled for product_owner */}
+            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari username / status" className="w-full md:w-60" />
-              <div className="flex gap-2">
-                
-                <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-blue-600 text-white"><UserPlus className="w-4 h-4 mr-2" />Tambah Pengguna</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Pengguna Baru</DialogTitle>
-                      <DialogDescription>Lengkapi data minimum sesuai API.</DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleCreateSubmit} className="grid gap-3">
-                      <Input required placeholder="Username" value={createForm.username} onChange={(e) => setCreateForm((prev) => ({ ...prev, username: e.target.value }))} />
-                      <Input type="email" placeholder="Email" value={createForm.email} onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))} />
-                      <Input required type="password" placeholder="Password" value={createForm.password} onChange={(e) => setCreateForm((prev) => ({ ...prev, password: e.target.value }))} />
-                      <Input required placeholder="Nama Lengkap" value={createForm.full_name} onChange={(e) => setCreateForm((prev) => ({ ...prev, full_name: e.target.value }))} />
-                      <Select value={createForm.status} onValueChange={(status) => setCreateForm((prev) => ({ ...prev, status }))}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="active">Active</SelectItem>
-                          <SelectItem value="inactive">Inactive</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <DialogFooter>
-                        <Button type="submit" disabled={createMutation.isLoading}>
-                          {createMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
+              <div className="flex flex-wrap gap-2">
+                {!isProductOwner && (
+                  <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-blue-600 text-white w-full sm:w-auto"><UserPlus className="w-4 h-4 mr-2" />Tambah Pengguna</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Pengguna Baru</DialogTitle>
+                        <DialogDescription>Lengkapi data minimum sesuai API.</DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleCreateSubmit} className="grid gap-3">
+                        <Input required placeholder="Username" value={createForm.username} onChange={(e) => setCreateForm((prev) => ({ ...prev, username: e.target.value }))} />
+                        <Input type="email" placeholder="Email" value={createForm.email} onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))} />
+                        <Input required type="password" placeholder="Password" value={createForm.password} onChange={(e) => setCreateForm((prev) => ({ ...prev, password: e.target.value }))} />
+                        <Input required placeholder="Nama Lengkap" value={createForm.full_name} onChange={(e) => setCreateForm((prev) => ({ ...prev, full_name: e.target.value }))} />
+                        <Select value={createForm.status} onValueChange={(status) => setCreateForm((prev) => ({ ...prev, status }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="active">Active</SelectItem>
+                            <SelectItem value="inactive">Inactive</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <DialogFooter>
+                          <Button type="submit" disabled={createMutation.isLoading}>
+                            {createMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                )}
               </div>
             </div>
           </div>
@@ -339,27 +356,34 @@ export default function UsersPage() {
 
         <Card>
           <CardContent>
-            <div className="flex items-center justify-between py-4 text-sm text-muted-foreground">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-4 text-sm text-muted-foreground">
               <div>
                 {isFetching ? 'Memuat data...' : `${pagination.total ?? users.length} pengguna`} · {selectedIds.size} dipilih
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Sebelumnya</Button>
                 <div>Halaman {pagination.currentPage} / {pagination.lastPage}</div>
                 <Button variant="outline" size="sm" disabled={pagination.currentPage >= pagination.lastPage} onClick={() => setPage((p) => p + 1)}>Berikutnya</Button>
               </div>
             </div>
-            <div className="overflow-x-auto">
+
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-12">
-                      <Checkbox checked={allSelected} onCheckedChange={(checked) => toggleSelectAll(!!checked)} aria-label="Pilih semua" />
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={(checked) => toggleSelectAll(!!checked)}
+                        aria-label="Pilih semua"
+                        disabled={isProductOwner}
+                      />
                     </TableHead>
                     <TableHead>Username</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Dibuat</TableHead>
-                    <TableHead>Aksi</TableHead>
+                    <TableHead>{isProductOwner ? 'Detail' : 'Aksi'}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -373,7 +397,12 @@ export default function UsersPage() {
                   {!isLoading && filtered.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>
-                        <Checkbox checked={selectedIds.has(user.id)} onCheckedChange={() => toggleSelect(user.id)} aria-label="Pilih pengguna" />
+                        <Checkbox
+                          checked={selectedIds.has(user.id)}
+                          onCheckedChange={() => toggleSelect(user.id)}
+                          aria-label="Pilih pengguna"
+                          disabled={isProductOwner}
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="font-medium">{user.username}</div>
@@ -388,21 +417,25 @@ export default function UsersPage() {
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
                           <Link to={`/pengguna/${user.id}`} className="text-blue-600 text-sm">Detail</Link>
-                          <Button variant="outline" size="sm" onClick={() => { setEditingId(user.id); setEditOpen(true) }}>
-                            <Edit2 className="w-4 h-4 mr-1" /> Edit
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleStatusToggle(user)} disabled={activateMutation.isLoading || deactivateMutation.isLoading}>
-                            {user.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => { setRoleUserId(user.id); setRoleOpen(true) }}>
-                            Role
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => { setPasswordUserId(user.id); setPasswordOpen(true) }}>
-                            <KeyRound className="w-4 h-4 mr-1" /> Password
-                          </Button>
-                          <Button variant="outline" size="sm" className="text-red-600" onClick={() => { setDeleteForm({ userId: user.id, reason: '' }); setDeleteOpen(true) }}>
-                            <Trash2 className="w-4 h-4 mr-1" /> Delete
-                          </Button>
+                          {!isProductOwner && (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => { setEditingId(user.id); setEditOpen(true) }}>
+                                <Edit2 className="w-4 h-4 mr-1" /> Edit
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => handleStatusToggle(user)} disabled={activateMutation.isLoading || deactivateMutation.isLoading}>
+                                {user.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => { setRoleUserId(user.id); setRoleOpen(true) }}>
+                                Role
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => { setPasswordUserId(user.id); setPasswordOpen(true) }}>
+                                <KeyRound className="w-4 h-4 mr-1" /> Password
+                              </Button>
+                              <Button variant="outline" size="sm" className="text-red-600" onClick={() => { setDeleteForm({ userId: user.id, reason: '' }); setDeleteOpen(true) }}>
+                                <Trash2 className="w-4 h-4 mr-1" /> Delete
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -415,11 +448,73 @@ export default function UsersPage() {
                 </TableBody>
               </Table>
             </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {isLoading && (
+                <div className="py-10 text-center text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto" />
+                </div>
+              )}
+
+              {!isLoading && filtered.map((user) => (
+                <div key={user.id} className="rounded-lg border border-slate-200 p-3 bg-white">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{user.username}</div>
+                      <div className="text-xs text-muted-foreground truncate">ID: {user.id}</div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Dibuat: {user.created_at ? new Date(user.created_at).toLocaleString() : '–'}
+                      </div>
+                    </div>
+                    <Checkbox
+                      checked={selectedIds.has(user.id)}
+                      onCheckedChange={() => toggleSelect(user.id)}
+                      aria-label="Pilih pengguna"
+                      disabled={isProductOwner}
+                    />
+                  </div>
+
+                  <div className="mt-2">
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${user.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {user.status || 'unknown'}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link to={`/pengguna/${user.id}`} className="text-blue-600 text-sm">Detail</Link>
+                    {!isProductOwner && (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => { setEditingId(user.id); setEditOpen(true) }}>
+                          <Edit2 className="w-4 h-4 mr-1" /> Edit
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => handleStatusToggle(user)} disabled={activateMutation.isLoading || deactivateMutation.isLoading}>
+                          {user.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => { setRoleUserId(user.id); setRoleOpen(true) }}>
+                          Role
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => { setPasswordUserId(user.id); setPasswordOpen(true) }}>
+                          <KeyRound className="w-4 h-4 mr-1" /> Password
+                        </Button>
+                        <Button variant="outline" size="sm" className="text-red-600" onClick={() => { setDeleteForm({ userId: user.id, reason: '' }); setDeleteOpen(true) }}>
+                          <Trash2 className="w-4 h-4 mr-1" /> Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {!isLoading && !filtered.length && (
+                <div className="py-8 text-center text-muted-foreground">Tidak ada data.</div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Edit */}
-        <Dialog open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) { setEditingId(null); setEditForm(DEFAULT_EDIT) } }}>
+  {/* Edit */}
+  <Dialog open={!isProductOwner && editOpen} onOpenChange={(open) => { setEditOpen(open); if (!open) { setEditingId(null); setEditForm(DEFAULT_EDIT) } }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Pengguna</DialogTitle>
@@ -446,8 +541,8 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete */}
-        <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setDeleteForm(DEFAULT_DELETE) }}>
+  {/* Delete */}
+  <Dialog open={!isProductOwner && deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setDeleteForm(DEFAULT_DELETE) }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Hapus Pengguna</DialogTitle>
@@ -465,8 +560,8 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Role */}
-        <Dialog open={roleOpen} onOpenChange={(open) => { setRoleOpen(open); if (!open) { setRoleForm(DEFAULT_ROLE); setRoleUserId(null) } }}>
+  {/* Role */}
+  <Dialog open={!isProductOwner && roleOpen} onOpenChange={(open) => { setRoleOpen(open); if (!open) { setRoleForm(DEFAULT_ROLE); setRoleUserId(null) } }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Atur Role</DialogTitle>
@@ -516,8 +611,8 @@ export default function UsersPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Reset Password */}
-        <Dialog open={passwordOpen} onOpenChange={(open) => { setPasswordOpen(open); if (!open) { setPasswordForm(DEFAULT_PASSWORD); setPasswordUserId(null) } }}>
+  {/* Reset Password */}
+  <Dialog open={!isProductOwner && passwordOpen} onOpenChange={(open) => { setPasswordOpen(open); if (!open) { setPasswordForm(DEFAULT_PASSWORD); setPasswordUserId(null) } }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Reset Password</DialogTitle>

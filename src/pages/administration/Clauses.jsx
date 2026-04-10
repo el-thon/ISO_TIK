@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminClauses, useCreateClause, useDeleteClause } from '@/services/adminClauseHooks'
+import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 export default function Clauses() {
   const [search, setSearch] = useState('')
@@ -33,9 +34,11 @@ export default function Clauses() {
   })
 
   const deleteMutation = useDeleteClause()
+  const isProductOwner = isProductOwnerUser(getUserData())
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (isProductOwner) return
     if (!code.trim() || !name.trim()) return
     createMutation.mutate({
       code: code.trim(),
@@ -49,39 +52,41 @@ export default function Clauses() {
   const createError = createMutation.error?.response?.data?.message || createMutation.error?.message
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-      <Card>
-        <CardContent className="pt-6">
-          <h3 className="text-sm font-semibold mb-4">Tambah Klausul</h3>
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <div>
-              <Label>Kode</Label>
-              <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Contoh: A.5.33" />
-            </div>
-            <div>
-              <Label>Nama</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Judul klausul" />
-            </div>
-            <div>
-              <Label>Deskripsi (opsional)</Label>
-              <textarea
-                rows={3}
-                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <Label>Aktif</Label>
-              <Switch checked={isActive} onCheckedChange={setIsActive} />
-            </div>
-            {createError && <p className="text-xs text-rose-600">{createError}</p>}
-            <Button type="submit" disabled={createMutation.isPending} className="w-full">
-              {createMutation.isPending ? 'Menyimpan...' : 'Simpan Klausul'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className={`grid gap-6 ${isProductOwner ? 'grid-cols-1' : 'lg:grid-cols-[360px_1fr]'}`}>
+      {!isProductOwner && (
+        <Card>
+          <CardContent className="pt-6">
+            <h3 className="text-sm font-semibold mb-4">Tambah Klausul</h3>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div>
+                <Label>Kode</Label>
+                <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Contoh: A.5.33" />
+              </div>
+              <div>
+                <Label>Nama</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Judul klausul" />
+              </div>
+              <div>
+                <Label>Deskripsi (opsional)</Label>
+                <textarea
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>Aktif</Label>
+                <Switch checked={isActive} onCheckedChange={setIsActive} />
+              </div>
+              {createError && <p className="text-xs text-rose-600">{createError}</p>}
+              <Button type="submit" disabled={createMutation.isPending} className="w-full">
+                {createMutation.isPending ? 'Menyimpan...' : 'Simpan Klausul'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="pt-6">
@@ -138,7 +143,7 @@ export default function Clauses() {
                     variant="ghost"
                     size="sm"
                     className="text-rose-600"
-                    disabled={deleteMutation.isPending}
+                    disabled={isProductOwner || deleteMutation.isPending}
                     onClick={() => deleteMutation.mutate(clause.id)}
                   >
                     <Trash2 className="w-4 h-4" />

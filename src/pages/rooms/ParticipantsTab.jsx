@@ -172,35 +172,37 @@ export default function ParticipantsTab({ roomId, room }) {
     isLoading: usersLoading,
     isError: usersError,
   } = useAvailableUsers(
-    { per_page: 200 },
+    { per_page: 200, forum_id: roomId },
     { enabled: dialogOpen && canManageParticipants }
   )
 
   const availableUsers = usersData?.users ?? []
 
-  const availableMembers = useMemo(() => {
+  const participantUserIds = useMemo(() => {
+    return new Set(
+      participants
+        .map((p) => String(p?.user_id ?? p?.user?.id ?? ''))
+        .filter(Boolean)
+    )
+  }, [participants])
+
+  // Tampilkan seluruh member ruangan (hasil GET /users?forum_id=...)
+  const roomMembers = useMemo(() => {
     if (!availableUsers?.length) return []
-    
-    const participantUserIds = new Set(participants.map((p) => p.user_id))
-    
-    return availableUsers.filter((member) => {
-      const memberId = getMemberId(member)
-      if (!memberId) return false
-      return !participantUserIds.has(memberId)
-    })
-  }, [availableUsers, participants])
+    return availableUsers.filter((member) => Boolean(getMemberId(member)))
+  }, [availableUsers])
 
   const filteredMembers = useMemo(() => {
-    if (!memberSearch.trim()) return availableMembers
+    if (!memberSearch.trim()) return roomMembers
     
     const search = memberSearch.toLowerCase()
-    return availableMembers.filter((member) => {
+    return roomMembers.filter((member) => {
       const { name, username, email } = getMemberDisplay(member)
       return name.toLowerCase().includes(search) ||
              username.toLowerCase().includes(search) ||
              email.toLowerCase().includes(search)
     })
-  }, [availableMembers, memberSearch])
+  }, [roomMembers, memberSearch])
 
   const leaveMutation = useLeaveRoom(roomId)
   
@@ -225,9 +227,15 @@ export default function ParticipantsTab({ roomId, room }) {
 
   const selectedUserId = watch('userId')
   const selectedMember = useMemo(() => {
-    if (!selectedUserId || !availableMembers.length) return null
-    return availableMembers.find(m => String(getMemberId(m)) === String(selectedUserId))
-  }, [selectedUserId, availableMembers])
+    if (!selectedUserId || !roomMembers.length) return null
+    return roomMembers.find(m => String(getMemberId(m)) === String(selectedUserId))
+  }, [selectedUserId, roomMembers])
+
+  const selectedMemberAlreadyParticipant = useMemo(() => {
+    if (!selectedMember) return false
+    const memberId = String(getMemberId(selectedMember))
+    return participantUserIds.has(memberId)
+  }, [selectedMember, participantUserIds])
 
   const inviteMutation = useAddRoomParticipant(roomId, {
     onSuccess: () => {
@@ -257,8 +265,9 @@ export default function ParticipantsTab({ roomId, room }) {
   const inviteDisabled =
     usersLoading ||
     usersError ||
-    availableMembers.length === 0 ||
+    roomMembers.length === 0 ||
     inviteMutation.isPending ||
+    selectedMemberAlreadyParticipant ||
     !selectedUserId
 
   const participantsErrorMessage =
@@ -336,9 +345,9 @@ export default function ParticipantsTab({ roomId, room }) {
               </p>
             )}
             
-            {availableMembers.length === 0 && !usersLoading && !usersError && availableUsers.length > 0 && (
+            {roomMembers.length === 0 && !usersLoading && !usersError && availableUsers.length > 0 && (
               <p className="text-sm text-amber-600">
-                Semua pengguna sudah menjadi peserta forum ini.
+                Belum ada anggota pada ruangan ini.
               </p>
             )}
             
@@ -370,7 +379,7 @@ export default function ParticipantsTab({ roomId, room }) {
                               usersLoading || 
                               usersError || 
                               inviteMutation.isPending ||
-                              availableMembers.length === 0
+                              roomMembers.length === 0
                             }
                           >
                             {field.value && selectedMember ? (
@@ -390,8 +399,8 @@ export default function ParticipantsTab({ roomId, room }) {
                                   ? 'Memuat pengguna...'
                                   : usersError
                                   ? 'Error memuat pengguna'
-                                  : availableMembers.length === 0
-                                  ? 'Semua pengguna sudah menjadi peserta'
+                                  : roomMembers.length === 0
+                                  ? 'Belum ada anggota ruangan'
                                   : 'Cari dan pilih pengguna...'}
                               </span>
                             )}
@@ -439,9 +448,10 @@ export default function ParticipantsTab({ roomId, room }) {
                             ) : (
                               <div className="p-1">
                                 {filteredMembers.map((member) => {
-                                  const memberId = getMemberId(member)
+                                  const memberId = String(getMemberId(member))
                                   const { name, username, email } = getMemberDisplay(member)
-                                  const isSelected = field.value === memberId
+                                  const isSelected = String(field.value) === memberId
+                                  const isAlreadyParticipant = participantUserIds.has(memberId)
                                   
                                   return (
                                     <button
@@ -450,13 +460,16 @@ export default function ParticipantsTab({ roomId, room }) {
                                       className={cn(
                                         "w-full text-left px-3 py-2 rounded-md flex items-center gap-3",
                                         "hover:bg-gray-100 transition-colors",
-                                        isSelected && "bg-blue-50"
+                                        isSelected && "bg-blue-50",
+                                        isAlreadyParticipant && "opacity-70"
                                       )}
                                       onClick={() => {
+                                        if (isAlreadyParticipant) return
                                         field.onChange(memberId)
                                         setMemberPopoverOpen(false)
                                         setMemberSearch('')
                                       }}
+                                      disabled={isAlreadyParticipant}
                                     >
                                       <Avatar className="h-8 w-8">
                                         <AvatarFallback className="text-xs">
@@ -474,6 +487,11 @@ export default function ParticipantsTab({ roomId, room }) {
                                           </div>
                                         )}
                                       </div>
+                                      {isAlreadyParticipant && (
+                                        <span className="text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                                          Sudah peserta
+                                        </span>
+                                      )}
                                       {isSelected && (
                                         <Check className="h-4 w-4 text-blue-600 shrink-0" />
                                       )}
@@ -534,9 +552,15 @@ export default function ParticipantsTab({ roomId, room }) {
                   )}
                 </div>
 
-                {availableMembers.length === 0 && !usersLoading && !usersError && (
+                {roomMembers.length > 0 && roomMembers.every((member) => participantUserIds.has(String(getMemberId(member)))) && !usersLoading && !usersError && (
                   <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-md p-3">
-                    Semua pengguna sudah menjadi peserta ruangan ini.
+                    Semua anggota ruangan ini sudah menjadi peserta forum.
+                  </p>
+                )}
+
+                {selectedMemberAlreadyParticipant && (
+                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-md p-3">
+                    Pengguna yang dipilih sudah menjadi peserta forum. Pilih anggota lain.
                   </p>
                 )}
 

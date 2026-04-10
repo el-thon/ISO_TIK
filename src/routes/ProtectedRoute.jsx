@@ -21,11 +21,23 @@ const isUserAdmin = (userData) => {
     userData?.data?.is_admin === true
 }
 
+const isUserProductOwner = (userData) => {
+  if (!userData) return false
+
+  const roles = userData?.roles ||
+    userData?.data?.roles ||
+    userData?.data?.user?.roles ||
+    []
+
+  return roles.includes('product_owner') || roles.includes('product owner')
+}
+
 export default function ProtectedRoute({ children, requireAdmin = false }) {
   const location = useLocation()
   const [isChecking, setIsChecking] = useState(true)
   const [isAuthorized, setIsAuthorized] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isProductOwner, setIsProductOwner] = useState(false)
   const hasShownExpiredToast = useRef(false)
   
   // Cek token dari berbagai sumber
@@ -46,9 +58,11 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
     if (token && user) {
       setIsAuthorized(true)
       setIsAdmin(isUserAdmin(user))
+      setIsProductOwner(isUserProductOwner(user))
     } else {
       setIsAuthorized(false)
       setIsAdmin(false)
+      setIsProductOwner(false)
     }
     
     setIsChecking(false)
@@ -100,7 +114,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
     return <Navigate to="/" replace state={{ from: location }} />
   }
 
-  if (requireAdmin && !isAdmin) {
+  if (requireAdmin && !(isAdmin || isProductOwner)) {
     return <Navigate to="/beranda" replace state={{ from: location }} />
   }
   
@@ -135,7 +149,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
         } catch (e) {
           cachedUser = null
         }
-        if (!isUserAdmin(cachedUser)) {
+        if (!isUserAdmin(cachedUser) && !isUserProductOwner(cachedUser)) {
           return <Navigate to="/beranda" replace state={{ from: location }} />
         }
       }

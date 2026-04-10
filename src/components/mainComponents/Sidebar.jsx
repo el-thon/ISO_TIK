@@ -1,16 +1,49 @@
 // components/Sidebar.jsx
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { clearTokens } from '@/services/api'
 import { useProfile } from '@/services/profileHooks'
 import { useMe } from '@/services/authHooks'
-import { getUserData, isAuthenticated } from '@/utils/auth'
-import { Home, Users, User, Columns, BookOpen, ClipboardList, Settings, LogOut } from 'lucide-react'
+import { getUserData } from '@/utils/auth'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Home, Columns, DoorOpen, Settings, LogOut } from 'lucide-react'
+
+const PHOTO_VERSION_KEY = 'iso_tik_photo_version'
+
+const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
+const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?$/, '') : ''
+const proxyTarget = (import.meta.env.VITE_PROXY_TARGET || '').trim()
+const explicitStorageBase = (import.meta.env.VITE_STORAGE_BASE_URL || '').trim()
+const runtimeFallback = typeof window !== 'undefined' ? window.location.origin : ''
+const STORAGE_BASE = (explicitStorageBase || apiOrigin || proxyTarget || runtimeFallback).replace(/\/$/, '')
+
+const resolvePhotoUrl = (path) => {
+  if (!path) return null
+
+  let timestamp = Date.now().toString()
+  try {
+    const storedVersion = localStorage.getItem(PHOTO_VERSION_KEY)
+    if (storedVersion) timestamp = storedVersion
+  } catch {
+    // ignore
+  }
+
+  if (String(path).startsWith('http://') || String(path).startsWith('https://')) {
+    return `${path}${String(path).includes('?') ? '&' : '?'}_t=${timestamp}`
+  }
+
+  const cleanPath = String(path).startsWith('/') ? String(path).slice(1) : String(path)
+  const fullUrl = cleanPath.startsWith('storage/')
+    ? `${STORAGE_BASE}/${cleanPath}`
+    : `${STORAGE_BASE}/storage/${cleanPath}`
+
+  return `${fullUrl}${fullUrl.includes('?') ? '&' : '?'}_t=${timestamp}`
+}
 
 const NAV_ITEMS = [
   { name: 'Beranda', to: '/beranda', icon: Home, section: 'main' },
-  { name: 'Pengguna', to: '/pengguna', icon: User, section: 'management', adminOnly: true },
   { name: 'Forum', to: '/forum', icon: Columns, section: 'management' },
+  { name: 'Ruangan', to: '/ruangan', icon: DoorOpen, section: 'management' },
   { name: 'Administrasi', to: '/administrasi', icon: Settings, section: 'management', adminOnly: true },
 ]
 
@@ -51,45 +84,41 @@ const isUserAdmin = (userData) => {
          userData?.data?.is_admin === true
 }
 
+const isUserProductOwner = (userData) => {
+  if (!userData) return false
+
+  const roles = userData?.roles ||
+                userData?.data?.roles ||
+                userData?.data?.user?.roles ||
+                []
+
+  return roles.includes('product_owner') || roles.includes('product owner')
+}
+
 // Hook untuk permissions dengan prioritas localStorage
 const useUserPermissions = () => {
-  // State awal dari localStorage
-  const [permissions, setPermissions] = useState(() => {
-    const userData = getUserData()
-    const isAdmin = isUserAdmin(userData)
-    
-    return {
-      isAdmin,
-      canManageUsers: isAdmin,
-      isLoading: false
-    }
-  })
-
-  // Fetch dari server untuk validasi (tanpa mengganggu state jika sama)
-  const { data: meData, error: meError, isLoading } = useMe({ 
+  // Fetch dari server untuk validasi role
+  const { data: meData } = useMe({
     staleTime: 60_000,
     retry: 1,
   })
 
-  // Update permissions hanya jika data dari server valid dan BERBEDA
-  useEffect(() => {
-    if (meData) {
-      const serverIsAdmin = isUserAdmin(meData)
-      const currentIsAdmin = permissions.isAdmin
-      
+  return useMemo(() => {
+    const localUser = getUserData()
+    const localIsAdmin = isUserAdmin(localUser)
+    const localIsProductOwner = isUserProductOwner(localUser)
+    const serverIsAdmin = meData ? isUserAdmin(meData) : null
+    const serverIsProductOwner = meData ? isUserProductOwner(meData) : null
+    const effectiveIsAdmin = serverIsAdmin ?? localIsAdmin
+    const effectiveIsProductOwner = serverIsProductOwner ?? localIsProductOwner
 
-      // Hanya update jika berbeda
-      if (serverIsAdmin !== currentIsAdmin) {
-        setPermissions({
-          isAdmin: serverIsAdmin,
-          canManageUsers: serverIsAdmin,
-          isLoading: false
-        })
-      } 
-    } 
-  }, [meData, meError])
-
-  return permissions
+    return {
+      isAdmin: effectiveIsAdmin,
+      isProductOwner: effectiveIsProductOwner,
+      canManageUsers: effectiveIsAdmin,
+      isLoading: false,
+    }
+  }, [meData])
 }
 
 const NavItem = ({ item }) => {
@@ -131,7 +160,7 @@ const NavSection = ({ title, items }) => {
   )
 }
 
-const UserProfile = ({ name, email, onLogout }) => {
+const UserProfile = ({ name, email, photoUrl, onLogout }) => {
   const initials = getUserInitials(name)
   const truncatedEmail = truncateEmail(email)
   
@@ -145,9 +174,12 @@ const UserProfile = ({ name, email, onLogout }) => {
           }`
         }
       >
-        <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-medium">
-          {initials}
-        </div>
+        <Avatar className="w-10 h-10">
+          {photoUrl ? <AvatarImage src={photoUrl} alt={name} /> : null}
+          <AvatarFallback className="bg-slate-200 text-slate-700 font-medium">
+            {initials}
+          </AvatarFallback>
+        </Avatar>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium truncate">{name}</div>
           {truncatedEmail && (
@@ -175,17 +207,17 @@ const UserProfile = ({ name, email, onLogout }) => {
 
 function SidebarInner() {
   const navigate = useNavigate()
-  const { data: profileData, isLoading: profileLoading } = useProfile()
-  const { isAdmin, canManageUsers } = useUserPermissions()
+  const { data: profileData } = useProfile()
+  const { canManageUsers, isProductOwner } = useUserPermissions()
 
   // Filter nav items berdasarkan permissions
   const filteredNavItems = useMemo(() => {
     
     return NAV_ITEMS.filter(item => {
-      if (item.adminOnly) return canManageUsers
+      if (item.adminOnly) return canManageUsers || isProductOwner
       return true
     })
-  }, [canManageUsers])
+  }, [canManageUsers, isProductOwner])
 
   // Group items by section
   const sections = useMemo(() => {
@@ -216,20 +248,29 @@ function SidebarInner() {
     getUserData()?.email ||
     ''
 
+  const rawPhotoPath =
+    profileData?.photo_url ||
+    profileData?.profile?.photo_url ||
+    profileData?.data?.photo_url ||
+    profileData?.data?.profile?.photo_url ||
+    getUserData()?.photo_url ||
+    getUserData()?.profile?.photo_url ||
+    null
+
+  const displayPhotoUrl = useMemo(() => resolvePhotoUrl(rawPhotoPath), [rawPhotoPath])
+
   const handleLogout = (e) => {
     e.preventDefault()
     clearTokens()
     navigate('/login', { replace: true })
   }
 
-  // Debug log
-
   return (
-    <div className="flex flex-col h-full justify-between">
+    <div className="flex h-full min-h-0 flex-col justify-between gap-4">
       <div>
-        <div className="mb-8 flex items-center gap-3">
+        <div className="mb-6 flex items-center gap-3 px-1">
           <div>
-            <div className="text-heading-3 font-semibold">Sistem TIK</div>
+            <div className="text-heading-3 font-semibold leading-tight">Sistem TIK</div>
             <div className="text-xs text-muted-foreground">Audit Internal</div>
           </div>
         </div>
@@ -251,6 +292,7 @@ function SidebarInner() {
       <UserProfile 
         name={displayName}
         email={displayEmail}
+        photoUrl={displayPhotoUrl}
         onLogout={handleLogout}
       />
     </div>
@@ -260,7 +302,7 @@ function SidebarInner() {
 export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
   return (
     <>
-      <aside className="hidden md:block w-64 h-screen bg-white border-r border-slate-100 px-4 py-6 sticky top-0 overflow-y-auto">
+      <aside className="hidden md:block md:w-60 lg:w-64 h-screen bg-white border-r border-slate-100 px-3 lg:px-4 py-5 lg:py-6 sticky top-0 overflow-y-auto shrink-0">
         <SidebarInner />
       </aside>
 
@@ -277,7 +319,7 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
         
         {/* Sidebar Mobile */}
         <div 
-          className={`absolute inset-y-0 left-0 z-50 w-64 h-screen bg-white border-r border-slate-100 px-4 py-6 transform transition-transform duration-200 overflow-y-auto ${
+          className={`absolute inset-y-0 left-0 z-50 w-[85vw] max-w-76 h-screen bg-white border-r border-slate-100 px-3 py-5 transform transition-transform duration-200 overflow-y-auto ${
             mobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >

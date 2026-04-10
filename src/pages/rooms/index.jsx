@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -29,6 +29,24 @@ import {
   useCreateForumPeriodForum,
   useJoinForumPeriod,
 } from '@/services/forumPeriodHooks'
+import { toast } from '@/components/ui/use-toast'
+import { getUserData, getUserRoles, isProductOwnerUser } from '@/utils/auth'
+
+const DEADLINE_ERROR_MESSAGE_ID = 'Deadline forum period sudah lewat'
+const DEADLINE_ERROR_MESSAGE_EN = 'Forum period deadline has passed'
+
+const isDeadlinePassedErrorMessage = (message = '') =>
+  String(message || '').toLowerCase().includes(DEADLINE_ERROR_MESSAGE_ID.toLowerCase()) ||
+  String(message || '').toLowerCase().includes(DEADLINE_ERROR_MESSAGE_EN.toLowerCase())
+
+const isForumRelated = (forum) => {
+  if (forum?.is_related === true) return true
+  if (forum?.is_related === false) return false
+  const role = String(forum?.current_user_role ?? forum?.user_role ?? '').toLowerCase().trim()
+  if (!role) return true
+  if (['outsider', 'none', 'guest', 'unrelated'].includes(role)) return false
+  return true
+}
 
 const createRoomSchema = z.object({
   name: z.string().min(3, 'Nama minimal 3 karakter'),
@@ -72,7 +90,8 @@ export default function RoomsPage() {
   const [selectedPeriodId, setSelectedPeriodId] = useState('')
   const [periodDetailId, setPeriodDetailId] = useState('')
   const [childForumPage, setChildForumPage] = useState(1)
-  const childForumsPerPage = 6
+  const lastDeadlineToastKeyRef = useRef('')
+  const localDeadlineToastShownRef = useRef('')
 
   const { data: periodsData, isLoading: periodsLoading } = useForumPeriods()
   const periods = periodsData?.periods ?? []
@@ -84,6 +103,14 @@ export default function RoomsPage() {
     periodDetail?.period?.end_date && new Date(periodDetail.period.end_date) < new Date()
   )
   const canManageSelectedPeriod = !isPeriodDeadlinePassed
+  const currentUser = getUserData()
+  const isProductOwner = isProductOwnerUser(currentUser)
+  const currentRoles = getUserRoles(currentUser)
+  const shouldFilterForumsByRelation =
+    !isProductOwner &&
+    (currentRoles.includes('member') || currentRoles.includes('admin') || currentRoles.includes('administrator'))
+  const childForumsPerPage = 1000
+  const uiChildForumsPerPage = 6
 
   const {
     data: childForumsData,
@@ -93,12 +120,74 @@ export default function RoomsPage() {
     refetch: refetchChildForums,
   } = useForumPeriodForums(
     periodDetailId,
-    { page: childForumPage, per_page: childForumsPerPage },
+    { page: 1, per_page: childForumsPerPage },
     { enabled: Boolean(periodDetailId) }
   )
   const childForums = childForumsData?.forums ?? []
-  const childForumsPagination = childForumsData?.pagination
-  const totalChildForumPages = Math.max(1, childForumsPagination?.last_page ?? 1)
+  const relationFilteredChildForums = useMemo(() => {
+    if (!shouldFilterForumsByRelation) return childForums
+    return childForums.filter((forum) => isForumRelated(forum))
+  }, [childForums, shouldFilterForumsByRelation])
+  const totalChildForumPages = Math.max(1, Math.ceil(relationFilteredChildForums.length / uiChildForumsPerPage))
+  const safeChildForumPage = Math.min(childForumPage, totalChildForumPages)
+  const visibleChildForums = useMemo(() => {
+    const start = (safeChildForumPage - 1) * uiChildForumsPerPage
+    const end = start + uiChildForumsPerPage
+    return relationFilteredChildForums.slice(start, end)
+  }, [relationFilteredChildForums, safeChildForumPage])
+
+  const periodDetailErrorMessage =
+    periodDetailErr?.response?.data?.message ||
+    periodDetailErr?.message ||
+    'Tidak dapat melihat detail periode ini.'
+
+  const childForumsErrorMessage =
+    childForumsErr?.response?.data?.message ||
+    childForumsErr?.message ||
+    'Gagal memuat forum child.'
+
+  useEffect(() => {
+    if (!periodDetailError) return
+    if (!isDeadlinePassedErrorMessage(periodDetailErrorMessage)) return
+
+    const toastKey = `period:${periodDetailId}:${periodDetailErrorMessage}`
+    if (lastDeadlineToastKeyRef.current === toastKey) return
+    lastDeadlineToastKeyRef.current = toastKey
+
+    toast({
+      variant: 'destructive',
+      title: 'Deadline ruangan telah lewat',
+      description: 'Deadline forum period sudah lewat. Ruangan hanya dapat diakses dalam mode baca.',
+    })
+  }, [periodDetailError, periodDetailErrorMessage, periodDetailId])
+
+  useEffect(() => {
+    if (!periodDetailId || !isPeriodDeadlinePassed) return
+    const toastKey = `period-local:${periodDetailId}`
+    if (localDeadlineToastShownRef.current === toastKey) return
+    localDeadlineToastShownRef.current = toastKey
+
+    toast({
+      variant: 'destructive',
+      title: 'Deadline ruangan telah lewat',
+      description: 'Deadline forum period sudah lewat. Ruangan hanya dapat diakses dalam mode baca.',
+    })
+  }, [periodDetailId, isPeriodDeadlinePassed])
+
+  useEffect(() => {
+    if (!childForumsError) return
+    if (!isDeadlinePassedErrorMessage(childForumsErrorMessage)) return
+
+    const toastKey = `forums:${periodDetailId}:${childForumsErrorMessage}`
+    if (lastDeadlineToastKeyRef.current === toastKey) return
+    lastDeadlineToastKeyRef.current = toastKey
+
+    toast({
+      variant: 'destructive',
+      title: 'Deadline ruangan telah lewat',
+      description: 'Deadline forum period sudah lewat. Data forum hanya dapat ditampilkan dalam mode baca.',
+    })
+  }, [childForumsError, childForumsErrorMessage, periodDetailId])
 
 
   const emptyState = !periodsLoading && periods.length === 0
@@ -139,24 +228,26 @@ export default function RoomsPage() {
       <div className="max-w-full mx-auto px-6 py-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <div>
-            <h1 className="text-heading-2 font-semibold">Forum</h1>
-            <p className="text-body-md text-muted-foreground">Kelola forum diskusi dan workspace</p>
+            <h1 className="text-heading-2 font-semibold">Ruangan</h1>
+            <p className="text-body-md text-muted-foreground">Ruangan Anda.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {!selectedPeriodId ? (
               <Dialog open={periodDialogOpen} onOpenChange={setPeriodDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    className="bg-blue hover:bg-blue-light text-white flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" /> Tambah Forum
-                  </Button>
-                </DialogTrigger>
+                {!isProductOwner && (
+                  <DialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      className="bg-blue hover:bg-blue-light text-white flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" /> Tambah Ruangan
+                    </Button>
+                  </DialogTrigger>
+                )}
                 <DialogContent className="max-w-lg">
                   <DialogHeader>
-                    <DialogTitle>Buat Forum Period</DialogTitle>
-                    <DialogDescription>Atur periode dan deadline (end date) untuk forum period.</DialogDescription>
+                    <DialogTitle>Buat Ruangan</DialogTitle>
+                    <DialogDescription>Atur periode dan deadline (end date) untuk ruangan.</DialogDescription>
                   </DialogHeader>
                   <CreatePeriodForm
                     onSuccess={() => {
@@ -216,22 +307,24 @@ export default function RoomsPage() {
 
         {periodDetailId && (
           <div className="mb-6 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="text-xs text-muted-foreground">Detail Forum Period</span>
             </div>
             {periodDetailLoading && <span>Memuat detail periode...</span>}
             {periodDetailError && (
-              <span className="text-rose-600">
-                {periodDetailErr?.response?.data?.message || 'Tidak dapat melihat detail periode ini.'}
-              </span>
+              !isDeadlinePassedErrorMessage(periodDetailErrorMessage) && (
+                <span className="text-rose-600">
+                  {periodDetailErrorMessage}
+                </span>
+              )
             )}
             {!periodDetailLoading && !periodDetailError && periodDetail?.period && (
               <div className="space-y-1">
-                <div className="font-medium">{periodDetail.period.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  Tipe: {periodDetail.period.period_type || '-'}
-                  {' • '}Mulai: {formatDate(periodDetail.period.start_date)}
-                  {' • '}Deadline: {formatDate(periodDetail.period.end_date)}
+                <div className="font-medium wrap-break-word">{periodDetail.period.name}</div>
+                <div className="text-xs text-muted-foreground flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1 sm:gap-2">
+                  <span>Tipe: {periodDetail.period.period_type || '-'}</span>
+                  <span>Mulai: {formatDate(periodDetail.period.start_date)}</span>
+                  <span>Deadline: {formatDate(periodDetail.period.end_date)}</span>
                 </div>
                 {periodDetail?.current_user_role === 'owner' && (
                   <div className="pt-2">
@@ -267,7 +360,9 @@ export default function RoomsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {periods.map((period) => {
-                const isDisabled = period?.is_related === false
+                // product_owner should be able to view all periods (read-only),
+                // so consider them not "disabled" even when not related.
+                const isDisabled = period?.is_related === false && !isProductOwner
                 return (
                     <Card
                       key={period.id}
@@ -347,21 +442,23 @@ export default function RoomsPage() {
 
               <TabsContent value="forums">
                 <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 md:p-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                     <div>
                       <h2 className="text-lg font-semibold text-slate-800">Forum</h2>
                       <p className="text-xs text-muted-foreground">Daftar forum dalam periode ini.</p>
                     </div>
                     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button
-                          size="sm"
-                          className="bg-blue hover:bg-blue-light text-white flex items-center gap-2"
-                          disabled={!canManageSelectedPeriod}
-                        >
-                          <Plus className="w-4 h-4" /> Tambah Forum
-                        </Button>
-                      </DialogTrigger>
+                      {!isProductOwner && (
+                        <DialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            className="bg-blue hover:bg-blue-light text-white flex items-center gap-2 w-full sm:w-auto"
+                            disabled={!canManageSelectedPeriod}
+                          >
+                            <Plus className="w-4 h-4" /> Tambah Forum
+                          </Button>
+                        </DialogTrigger>
+                      )}
                       <DialogContent className="max-w-lg">
                         <DialogHeader>
                           <DialogTitle>Buat Forum Child</DialogTitle>
@@ -382,7 +479,11 @@ export default function RoomsPage() {
                   </div>
                 {childForumsError && (
                   <div className="p-4 mb-6 rounded-md bg-rose-50 border border-rose-100 text-sm text-rose-700 flex items-center justify-between">
-                    <span>{childForumsErr?.response?.data?.message || 'Gagal memuat forum child.'}</span>
+                    <span>
+                      {isDeadlinePassedErrorMessage(childForumsErrorMessage)
+                        ? 'Deadline ruangan sudah lewat. Notifikasi telah ditampilkan.'
+                        : childForumsErrorMessage}
+                    </span>
                     <Button variant="outline" size="sm" className="px-3 py-1" onClick={() => refetchChildForums()}>
                       Coba lagi
                     </Button>
@@ -390,14 +491,14 @@ export default function RoomsPage() {
                 )}
                   {childForumsLoading ? (
                     <RoomsSkeleton />
-                  ) : childForums.length === 0 ? (
+                  ) : visibleChildForums.length === 0 ? (
                     <div className="border border-dashed rounded-lg p-6 text-center text-muted-foreground bg-white">
                       Belum ada forum di periode ini.
                     </div>
                   ) : (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {childForums.map((room) => {
+                        {visibleChildForums.map((room) => {
                           // prefer structured owner.name, then created_by (string), then username fallback
                           const createdBy = room?.owner?.name || room?.created_by || room?.created_by_username || room?.responsible_user_id || '-'
                           const canEdit = periodDetail?.current_user_role === 'owner' || room?.current_user_role === 'owner'
@@ -440,19 +541,19 @@ export default function RoomsPage() {
                             size="xs"
                             variant="outline"
                             className="px-3 py-1"
-                            disabled={childForumPage <= 1}
+                            disabled={safeChildForumPage <= 1}
                             onClick={() => setChildForumPage((prev) => Math.max(1, prev - 1))}
                           >
                             Sebelumnya
                           </Button>
                           <span>
-                            {childForumPage} / {totalChildForumPages}
+                            {safeChildForumPage} / {totalChildForumPages}
                           </span>
                           <Button
                             size="xs"
                             variant="outline"
                             className="px-3 py-1"
-                            disabled={childForumPage >= totalChildForumPages}
+                            disabled={safeChildForumPage >= totalChildForumPages}
                             onClick={() => setChildForumPage((prev) => Math.min(totalChildForumPages, prev + 1))}
                           >
                             Berikutnya

@@ -185,42 +185,25 @@ const OverviewPieChart = ({ users, periods, masters, onSliceClick }) => {
   )
 }
 
-// Helper to get weeks
-const getWeeksInCurrentMonth = () => {
+// Helper to get days in current month (used for 1 month / daily buckets)
+const getDaysInCurrentMonth = () => {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth()
-  
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
-  
-  const weeks = []
-  const firstDayOfWeek = firstDay.getDay()
-  const daysToFirstMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1
-  
-  let currentWeekStart = new Date(firstDay)
-  currentWeekStart.setDate(currentWeekStart.getDate() - daysToFirstMonday)
-  
-  let weekNumber = 1
-  while (currentWeekStart <= lastDay && weeks.length < 4) {
-    const weekEnd = new Date(currentWeekStart)
-    weekEnd.setDate(weekEnd.getDate() + 6)
-    
-    const weekStartInMonth = new Date(Math.max(currentWeekStart, firstDay))
-    const weekEndInMonth = new Date(Math.min(weekEnd, lastDay))
-    const daysInMonth = Math.max(0, Math.ceil((weekEndInMonth - weekStartInMonth) / (1000 * 60 * 60 * 24)) + 1)
-    
-    if (daysInMonth >= 3) {
-      weeks.push({
-        start: new Date(currentWeekStart),
-        end: new Date(weekEnd),
-        label: `Minggu ${weekNumber}`
-      })
-      weekNumber++
-    }
-    currentWeekStart.setDate(currentWeekStart.getDate() + 7)
+
+  const days = []
+  for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
+    const dayStart = new Date(d)
+    const dayEnd = new Date(d)
+    dayEnd.setHours(23, 59, 59, 999)
+    const yyyy = dayStart.getFullYear()
+    const mm = String(dayStart.getMonth() + 1).padStart(2, '0')
+    const dd = String(dayStart.getDate()).padStart(2, '0')
+    days.push({ start: new Date(dayStart), end: new Date(dayEnd), label: `${yyyy}-${mm}-${dd}` })
   }
-  return weeks
+  return days
 }
 
 // Helper to get months
@@ -319,10 +302,9 @@ const StatsChart = ({ users = [], periods = [], masters = [], onItemClick }) => 
 
   const buckets = useMemo(() => {
     if (selectedRange === '1') {
-      return getWeeksInCurrentMonth()
-    } else {
-      return getMonths(parseInt(selectedRange))
+      return getDaysInCurrentMonth()
     }
+    return getMonths(parseInt(selectedRange))
   }, [selectedRange])
 
   const countByBucket = (items) => {
