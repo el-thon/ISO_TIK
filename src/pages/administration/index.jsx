@@ -1,18 +1,33 @@
-import React, { useState } from 'react'
-import { FileText, Users } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { FileText, ShieldCheck, Users } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import Clauses from './Clauses'
 import TopicDocumentMasters from './TopicDocumentMasters'
 import UsersManagementTab from './UsersManagementTab'
+import OtpLoginSettings from './OtpLoginSettings'
+import { useMe } from '@/services/authHooks'
+import { getUserData, getUserRoles } from '@/utils/auth'
 
 export default function AdministrationPage() {
+  const { data: meData } = useMe({ staleTime: 60_000 })
+  const currentUser = meData?.data?.user ?? meData ?? getUserData()
+  const roles = getUserRoles(currentUser)
+  const isAdmin = roles.includes('admin') || roles.includes('super_admin')
+
   const [tab, setTab] = useState('clauses')
 
   const tabs = [
     { key: 'clauses', label: 'Klausul', Icon: FileText },
     { key: 'masters', label: 'Dokumen Header', Icon: FileText },
     { key: 'users', label: 'Manajemen Pengguna', Icon: Users },
+    ...(isAdmin ? [{ key: 'otp-login', label: 'OTP Login', Icon: ShieldCheck }] : []),
   ]
+
+  useEffect(() => {
+    if (!tabs.some((item) => item.key === tab)) {
+      setTab('clauses')
+    }
+  }, [tab, tabs])
 
   return (
     <MainLayout>
@@ -47,6 +62,7 @@ export default function AdministrationPage() {
           {tab === 'clauses' && <Clauses />}
           {tab === 'masters' && <TopicDocumentMasters />}
           {tab === 'users' && <UsersManagementTab />}
+          {tab === 'otp-login' && isAdmin && <OtpLoginSettings />}
         </div>
       </div>
     </MainLayout>

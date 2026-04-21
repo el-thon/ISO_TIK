@@ -32,7 +32,6 @@ function Login() {
   const [otpInfo, setOtpInfo] = useState('')
   const [otpAttemptsRemaining, setOtpAttemptsRemaining] = useState(null)
   const [otpMaxAttempts, setOtpMaxAttempts] = useState(null)
-  const [otpTransitioning, setOtpTransitioning] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
   const otpInputRef = useRef(null)
@@ -42,7 +41,6 @@ function Login() {
     onSuccess: (data) => {
       if (data?.otp_required) {
         setOtpStep(true)
-        setOtpTransitioning(false)
         setOtpDelivery(data?.otp_sent_to || data?.otp_delivery || data?.email || null)
         setOtp('')
         setOtpError('')
@@ -67,13 +65,10 @@ function Login() {
       sessionStorage.setItem('iso_tik_login_welcome_message', welcomeMessage)
       localStorage.setItem(LOGIN_ONCE_KEY, 'true')
 
-      // Gunakan setTimeout untuk memastikan semua state ter-update
-      setTimeout(() => {
-        navigate('/beranda', {
-          replace: true,
-          state: { fromLogin: true }
-        })
-      }, 100) // Delay kecil untuk keamanan
+      navigate('/beranda', {
+        replace: true,
+        state: { fromLogin: true },
+      })
     }
   })
 
@@ -120,10 +115,6 @@ function Login() {
       setOtpMaxAttempts(maxAttempts)
     }
 
-    if (loginError && otpTransitioning) {
-      setOtpTransitioning(false)
-      setOtpStep(false)
-    }
     if (loginError) {
       const rawMessage = loginError?.response?.data?.message || loginError?.message || 'Gagal masuk. Periksa kembali username dan password Anda.'
       const lowerRawMessage = String(rawMessage).toLowerCase()
@@ -158,16 +149,6 @@ function Login() {
 
     setOtpInfo('')
 
-    if (!otpStep) {
-      setOtpStep(true)
-      setOtpTransitioning(true)
-      setOtpDelivery(null)
-      setOtp('')
-      setOtpError('')
-      setOtpInfo('Meminta OTP...')
-    }
-
-
     if (remember) {
       localStorage.setItem(REMEMBER_KEY, 'true')
       localStorage.setItem(REMEMBER_USERNAME_KEY, username)
@@ -188,9 +169,7 @@ function Login() {
           </CardTitle>
           <CardDescription className="text-body-md text-muted-foreground">
             {otpStep
-              ? otpTransitioning
-                ? 'Meminta OTP...'
-                : 'Masukkan kode OTP 6 digit yang dikirim ke email Anda.'
+              ? 'Masukkan kode OTP 6 digit yang dikirim ke email Anda.'
               : 'Masuk menggunakan username dan kata sandi Anda.'}
           </CardDescription>
         </CardHeader>
@@ -304,7 +283,6 @@ function Login() {
                   className="w-full"
                   onClick={() => {
                     setOtpStep(false)
-                    setOtpTransitioning(false)
                     setOtp('')
                     setOtpError('')
                     setOtpInfo('')
@@ -319,7 +297,7 @@ function Login() {
                   <button
                     type="button"
                     onClick={() => resendOtp({ login: username, username, password })}
-                    disabled={isResendLoading || resendCooldown > 0 || otpTransitioning}
+                    disabled={isResendLoading || resendCooldown > 0}
                     className="text-primary hover:underline disabled:opacity-60"
                   >
                     {isResendLoading

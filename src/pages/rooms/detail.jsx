@@ -123,7 +123,7 @@ export default function RoomDetail() {
 
   const stats = room?.stats ?? { participant_count: 0, topic_count: 0 }
   const roleKey = normalizeRoleKey(room?.user_role || room?.role || room?.participant_role || participantRole)
-  const canCreateTopic = Boolean(currentParticipant)
+  const canCreateTopic = roleKey === 'auditor'
   const defaultTab = 'topics' // Default to topics tab
   const isPeriodClosed = Boolean(
     room?.forum_period_deadline_passed ||
@@ -139,7 +139,7 @@ export default function RoomDetail() {
   const deadlineToastShownRef = React.useRef(false)
 
   useEffect(() => {
-    if (!isPeriodClosed || deadlineToastShownRef.current) return
+    if (!canCreateTopic || !isPeriodClosed || deadlineToastShownRef.current) return
 
     const t = toast({
       variant: 'destructive',
@@ -154,7 +154,7 @@ export default function RoomDetail() {
     deadlineToastShownRef.current = true
 
     return () => clearTimeout(timer)
-  }, [isPeriodClosed])
+  }, [canCreateTopic, isPeriodClosed])
 
   return (
     <MainLayout>
