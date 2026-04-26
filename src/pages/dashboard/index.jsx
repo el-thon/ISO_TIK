@@ -36,7 +36,7 @@ const ensureArray = (data) => {
 
 const CHART_COLORS = {
   'Total Pengguna': '#06b6d4',
-  'Ruangan': '#7c3aed',
+  'Periode': '#7c3aed',
   'Data Master': '#f97316',
   ChildForum: '#7c3aed',
 }
@@ -205,7 +205,7 @@ const OverviewStatsChart = ({ users = [], periods = [], masters = [] }) => {
   const chartData = buckets.map((bucket, index) => ({
     name: bucket.label,
     'Total Pengguna': usersCounts[index] || 0,
-    'Ruangan': periodsCounts[index] || 0,
+    'Periode': periodsCounts[index] || 0,
     'Data Master': mastersCounts[index] || 0,
   }))
 
@@ -217,7 +217,7 @@ const OverviewStatsChart = ({ users = [], periods = [], masters = [] }) => {
         <div className="flex items-center justify-between gap-4">
           <div>
             <CardTitle className="text-md font-semibold">
-              Ringkasan Data Master, Ruangan, dan Pengguna
+              Ringkasan Data Master, Periode, dan Pengguna
             </CardTitle>
             <p className="text-sm text-gray-500 mt-1">
              Menampilkan data per bulan, triwulan, semester dan 1 tahun.
@@ -256,7 +256,7 @@ const OverviewStatsChart = ({ users = [], periods = [], masters = [] }) => {
               <Tooltip />
               <Legend />
               <Bar dataKey="Data Master" fill={CHART_COLORS['Data Master']} radius={[6, 6, 0, 0]} />
-              <Bar dataKey="Ruangan" fill={CHART_COLORS['Ruangan']} radius={[6, 6, 0, 0]} />
+              <Bar dataKey="Periode" fill={CHART_COLORS['Periode']} radius={[6, 6, 0, 0]} />
               <Bar dataKey="Total Pengguna" fill={CHART_COLORS['Total Pengguna']} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -336,12 +336,12 @@ const PeriodChildForumChart = ({ periods = [] }) => {
       <Card className="border border-gray-200">
         <CardHeader>
           <CardTitle className="text-md font-semibold">
-            Total Forum Dalam 1 Ruangan
+            Total Forum Dalam 1 Periode
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-80 flex items-center justify-center text-sm text-gray-500">
-            Data Ruangan belum tersedia
+            Data Periode belum tersedia
           </div>
         </CardContent>
       </Card>
@@ -353,7 +353,7 @@ const PeriodChildForumChart = ({ periods = [] }) => {
       <CardHeader className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <CardTitle className="text-md font-semibold">
-            Total Forum Dalam 1 Ruangan
+            Total Forum Dalam 1 Periode
           </CardTitle>
 
         </div>
@@ -454,7 +454,7 @@ const ChildForumFormulirChart = ({ periods = [], forums = [] }) => {
     const directForums = ensureArray(forums).map((forum, index) => ({
       id: forum?.id || forum?.forum_id || `forum-${index}`,
       forumName: forum?.forum_name || forum?.name || `Forum ${index + 1}`,
-      periodName: forum?.room_name || 'Tanpa Ruangan',
+    periodName: forum?.room_name || 'Tanpa Periode',
       formulirCount: Number(
         forum?.total_discrepancy_forms ||
         forum?.formulir_count ||
@@ -470,7 +470,7 @@ const ChildForumFormulirChart = ({ periods = [], forums = [] }) => {
     }
 
     const childForums = ensureArray(periods).flatMap((period) => {
-      const periodName = period?.name || 'Room Period'
+  const periodName = period?.name || 'Forum Periode'
       return ensureArray(period?.forums).map((forum, index) => ({
         id: forum?.id || `${period?.id || 'period'}-${index}`,
         forumName: forum?.name || `Forum ${index + 1}`,
@@ -508,7 +508,7 @@ const ChildForumFormulirChart = ({ periods = [], forums = [] }) => {
     return (
       <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 max-w-xs">
   <div className="text-sm font-semibold text-gray-900 wrap-break-word">{item.forumName}</div>
-  <div className="text-xs text-gray-500 mt-1 wrap-break-word">Room Period: {item.periodName}</div>
+  <div className="text-xs text-gray-500 mt-1 wrap-break-word">Periode: {item.periodName}</div>
         <div className="text-sm text-gray-700 mt-1">
           Total Formulir: <span className="font-semibold">{item.formulirCount}</span>
         </div>
@@ -675,7 +675,7 @@ export default function Dashboard() {
       trend: statsData?.user_growth ? `+${statsData.user_growth}% growth` : null,
     },
     {
-      title: 'Ruangan',
+      title: 'Periode',
       value: periodStats.total,
       icon: Calendar,
       details: [

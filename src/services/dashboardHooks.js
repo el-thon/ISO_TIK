@@ -25,7 +25,7 @@ export const useDashboardStats = () => {
 
 export const useForumPeriods = () => {
   return useQuery({
-    queryKey: ['ruangan'],
+    queryKey: ['period'],
     queryFn: async () => {
       const response = await listForumPeriods({ per_page: 1000 })
       return response?.periods || []
@@ -157,7 +157,7 @@ export const useDashboardData = () => {
     forum_id: item?.forum_id || null,
     forum_name: item?.forum_name || `Forum ${index + 1}`,
     room_id: item?.room_id || null,
-    room_name: item?.room_name || 'Tanpa Ruangan',
+  room_name: item?.room_name || 'No Period',
     forum_created_at: item?.forum_created_at || null,
     total_discrepancy_forms: Number(item?.total_discrepancy_forms || 0),
   }))

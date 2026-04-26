@@ -43,7 +43,7 @@ const resolvePhotoUrl = (path) => {
 const NAV_ITEMS = [
   { name: 'Beranda', to: '/beranda', icon: Home, section: 'main' },
   { name: 'Forum', to: '/forum', icon: Columns, section: 'management' },
-  { name: 'Ruangan', to: '/ruangan', icon: DoorOpen, section: 'management' },
+  { name: 'Periode', to: '/period', icon: DoorOpen, section: 'management' },
   { name: 'Administrasi', to: '/administrasi', icon: Settings, section: 'management', adminOnly: true },
 ]
 

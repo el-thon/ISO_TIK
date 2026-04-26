@@ -100,7 +100,7 @@ export default function ForumsPage() {
                         </div>
                         <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{forum.description || 'Belum ada deskripsi'}</p>
                         {forum?.period_name && (
-                          <p className="text-xs text-muted-foreground mt-1">Ruangan: {forum.period_name}</p>
+                          <p className="text-xs text-muted-foreground mt-1">Periode: {forum.period_name}</p>
                         )}
                         <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-slate-700">

@@ -83,7 +83,7 @@ export default function OtpLoginSettings() {
   const errorMessage = error?.response?.data?.message || error?.message || 'Gagal memuat pengaturan sistem.'
 
   return (
-    <div className="max-w-3xl">
+    <div className="w-full max-w-full">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -111,9 +111,9 @@ export default function OtpLoginSettings() {
 
           {!loadingState && !isError && (
             <>
-              <div className="rounded-md border p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
+              <div className="rounded-md border p-4 w-full">
+                <div className="flex w-full items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
                     <Label htmlFor="otp-login-toggle" className="text-sm font-medium">
                       Wajib OTP saat login
                     </Label>

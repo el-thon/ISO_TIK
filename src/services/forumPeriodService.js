@@ -5,9 +5,7 @@ const ensureArray = (value) => (Array.isArray(value) ? value : value ? [value] :
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? null
 
-const LEGACY_ROUTE_RE = /^\/forum-periods\b/
-
-const toRuanganPath = (legacyPath) => legacyPath.replace(LEGACY_ROUTE_RE, '/ruangan')
+const PERIOD_ROUTE = '/period'
 
 const isNotFoundError = (error) => Number(error?.response?.status) === 404
 const isForbiddenError = (error) => Number(error?.response?.status) === 403
@@ -42,22 +40,11 @@ const buildPaginationFromArray = (items = [], params = {}) => {
   }
 }
 
-const requestWithRuanganFallback = async (method, legacyPath, payloadOrConfig, maybeConfig) => {
-  const ruanganPath = toRuanganPath(legacyPath)
-
-  try {
-    if (method === 'get' || method === 'delete') {
-      return await api[method](ruanganPath, payloadOrConfig)
-    }
-    return await api[method](ruanganPath, payloadOrConfig, maybeConfig)
-  } catch (error) {
-    if (!isNotFoundError(error)) throw error
-
-    if (method === 'get' || method === 'delete') {
-      return await api[method](legacyPath, payloadOrConfig)
-    }
-    return await api[method](legacyPath, payloadOrConfig, maybeConfig)
+const requestPeriod = async (method, path, payloadOrConfig, maybeConfig) => {
+  if (method === 'get' || method === 'delete') {
+    return await api[method](path, payloadOrConfig)
   }
+  return await api[method](path, payloadOrConfig, maybeConfig)
 }
 
 const pickArrayData = (...sources) => {
@@ -112,7 +99,7 @@ const normalizeForumRelation = (forum = {}) => {
 }
 
 export async function listForumPeriods(params = {}) {
-  const res = await requestWithRuanganFallback('get', '/forum-periods', { params })
+  const res = await requestPeriod('get', PERIOD_ROUTE, { params })
   const payload = unwrap(res) ?? {}
 
   return {
@@ -131,18 +118,18 @@ export async function listForumPeriods(params = {}) {
 
 export async function getForumPeriod(periodId) {
   if (!periodId) throw new Error('periodId is required')
-  const res = await requestWithRuanganFallback('get', `/forum-periods/${periodId}`)
+  const res = await requestPeriod('get', `${PERIOD_ROUTE}/${periodId}`)
   return unwrap(res) ?? {}
 }
 
 export async function createForumPeriod(payload) {
-  const res = await requestWithRuanganFallback('post', '/forum-periods', payload)
+  const res = await requestPeriod('post', PERIOD_ROUTE, payload)
   return unwrap(res) ?? {}
 }
 
 export async function updateForumPeriod(periodId, payload) {
   if (!periodId) throw new Error('periodId is required')
-  const res = await requestWithRuanganFallback('put', `/forum-periods/${periodId}`, payload)
+  const res = await requestPeriod('put', `${PERIOD_ROUTE}/${periodId}`, payload)
   return unwrap(res) ?? {}
 }
 
@@ -150,7 +137,7 @@ export async function listForumPeriodForums(periodId, params = {}) {
   if (!periodId) throw new Error('periodId is required')
 
   try {
-    const res = await requestWithRuanganFallback('get', `/forum-periods/${periodId}/forums`, { params })
+  const res = await requestPeriod('get', `${PERIOD_ROUTE}/${periodId}/forums`, { params })
     const payload = unwrap(res) ?? {}
 
     const forums = ensureArray(
@@ -191,7 +178,7 @@ export async function listForumPeriodForums(periodId, params = {}) {
           resolvedForums = merged
         }
       } catch {
-        // keep primary /ruangan result when global reconciliation fails
+  // keep primary /period result when global reconciliation fails
       }
     }
 
@@ -254,21 +241,21 @@ export async function listForumPeriodForums(periodId, params = {}) {
 
 export async function createForumPeriodForum(periodId, payload) {
   if (!periodId) throw new Error('periodId is required')
-  const res = await requestWithRuanganFallback('post', `/forum-periods/${periodId}/forums`, payload)
+  const res = await requestPeriod('post', `${PERIOD_ROUTE}/${periodId}/forums`, payload)
   return unwrap(res) ?? {}
 }
 
 export async function updateForumPeriodForum(periodId, forumId, payload) {
   if (!periodId) throw new Error('periodId is required')
   if (!forumId) throw new Error('forumId is required')
-  const res = await requestWithRuanganFallback('put', `/forum-periods/${periodId}/forums/${forumId}`, payload)
+  const res = await requestPeriod('put', `${PERIOD_ROUTE}/${periodId}/forums/${forumId}`, payload)
   return unwrap(res) ?? {}
 }
 
 export async function listForumPeriodForumTopics(periodId, forumId, params = {}) {
   if (!periodId) throw new Error('periodId is required')
   if (!forumId) throw new Error('forumId is required')
-  const res = await requestWithRuanganFallback('get', `/forum-periods/${periodId}/forums/${forumId}/topics`, { params })
+  const res = await requestPeriod('get', `${PERIOD_ROUTE}/${periodId}/forums/${forumId}/topics`, { params })
   const payload = unwrap(res) ?? {}
 
   return {
@@ -291,12 +278,61 @@ export async function listForumPeriodForumTopics(periodId, forumId, params = {})
 export async function createForumPeriodForumTopic(periodId, forumId, payload) {
   if (!periodId) throw new Error('periodId is required')
   if (!forumId) throw new Error('forumId is required')
-  const res = await requestWithRuanganFallback('post', `/forum-periods/${periodId}/forums/${forumId}/topics`, payload)
+  const res = await requestPeriod('post', `${PERIOD_ROUTE}/${periodId}/forums/${forumId}/topics`, payload)
   return unwrap(res) ?? {}
 }
 
 export async function joinForumPeriodByCode(payload) {
-  const res = await requestWithRuanganFallback('post', '/forum-periods/join', payload)
+  if (!payload?.period_id) throw new Error('period_id is required to join period')
+  const res = await requestPeriod('post', `${PERIOD_ROUTE}/join`, payload)
+  return unwrap(res) ?? {}
+}
+
+export async function listPeriodJoinRequests(periodId, params = {}) {
+  if (!periodId) throw new Error('periodId is required')
+  const res = await requestPeriod('get', `${PERIOD_ROUTE}/${periodId}/join-requests`, { params })
+  const payload = unwrap(res) ?? {}
+
+  return {
+    period_id: payload?.period_id ?? periodId,
+    requests: ensureArray(
+      pickArrayData(
+        payload?.requests,
+        payload?.items,
+        payload?.data,
+        payload?.results,
+        payload?.list,
+        payload
+      )
+    ),
+  }
+}
+
+export async function getMyPeriodJoinRequest(periodId) {
+  if (!periodId) throw new Error('periodId is required')
+  const res = await requestPeriod('get', `${PERIOD_ROUTE}/${periodId}/join-requests/me`)
+  const payload = unwrap(res) ?? {}
+
+  return {
+    period_id: payload?.period_id ?? periodId,
+    is_member: Boolean(payload?.is_member),
+    join_request: payload?.join_request ?? null,
+  }
+}
+
+export async function approvePeriodJoinRequest(periodId, joinRequestId) {
+  if (!periodId) throw new Error('periodId is required')
+  if (!joinRequestId) throw new Error('joinRequestId is required')
+
+  const res = await requestPeriod('post', `${PERIOD_ROUTE}/${periodId}/join-requests/${joinRequestId}/approve`)
+  return unwrap(res) ?? {}
+}
+
+export async function rejectPeriodJoinRequest(periodId, joinRequestId, payload = {}) {
+  if (!periodId) throw new Error('periodId is required')
+  if (!joinRequestId) throw new Error('joinRequestId is required')
+
+  const res = await requestPeriod('post', `${PERIOD_ROUTE}/${periodId}/join-requests/${joinRequestId}/reject`, payload)
   return unwrap(res) ?? {}
 }
 
@@ -311,4 +347,8 @@ export default {
   listForumPeriodForumTopics,
   createForumPeriodForumTopic,
   joinForumPeriodByCode,
+  listPeriodJoinRequests,
+  getMyPeriodJoinRequest,
+  approvePeriodJoinRequest,
+  rejectPeriodJoinRequest,
 }

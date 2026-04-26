@@ -12,7 +12,6 @@ import Profile from './pages/profile'
 import Administration from './pages/administration'
 import RoomsPage from './pages/rooms'
 import ForumsPage from './pages/forums'
-import RoomDetail from './pages/rooms/detail'
 import NotFound from './pages/not-found'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 
@@ -27,8 +26,7 @@ export const router = createBrowserRouter(
     { path: '/beranda', element: (<ProtectedRoute><Dashboard /></ProtectedRoute>) },
     { path: '/tugas', element: (<ProtectedRoute><Assignments /></ProtectedRoute>) },
   { path: '/forum', element: (<ProtectedRoute><ForumsPage/></ProtectedRoute>) },
-  { path: '/ruangan', element: (<ProtectedRoute><RoomsPage/></ProtectedRoute>) },
-    { path: '/forum/:id', element: (<ProtectedRoute><RoomDetail /></ProtectedRoute>) },
+  { path: '/period', element: (<ProtectedRoute><RoomsPage/></ProtectedRoute>) },
   { path: '/administrasi', element: (<ProtectedRoute requireAdmin><Administration /></ProtectedRoute>) },
     { path: '/formulir/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
     { path: '/formulir/buat', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },

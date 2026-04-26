@@ -339,9 +339,7 @@ function Login() {
               {isLoginLoading
                 ? 'Memproses...'
                 : otpStep
-                  ? otpTransitioning
-                    ? 'Menunggu OTP...'
-                    : 'Verifikasi OTP'
+                  ? 'Verifikasi OTP'
                   : 'Masuk'}
             </Button>
           </form>

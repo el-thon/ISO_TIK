@@ -64,8 +64,8 @@ const getUserRoles = (userData) => {
 const isProductOwnerUser = (userData) => getUserRoles(userData).includes('product_owner')
 
 const isReadOnlyMethod = (method = 'GET') => ['GET', 'HEAD', 'OPTIONS'].includes(String(method).toUpperCase())
-const DEADLINE_ERROR_MESSAGE_ID = 'Deadline forum period sudah lewat'
-const DEADLINE_ERROR_MESSAGE_EN = 'Forum period deadline has passed'
+const DEADLINE_ERROR_MESSAGE_ID = 'Period deadline has passed'
+const DEADLINE_ERROR_MESSAGE_EN = 'Period deadline has passed'
 
 let lastDeadlineToastAt = 0
 
@@ -84,8 +84,8 @@ const maybeShowDeadlinePassedToast = (error) => {
 
   toast({
     variant: 'destructive',
-    title: 'Deadline ruangan telah lewat',
-    description: 'Deadline forum period sudah lewat. Akses tersedia dalam mode baca.',
+    title: 'Period deadline has passed',
+    description: 'Period access is available in read-only mode.',
   })
 }
 
