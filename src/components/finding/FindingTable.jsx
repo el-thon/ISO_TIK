@@ -121,16 +121,27 @@ const FindingTable = ({ findings, auditInfo }) => {
   }
 
   const getFindingTypeBadge = (type) => {
-    switch (type) {
-      case 'minor':
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Minor</span>
-      case 'mayor':
-        return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Mayor</span>
-      case 'observasi':
-        return <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">Observasi</span>
-      default:
-        return null
+    const normalized = String(type || '').toLowerCase().trim()
+    if (!normalized) return null
+
+    // Support both canonical enums (major/observation) and legacy Indonesian values.
+    if (normalized === 'minor') {
+      return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs">Minor</span>
     }
+
+    if (normalized === 'major' || normalized === 'mayor') {
+      return <span className="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs">Mayor</span>
+    }
+
+    if (normalized === 'observation' || normalized === 'observasi') {
+      return <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">Observasi</span>
+    }
+
+    return (
+      <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-xs">
+        {String(type)}
+      </span>
+    )
   }
 
   return (

@@ -37,7 +37,6 @@ function unwrapPaginator(body) {
 function stripSignaturePaths(signature) {
   if (!signature || typeof signature !== 'object') return signature
   const cleaned = { ...signature }
-  delete cleaned.stored_path
   delete cleaned.signature_url
   delete cleaned.url
   delete cleaned.path

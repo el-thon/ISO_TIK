@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { clearTokens } from '@/services/api'
-import { useProfile } from '@/services/profileHooks'
+import { useProfile, useSignature, hasSignature } from '@/services/profileHooks'
 import { useMe } from '@/services/authHooks'
 import { getUserData } from '@/utils/auth'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -160,7 +160,7 @@ const NavSection = ({ title, items }) => {
   )
 }
 
-const UserProfile = ({ name, email, photoUrl, onLogout }) => {
+const UserProfile = ({ name, email, photoUrl, signatureStatus, signatureTone, onLogout }) => {
   const initials = getUserInitials(name)
   const truncatedEmail = truncateEmail(email)
   
@@ -185,6 +185,11 @@ const UserProfile = ({ name, email, photoUrl, onLogout }) => {
           {truncatedEmail && (
             <div className="text-xs text-muted-foreground truncate">{truncatedEmail}</div>
           )}
+          {signatureStatus && (
+            <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium mt-1 ${signatureTone}`}>
+              {signatureStatus}
+            </div>
+          )}
         </div>
       </NavLink>
 
@@ -208,6 +213,7 @@ const UserProfile = ({ name, email, photoUrl, onLogout }) => {
 function SidebarInner() {
   const navigate = useNavigate()
   const { data: profileData } = useProfile()
+  const signatureQuery = useSignature()
   const { canManageUsers, isProductOwner } = useUserPermissions()
 
   // Filter nav items berdasarkan permissions
@@ -259,6 +265,23 @@ function SidebarInner() {
 
   const displayPhotoUrl = useMemo(() => resolvePhotoUrl(rawPhotoPath), [rawPhotoPath])
 
+  const hasUserSignature = useMemo(
+    () => hasSignature(signatureQuery.data),
+    [signatureQuery.data]
+  )
+
+  const signatureStatus = signatureQuery.isLoading
+    ? 'Tanda tangan: memuat...'
+    : hasUserSignature
+      ? 'Tanda tangan tersedia'
+      : 'Tanda tangan belum diunggah'
+
+  const signatureTone = signatureQuery.isLoading
+    ? 'text-muted-foreground bg-slate-100'
+    : hasUserSignature
+      ? 'text-emerald-700 bg-emerald-50'
+      : 'text-amber-700 bg-amber-50'
+
   const handleLogout = (e) => {
     e.preventDefault()
     clearTokens()
@@ -293,6 +316,8 @@ function SidebarInner() {
         name={displayName}
         email={displayEmail}
         photoUrl={displayPhotoUrl}
+        signatureStatus={signatureStatus}
+        signatureTone={signatureTone}
         onLogout={handleLogout}
       />
     </div>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,8 +13,10 @@ import {
   useUploadSignature,
   useDeleteSignature,
   useDownloadSignature,
+  getSignatureUrl,
+  hasSignature,
 } from '@/services/profileHooks'
-import { Loader2 } from 'lucide-react'
+import { Loader2, ImageIcon, Download, Trash2, Upload } from 'lucide-react'
 
 // ==================== UTILS ====================
 const formatDate = (value) => {
@@ -24,9 +26,10 @@ const formatDate = (value) => {
   return date.toLocaleString()
 }
 
-// ==================== SIGNATURE COMPONENT (SEDERHANA) ====================
+// ==================== SIGNATURE SECTION WITH PREVIEW ====================
 const SignatureSection = ({ 
-  hasSignature,
+  signatureUrl,
+  hasSig,
   onUpload,
   onDownload,
   onDelete,
@@ -36,6 +39,7 @@ const SignatureSection = ({
   status 
 }) => {
   const fileInputRef = useRef(null)
+  const [previewError, setPreviewError] = useState(false)
   
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
@@ -45,6 +49,11 @@ const SignatureSection = ({
   const handleSelectClick = () => {
     fileInputRef.current?.click()
   }
+  
+  // Reset preview error when URL changes
+  useEffect(() => {
+    setPreviewError(false)
+  }, [signatureUrl])
   
   return (
     <Card>
@@ -56,8 +65,8 @@ const SignatureSection = ({
           </div>
         </div>
 
-        {!hasSignature && (
-          <div className="mb-3 text-xs text-amber-600">
+        {!hasSig && (
+          <div className="mb-3 text-xs text-amber-600 bg-amber-50 p-2 rounded-md">
             Tanda tangan belum tersedia. Silakan unggah file (PNG/JPG, maks 2MB) untuk mengaktifkan tanda tangan Anda.
           </div>
         )}
@@ -72,42 +81,79 @@ const SignatureSection = ({
         />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2 border rounded-lg p-4 flex items-center justify-center bg-slate-50 min-h-40">
-            <div className="text-xs text-muted-foreground text-center">
-              {hasSignature 
-                ? 'Tanda tangan sudah tersedia. Gunakan tombol di samping untuk mengunduh atau menghapus.' 
-                : 'Belum ada tanda tangan. Unggah terlebih dahulu.'}
-            </div>
+          {/* PREVIEW AREA - Menampilkan gambar signature */}
+          <div className="md:col-span-2 border rounded-lg bg-white min-h-40 flex flex-col items-center justify-center p-4">
+            {hasSig && signatureUrl && !previewError ? (
+              <div className="w-full">
+                <img
+                  src={signatureUrl}
+                  alt="Tanda Tangan"
+                  className="max-h-32 max-w-full object-contain mx-auto border border-slate-200 rounded-md p-2 bg-white"
+                  onError={() => setPreviewError(true)}
+                />
+                <p className="text-xs text-muted-foreground text-center mt-2">
+                  Tanda tangan aktif
+                </p>
+              </div>
+            ) : hasSig && previewError ? (
+              <div className="text-center">
+                <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">
+                  Gambar tidak dapat dimuat
+                </p>
+                <Button 
+                  variant="link" 
+                  size="sm" 
+                  className="text-xs mt-1"
+                  onClick={onDownload}
+                >
+                  Coba unduh
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">
+                  Belum ada tanda tangan
+                </p>
+              </div>
+            )}
           </div>
           
+          {/* ACTION BUTTONS */}
           <div className="flex flex-col gap-2 justify-start">
             <Button 
               variant="outline" 
               onClick={handleSelectClick} 
               disabled={isUploading}
+              className="flex items-center gap-2"
             >
+              <Upload className="w-4 h-4" />
               {isUploading ? 'Mengunggah...' : 'Unggah Tanda Tangan'}
             </Button>
             
             <Button 
               variant="outline" 
               onClick={onDownload} 
-              disabled={isDownloading || !hasSignature}
+              disabled={isDownloading || !hasSig}
+              className="flex items-center gap-2"
             >
+              <Download className="w-4 h-4" />
               {isDownloading ? 'Mengunduh...' : 'Unduh'}
             </Button>
             
             <Button 
               variant="ghost" 
-              className="text-red-600 hover:text-red-700" 
+              className="text-red-600 hover:text-red-700 flex items-center gap-2" 
               onClick={onDelete} 
-              disabled={isDeleting || !hasSignature}
+              disabled={isDeleting || !hasSig}
             >
+              <Trash2 className="w-4 h-4" />
               {isDeleting ? 'Menghapus...' : 'Hapus'}
             </Button>
             
             {status && (
-              <p className={`text-xs ${status.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+              <p className={`text-xs ${status.type === 'success' ? 'text-emerald-600' : 'text-red-600'} text-center mt-2`}>
                 {status.text}
               </p>
             )}
@@ -120,14 +166,16 @@ const SignatureSection = ({
 
 // ==================== MAIN COMPONENT ====================
 export default function Security() {
-  // Queries
+  // Pagination states
   const [sessionsPage, setSessionsPage] = useState(1)
   const [historyPage, setHistoryPage] = useState(1)
+  
+  // Queries
   const sessionsQuery = useSessions({ page: sessionsPage, per_page: 5 })
   const historyQuery = useLoginHistory({ page: historyPage, per_page: 5 })
   const signatureQuery = useSignature()
   
-  // Signature state (hanya status, tidak ada preview)
+  // Signature state
   const [signatureStatus, setSignatureStatus] = useState(null)
   
   // Forms
@@ -151,17 +199,12 @@ export default function Security() {
   const [passwordStatus, setPasswordStatus] = useState(null)
   const [revokeStatus, setRevokeStatus] = useState(null)
 
-  // ========== SIGNATURE HANDLING ==========
+  // ========== SIGNATURE HANDLING (Menggunakan utilities dari profileHooks) ==========
   const signatureData = signatureQuery.data || {}
-  const signatureEmbedded = signatureData.signature || signatureData.data || {}
   
-  const hasSignature = useMemo(() => {
-    const candidates = [signatureData, signatureEmbedded]
-    return candidates.some((c) => {
-      if (!c) return false
-      return Boolean(c.id || c.signature_id || c.signatureId)
-    })
-  }, [signatureData, signatureEmbedded])
+  // Gunakan utility dari profileHooks
+  const signatureUrl = useMemo(() => getSignatureUrl(signatureData), [signatureData])
+  const hasSig = useMemo(() => hasSignature(signatureData), [signatureData])
 
   // Upload handler
   const handleUploadSignature = async (file) => {
@@ -181,7 +224,7 @@ export default function Security() {
     if (!file.type.startsWith('image/')) {
       setSignatureStatus({ 
         type: 'error', 
-        text: 'Hanya file gambar yang diperbolehkan' 
+        text: 'Hanya file gambar (PNG/JPG) yang diperbolehkan' 
       })
       return
     }
@@ -228,7 +271,6 @@ export default function Security() {
         link.click()
         link.remove()
         
-        // Cleanup URL setelah download
         setTimeout(() => {
           URL.revokeObjectURL(url)
         }, 1000)
@@ -262,7 +304,6 @@ export default function Security() {
         text: 'Tanda tangan berhasil dihapus' 
       })
       
-      // Refresh data
       await signatureQuery.refetch()
     } catch (error) {
       const message = error?.response?.data?.message || 'Gagal menghapus tanda tangan'
@@ -270,7 +311,7 @@ export default function Security() {
     }
   }
 
-  // ========== FORM HANDLERS ==========
+  // ========== PASSWORD HANDLER ==========
   const handlePasswordSubmit = async (values) => {
     setPasswordStatus(null)
     try {
@@ -283,6 +324,7 @@ export default function Security() {
     }
   }
 
+  // ========== REVOKE ALL SESSIONS HANDLER ==========
   const handleRevokeAll = async (event) => {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
@@ -305,10 +347,29 @@ export default function Security() {
         text: 'Semua sesi lain berhasil dicabut' 
       })
       event.currentTarget.reset()
-  sessionsQuery.refetch()
+      sessionsQuery.refetch()
     } catch (error) {
       const message = error?.response?.data?.message || 'Gagal mencabut sesi'
       setRevokeStatus({ type: 'error', text: message })
+    }
+  }
+
+  // ========== REVOKE SINGLE SESSION HANDLER ==========
+  const handleRevokeSession = async (sessionId) => {
+    try {
+      await revokeSession.mutateAsync({ sessionId })
+      sessionsQuery.refetch()
+      setRevokeStatus({ 
+        type: 'success', 
+        text: 'Sesi berhasil dicabut' 
+      })
+      setTimeout(() => setRevokeStatus(null), 3000)
+    } catch (error) {
+      setRevokeStatus({ 
+        type: 'error', 
+        text: error?.response?.data?.message || 'Gagal mencabut sesi' 
+      })
+      setTimeout(() => setRevokeStatus(null), 3000)
     }
   }
 
@@ -332,11 +393,11 @@ export default function Security() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {/* Change Password Form */}
             <form 
               onSubmit={changePasswordForm.handleSubmit(handlePasswordSubmit)} 
-              className="border rounded-lg p-4 space-y-3"
+              className="border rounded-lg p-4 space-y-3 w-full"
             >
               <p className="text-sm font-medium">Ubah Password</p>
               <Input
@@ -370,9 +431,10 @@ export default function Security() {
         </CardContent>
       </Card>
 
-      {/* Signature Section - Sederhana, tanpa preview */}
+      {/* Signature Section WITH PREVIEW */}
       <SignatureSection
-        hasSignature={hasSignature}
+        signatureUrl={signatureUrl}
+        hasSig={hasSig}
         onUpload={handleUploadSignature}
         onDownload={handleDownloadSignature}
         onDelete={handleDeleteSignature}
@@ -439,17 +501,7 @@ export default function Security() {
                         variant="ghost"
                         size="sm"
                         disabled={session.is_current || revokeSession.isPending}
-                        onClick={async () => {
-                          try {
-                            await revokeSession.mutateAsync({ sessionId: session.id })
-                            sessionsQuery.refetch()
-                          } catch (error) {
-                            setRevokeStatus({ 
-                              type: 'error', 
-                              text: error?.response?.data?.message || 'Gagal mencabut sesi' 
-                            })
-                          }
-                        }}
+                        onClick={() => handleRevokeSession(session.id)}
                       >
                         Cabut
                       </Button>
@@ -460,34 +512,34 @@ export default function Security() {
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Halaman {sessionPagination?.currentPage || 1} / {sessionPagination?.lastPage || 1}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSessionsPage((prev) => Math.max(1, prev - 1))}
-                disabled={(sessionPagination?.currentPage || 1) === 1}
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSessionsPage((prev) => 
-                  sessionPagination?.lastPage 
-                    ? Math.min(sessionPagination.lastPage, prev + 1) 
-                    : prev + 1
-                )}
-                disabled={!sessionPagination || sessionPagination.currentPage >= sessionPagination.lastPage}
-              >
-                Next
-              </Button>
+          {/* Session Pagination */}
+          {sessionPagination && sessionPagination.lastPage > 1 && (
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                Halaman {sessionPagination.currentPage} / {sessionPagination.lastPage}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSessionsPage((prev) => Math.max(1, prev - 1))}
+                  disabled={sessionPagination.currentPage === 1}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSessionsPage((prev) => 
+                    Math.min(sessionPagination.lastPage, prev + 1)
+                  )}
+                  disabled={sessionPagination.currentPage === sessionPagination.lastPage}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Revoke All Form */}
           <form onSubmit={handleRevokeAll} className="flex flex-col gap-3 md:flex-row md:items-center border rounded-lg p-3">
@@ -568,33 +620,33 @@ export default function Security() {
           </div>
 
           {/* History Pagination */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Halaman {historyPagination?.currentPage || 1} / {historyPagination?.lastPage || 1}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
-                disabled={(historyPagination?.currentPage || 1) === 1}
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setHistoryPage((prev) => 
-                  historyPagination?.lastPage 
-                    ? Math.min(historyPagination.lastPage, prev + 1) 
-                    : prev + 1
-                )}
-                disabled={!historyPagination || historyPagination.currentPage >= historyPagination.lastPage}
-              >
-                Next
-              </Button>
+          {historyPagination && historyPagination.lastPage > 1 && (
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                Halaman {historyPagination.currentPage} / {historyPagination.lastPage}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
+                  disabled={historyPagination.currentPage === 1}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHistoryPage((prev) => 
+                    Math.min(historyPagination.lastPage, prev + 1)
+                  )}
+                  disabled={historyPagination.currentPage === historyPagination.lastPage}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

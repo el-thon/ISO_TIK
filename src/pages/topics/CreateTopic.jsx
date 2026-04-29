@@ -28,6 +28,7 @@ import { useActiveDocumentMaster } from '@/services/activeMasterHooks'
 import * as forumAttachmentService from '@/services/forumAttachmentService'
 import * as topicService from '@/services/topicService'
 import { cn } from '@/lib/utils'
+import { isPeriodDeadlinePassed } from '@/utils/periodDeadline'
 import { useAdminClauses } from '@/services/adminClauseHooks'
 import { useMe } from '@/services/authHooks'
 
@@ -850,6 +851,16 @@ export default function CreateTopic() {
   
   const rooms = roomsData?.rooms ?? []
 
+  // Resolve the selected forum/room object so we can check its period deadline consistently.
+  const selectedForumObj = useMemo(() => {
+    if (!resolvedForumId) return null
+    return rooms.find((room) => String(room.id) === String(resolvedForumId)) || null
+  }, [rooms, resolvedForumId])
+
+  const isSelectedPeriodClosed = useMemo(() => {
+    return isPeriodDeadlinePassed(selectedForumObj)
+  }, [selectedForumObj])
+
   // Load clauses
   const {
     data: clausesData,
@@ -1038,6 +1049,16 @@ export default function CreateTopic() {
     // Reset server and master validation errors
     setServerError(null)
     setMasterValidationError(null)
+
+    if (isSelectedPeriodClosed) {
+      setServerError(
+        <div className="space-y-2">
+          <p className="font-semibold">Periode forum sudah melewati tenggat (deadline period).</p>
+          <p className="text-sm">Pembuatan formulir ketidaksesuaian diblokir setelah deadline period.</p>
+        </div>
+      )
+      return
+    }
     
     const { ok, chosenForum } = validatePhase1()
     if (!ok) {
@@ -1463,7 +1484,7 @@ export default function CreateTopic() {
             </Button>
             <Button
               variant="secondary"
-              disabled={isBusy}
+              disabled={isBusy || isSelectedPeriodClosed}
               onClick={() => handleSubmit('draft')}
               className="min-w-25"
             >
@@ -1471,7 +1492,7 @@ export default function CreateTopic() {
               <Save className="h-4 w-4 mr-2" /> Draft
             </Button>
             <Button
-              disabled={isBusy}
+              disabled={isBusy || isSelectedPeriodClosed}
               onClick={() => handleSubmit('publish')}
               className="min-w-25 bg-blue-600 hover:bg-blue-700"
             >

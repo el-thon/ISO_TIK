@@ -46,6 +46,7 @@ import FindingForm from '@/components/finding/FindingForm'
 import FindingTable from '@/components/finding/FindingTable'
 import { convertFormToInputItem, extractFindingFromInputItem } from '../../utils/findingHelper'
 import * as documentService from '@/services/documentService'
+import { isPeriodDeadlinePassed as isPeriodDeadlinePassedUtil } from '@/utils/periodDeadline'
 
 // Import PDF Generator
 import { generatePDF } from '@/utils/pdfGenerator'
@@ -752,6 +753,21 @@ export default function TopicDetail() {
   const isClosed = String(topic?.status || '').toLowerCase() === 'closed'
   const versionDisplay = topic ? `v${topic.version_major}.${topic.version_minor}` : ''
 
+  const isTopicDeadlinePassed = Boolean(
+    topic?.deadline_at && new Date(topic.deadline_at) < new Date()
+  )
+
+  // The period deadline should lock down topic editing too.
+  // Backend usually exposes this flag at forum level when topic is loaded with its forum.
+  const resolvePeriodDeadlinePassed = () => {
+    // Always reference the *period* (forum_period_*) fields, never forum/topic deadlines.
+    return isPeriodDeadlinePassedUtil(topic?.forum) || isPeriodDeadlinePassedUtil(topic?.room)
+  }
+
+  const isPeriodDeadlinePassed = resolvePeriodDeadlinePassed()
+
+  const isFindingLockedByDeadline = isTopicDeadlinePassed || isPeriodDeadlinePassed
+
   useEffect(() => {
     if (isClosed) {
       setShowFindingForm(false)
@@ -886,26 +902,33 @@ export default function TopicDetail() {
                           'Export PDF'
                         )}
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setShowFindingForm(!showFindingForm)}
-                        disabled={createInputItemMutation.isLoading || isClosed}
-                      >
-                        {createInputItemMutation.isLoading ? (
-                          <>Menyimpan...</>
-                        ) : isClosed ? (
-                          'Temuan Dikunci'
-                        ) : showFindingForm ? (
-                          'Sembunyikan Form'
-                        ) : findingData ? (
-                          'Edit Temuan'
-                        ) : (
-                          'Tambah Temuan'
-                        )}
-                      </Button>
+                      {!isFindingLockedByDeadline && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setShowFindingForm(!showFindingForm)}
+                          disabled={createInputItemMutation.isLoading || isClosed}
+                        >
+                          {createInputItemMutation.isLoading ? (
+                            <>Menyimpan...</>
+                          ) : isClosed ? (
+                            'Temuan Dikunci'
+                          ) : showFindingForm ? (
+                            'Sembunyikan Form'
+                          ) : findingData ? (
+                            'Edit Temuan'
+                          ) : (
+                            'Tambah Temuan'
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
+                  {isFindingLockedByDeadline && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Deadline sudah lewat. Penambahan/perubahan temuan dinonaktifkan.
+                    </p>
+                  )}
                   {isClosed && (
                     <p className="text-xs text-muted-foreground">
                       Topik sudah ditutup. Edit temuan akan aktif kembali setelah topik dibuka.
@@ -916,6 +939,8 @@ export default function TopicDetail() {
                     <FindingForm 
                       onSubmit={handleSaveFinding}
                       initialData={findingData}
+                      forumId={topic?.forum?.id || topic?.room?.id || topic?.forum_id || topic?.room_id}
+                      readOnly={isFindingLockedByDeadline}
                     />
                   ) : findingData ? (
                     <FindingTable 

@@ -47,7 +47,7 @@ export const useChildForumDetails = (childId) => {
   })
 }
 
-export const useDashboardData = () => {
+export const useDashboardData = ({ findingType } = {}) => {
   const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['users', 'list', 'dashboard'],
     queryFn: async () => {
@@ -58,9 +58,13 @@ export const useDashboardData = () => {
   })
 
   const { data: statsData, isLoading: statsLoading, error: statsError } = useQuery({
-    queryKey: ['dashboard', 'statistics', 'dashboard'],
+    queryKey: ['dashboard', 'statistics', 'dashboard', { findingType: findingType ?? null }],
     queryFn: async () => {
-      const res = await api.get('/dashboard/statistics')
+      const res = await api.get('/dashboard/statistics', {
+        params: {
+          finding_type: findingType || undefined,
+        },
+      })
       return res.data?.data || {}
     },
     staleTime: 5 * 60 * 1000,

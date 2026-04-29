@@ -9,9 +9,20 @@ import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogPortal,
+  DialogOverlay,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { useAdminClauses } from '@/services/adminClauseHooks'
 import { cn } from '@/lib/utils'
 import * as documentService from '@/services/documentService'
+import * as forumAttachmentService from '@/services/forumAttachmentService'
 
 const createEmptyFinding = () => ({
   no: 1,
@@ -79,7 +90,13 @@ const formatFileSize = (bytes) => {
 }
 
 function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...', loading = false }) {
-  const selected = new Set(value)
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+
+  const selected = useMemo(() => {
+    return new Set(value)
+  }, [value])
+
   const toggle = (val) => {
     if (selected.has(val)) {
       onChange(value.filter((item) => item !== val))
@@ -88,62 +105,98 @@ function MultiSelect({ options, value, onChange, placeholder = 'Pilih klausul...
     }
   }
 
+  const filteredOptions = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return options
+    return options.filter((opt) => (opt.label || '').toLowerCase().includes(normalized))
+  }, [options, query])
+
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" className="w-full justify-between h-10">
-          <span className="truncate flex items-center gap-2">
-            {value.length > 0 ? (
-              <>
-                <Badge variant="secondary" className="rounded-sm px-1 font-normal">
-                  {value.length}
-                </Badge>
-                <span>{value.length} klausul dipilih</span>
-              </>
-            ) : (
-              placeholder
-            )}
-          </span>
-          <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-  <div className="max-h-75 overflow-y-auto p-2">
-          {loading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : options.length === 0 ? (
-            <div className="text-center py-6 text-sm text-muted-foreground">
-              Tidak ada klausul tersedia
-            </div>
+    <>
+      <Button
+        variant="outline"
+        className="w-full justify-between h-10"
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        <span className="truncate flex items-center gap-2">
+          {value.length > 0 ? (
+            <>
+              <Badge variant="secondary" className="rounded-sm px-1 font-normal">
+                {value.length}
+              </Badge>
+              <span>{value.length} klausul dipilih</span>
+            </>
           ) : (
-            <div className="space-y-1">
-              {options.map((option) => (
-                <label
-                  key={option.value}
-                  className={cn(
-                    "flex items-start gap-2 p-2 rounded-md text-sm cursor-pointer hover:bg-accent",
-                    selected.has(option.value) && "bg-accent"
-                  )}
-                >
-                  <Checkbox
-                    checked={selected.has(option.value)}
-                    onCheckedChange={() => toggle(option.value)}
-                    className="mt-0.5"
-                  />
-                  <span className="leading-tight flex-1">{option.label}</span>
-                </label>
-              ))}
-            </div>
+            placeholder
           )}
-        </div>
-      </PopoverContent>
-    </Popover>
+        </span>
+        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogOverlay className="backdrop-blur-sm" />
+          <DialogContent className="max-w-2xl p-0">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Daftar Klausul</DialogTitle>
+              <DialogDescription>Pilih klausul yang relevan untuk temuan ini.</DialogDescription>
+            </DialogHeader>
+
+            <div className="px-6 pb-4">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari klausul..."
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-6 pb-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredOptions.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  Tidak ada klausul tersedia
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className={cn(
+                        "flex items-start gap-2 p-3 rounded-md text-sm cursor-pointer border hover:bg-accent",
+                        selected.has(option.value) && "bg-accent"
+                      )}
+                    >
+                      <Checkbox
+                        checked={selected.has(option.value)}
+                        onCheckedChange={() => toggle(option.value)}
+                        className="mt-0.5"
+                      />
+                      <span className="leading-tight flex-1">{option.label}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Selesai
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </>
   )
 }
 
 function DocumentSelect({ value, onChange, disabled, documents, loading }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [documentNames, setDocumentNames] = useState({})
   const [loadingNames, setLoadingNames] = useState({})
 
@@ -186,52 +239,133 @@ function DocumentSelect({ value, onChange, disabled, documents, loading }) {
     return `Dokumen-${doc.id.substring(0, 8)}`
   }
 
-  const isLoading = (docId) => loadingNames[docId]
+  const selectedDocument = useMemo(() => {
+    if (!value) return null
+    return documents.find((doc) => String(doc.id) === String(value)) ?? null
+  }, [documents, value])
+
+  const filteredDocuments = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return documents
+    return documents.filter((doc) => getDisplayName(doc).toLowerCase().includes(normalized))
+  }, [documents, query, documentNames])
+
+  const isLoadingName = (docId) => loadingNames[docId]
 
   return (
-    <Select value={value} onValueChange={onChange} disabled={disabled}>
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder={loading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'} />
-      </SelectTrigger>
-  <SelectContent className="w-full min-w-75 max-h-75">
-        {loading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="text-center py-6 text-sm text-muted-foreground">
-            Tidak ada dokumen tersedia
-          </div>
-        ) : (
-          documents.map((document) => (
-            <SelectItem key={document.id} value={String(document.id)} className="py-2">
-              <div className="flex items-start gap-3">
-                <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex flex-col min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium truncate" title={getDisplayName(document)}>
-                      {getDisplayName(document)}
-                    </span>
-                    {isLoading(document.id) && (
-                      <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
-                    )}
-                  </div>
-                  {document.size && (
-                    <span className="text-xs text-muted-foreground">
-                      {formatFileSize(document.size)}
-                    </span>
-                  )}
+    <>
+      <Button
+        variant="outline"
+        className="w-full justify-between h-10"
+        onClick={() => setOpen(true)}
+        type="button"
+        disabled={disabled}
+      >
+        <span className="truncate flex items-center gap-2">
+          {selectedDocument ? (
+            <span className="truncate" title={getDisplayName(selectedDocument)}>
+              {getDisplayName(selectedDocument)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              {loading ? 'Memuat dokumen...' : 'Pilih dokumen pendukung'}
+            </span>
+          )}
+        </span>
+        <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogOverlay className="backdrop-blur-sm" />
+          <DialogContent className="max-w-2xl p-0">
+            <DialogHeader className="px-6 pt-6">
+              <DialogTitle>Daftar Dokumen</DialogTitle>
+              <DialogDescription>Pilih dokumen pendukung untuk bukti objektif.</DialogDescription>
+            </DialogHeader>
+
+            <div className="px-6 pb-4">
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari dokumen..."
+              />
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto px-6 pb-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
+              ) : filteredDocuments.length === 0 ? (
+                <div className="text-center py-6 text-sm text-muted-foreground">
+                  Tidak ada dokumen tersedia
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredDocuments.map((document) => {
+                    const selected = String(document.id) === String(value)
+                    return (
+                      <button
+                        key={document.id}
+                        type="button"
+                        onClick={() => {
+                          onChange(String(document.id))
+                          setOpen(false)
+                        }}
+                        className={cn(
+                          "w-full text-left flex items-start gap-3 p-3 rounded-md text-sm border hover:bg-accent",
+                          selected && "bg-accent"
+                        )}
+                      >
+                        <FileText className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate" title={getDisplayName(document)}>
+                              {getDisplayName(document)}
+                            </span>
+                            {isLoadingName(document.id) && (
+                              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />
+                            )}
+                          </div>
+                          {document.size && (
+                            <span className="text-xs text-muted-foreground">
+                              {formatFileSize(document.size)}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 pb-6">
+              <div className="flex flex-wrap gap-2 justify-between w-full">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    onChange('')
+                    setOpen(false)
+                  }}
+                >
+                  Hapus pilihan
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Selesai
+                </Button>
               </div>
-            </SelectItem>
-          ))
-        )}
-      </SelectContent>
-    </Select>
+            </DialogFooter>
+          </DialogContent>
+        </DialogPortal>
+      </Dialog>
+    </>
   )
 }
 
-const FindingForm = ({ onSubmit, initialData }) => {
+const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
   const { data: clauseData, isLoading: clausesLoading } = useAdminClauses({ per_page: 100, is_active: true })
   const [documents, setDocuments] = useState([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
@@ -255,8 +389,16 @@ const FindingForm = ({ onSubmit, initialData }) => {
       setDocumentsLoading(true)
       setDocumentsError(null)
       try {
-        const res = await documentService.listDocuments({ per_page: 200 })
-        const docs = res?.documents ?? []
+        let docs = []
+        if (forumId) {
+          // Load attachments that belong to the forum where the topic/form was created
+          const res = await forumAttachmentService.listForumAttachments(forumId, { per_page: 200 })
+          docs = res?.attachments ?? []
+        } else {
+          const res = await documentService.listDocuments({ per_page: 200 })
+          docs = res?.documents ?? []
+        }
+
         if (isMounted) setDocuments(docs)
       } catch (error) {
         if (isMounted) setDocumentsError(error)
@@ -269,7 +411,7 @@ const FindingForm = ({ onSubmit, initialData }) => {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [forumId])
 
   const clauseOptions = useMemo(() => {
     const clauses = clauseData?.clauses ?? clauseData?.items ?? clauseData?.data ?? []
@@ -456,24 +598,28 @@ const FindingForm = ({ onSubmit, initialData }) => {
           <div>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">Daftar Temuan</h3>
-              <Button type="button" onClick={addFinding} variant="outline" size="sm">
-                + Tambah Temuan
-              </Button>
+              {!readOnly && (
+                <Button type="button" onClick={addFinding} variant="outline" size="sm">
+                  + Tambah Temuan
+                </Button>
+              )}
             </div>
 
             {formData.findings.map((finding, index) => (
               <div key={index} className="border rounded-md p-4 mb-4 space-y-3">
                 <div className="flex justify-between">
                   <h4 className="font-medium">Temuan #{finding.no}</h4>
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={() => removeFinding(index)}
-                    className="text-red-600"
-                  >
-                    Hapus
-                  </Button>
+                  {!readOnly && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => removeFinding(index)}
+                      className="text-red-600"
+                    >
+                      Hapus
+                    </Button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
@@ -483,10 +629,11 @@ const FindingForm = ({ onSubmit, initialData }) => {
                       className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
                       value={finding.finding_type}
                       onChange={(e) => updateFinding(index, 'finding_type', e.target.value)}
+                      disabled={readOnly}
                     >
                       <option value="minor">Minor</option>
-                      <option value="mayor">Mayor</option>
-                      <option value="observasi">Observasi</option>
+                      <option value="major">Mayor</option>
+                      <option value="observation">Observasi</option>
                     </select>
                   </div>
                   <div className="col-span-2">
@@ -497,6 +644,7 @@ const FindingForm = ({ onSubmit, initialData }) => {
                       value={finding.finding_description}
                       onChange={(e) => updateFinding(index, 'finding_description', e.target.value)}
                       required
+                      disabled={readOnly}
                     />
                   </div>
                 </div>
@@ -509,6 +657,7 @@ const FindingForm = ({ onSubmit, initialData }) => {
                     onChange={(value) => updateFinding(index, 'clause_references', value)}
                     placeholder={clausesLoading ? 'Memuat klausul...' : 'Pilih klausul'}
                     loading={clausesLoading}
+                    disabled={readOnly}
                   />
                 </div>
 
@@ -531,6 +680,7 @@ const FindingForm = ({ onSubmit, initialData }) => {
                             updateFinding(index, 'objective_evidence', buildObjectiveEvidence(docId, event.target.value))
                           }
                           placeholder="Tambahkan keterangan bukti objektif"
+                          disabled={readOnly}
                         />
                         {docId && !documentsError && (
                           <p className="text-xs text-muted-foreground mt-1">
@@ -551,9 +701,11 @@ const FindingForm = ({ onSubmit, initialData }) => {
             )}
           </div>
 
-          <Button type="submit" className="w-full">
-            Simpan Daftar Temuan
-          </Button>
+          {!readOnly && (
+            <Button type="submit" className="w-full">
+              Simpan Daftar Temuan
+            </Button>
+          )}
         </CardContent>
       </Card>
     </form>

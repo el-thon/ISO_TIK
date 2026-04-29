@@ -446,7 +446,7 @@ const PeriodChildForumChart = ({ periods = [] }) => {
   )
 }
 
-const ChildForumFormulirChart = ({ periods = [], forums = [] }) => {
+const ChildForumFormulirChart = ({ periods = [], forums = [], findingType = '', onFindingTypeChange }) => {
   const [pageSize, setPageSize] = useState('10')
   const [page, setPage] = useState(1)
 
@@ -541,6 +541,23 @@ const ChildForumFormulirChart = ({ periods = [], forums = [] }) => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+          <Select
+            value={findingType}
+            onValueChange={(value) => {
+              onFindingTypeChange?.(value)
+              setPage(1)
+            }}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Semua kategori" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua</SelectItem>
+              <SelectItem value="minor">Minor</SelectItem>
+              <SelectItem value="major">Mayor</SelectItem>
+              <SelectItem value="observation">Observasi</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={pageSize} onValueChange={setPageSize}>
             <SelectTrigger className="w-24">
               <SelectValue placeholder="Jumlah" />
@@ -592,6 +609,8 @@ const ChildForumFormulirChart = ({ periods = [], forums = [] }) => {
 
 export default function Dashboard() {
   const location = useLocation()
+  // Radix SelectItem value can't be an empty string; use a sentinel for 'all'.
+  const [discrepancyFindingType, setDiscrepancyFindingType] = useState('all')
   const {
     usersData,
     userStats,
@@ -601,7 +620,7 @@ export default function Dashboard() {
     documentMasterArray,
     isLoading,
     error,
-  } = useDashboardData()
+  } = useDashboardData({ findingType: discrepancyFindingType === 'all' ? undefined : discrepancyFindingType })
 
   useEffect(() => {
     const welcomeMessage = sessionStorage.getItem('iso_tik_login_welcome_message')
@@ -614,7 +633,7 @@ export default function Dashboard() {
     })
     sessionStorage.removeItem('iso_tik_login_welcome_message')
   }, [location?.key])
-
+ 
   const periodStats = useMemo(() => {
     const periods = ensureArray(periodsArray)
     const now = new Date()
@@ -750,7 +769,12 @@ export default function Dashboard() {
 
         <div className="mb-6 grid grid-cols-1 xl:grid-cols-2 gap-6">
           <PeriodChildForumChart periods={periodsArray} />
-          <ChildForumFormulirChart periods={periodsArray} forums={discrepancyFormsPerForumArray} />
+          <ChildForumFormulirChart
+            periods={periodsArray}
+            forums={discrepancyFormsPerForumArray}
+            findingType={discrepancyFindingType}
+            onFindingTypeChange={setDiscrepancyFindingType}
+          />
         </div>
       </div>
     </MainLayout>
