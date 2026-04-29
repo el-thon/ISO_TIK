@@ -21,6 +21,7 @@ import {
 } from '@/services/topicHooks'
 import { useMe } from '@/services/authHooks'
 import { useAdminClauses } from '@/services/adminClauseHooks'
+import { useRoomParticipants } from '@/services/roomHooks'
 import { ACTION_METADATA, isLikelyTopicId, buildErrorMessage } from './detail/utils'
 import { toast } from '@/components/ui/use-toast'
 import api from '@/services/api'
@@ -247,6 +248,15 @@ export default function TopicDetail() {
 
   // Definisikan topicId setelah topic tersedia
   const topicId = topic?.id || paramTopicId
+
+  const forumId = topic?.forum?.id || topic?.room?.id || topic?.forum_id || topic?.room_id
+
+  // Load participants to determine if current user is auditee (auditee can't add/edit findings)
+  const participantsParams = useMemo(() => ({ per_page: 200 }), [])
+  const { data: participantsData } = useRoomParticipants(forumId, participantsParams, {
+    enabled: Boolean(forumId),
+  })
+  const forumParticipants = participantsData?.participants ?? []
 
   // Load finding data dari input_items
   const resolvedInputItems = useMemo(() => {
@@ -766,7 +776,19 @@ export default function TopicDetail() {
 
   const isPeriodDeadlinePassed = resolvePeriodDeadlinePassed()
 
+  const normalizeParticipantRole = (role) => String(role || '').trim().toLowerCase()
+
+  const isCurrentUserAuditee = useMemo(() => {
+    const currentUserId = currentUser?.id
+    if (!currentUserId) return false
+    const normalizedId = String(currentUserId)
+    const match = forumParticipants.find((p) => String(p?.user_id ?? p?.user?.id ?? '') === normalizedId)
+    if (!match) return false
+    return normalizeParticipantRole(match?.role) === 'auditee'
+  }, [currentUser?.id, forumParticipants])
+
   const isFindingLockedByDeadline = isTopicDeadlinePassed || isPeriodDeadlinePassed
+  const isFindingReadOnly = isFindingLockedByDeadline || isCurrentUserAuditee
 
   useEffect(() => {
     if (isClosed) {
@@ -902,7 +924,7 @@ export default function TopicDetail() {
                           'Export PDF'
                         )}
                       </Button>
-                      {!isFindingLockedByDeadline && (
+                      {!isFindingLockedByDeadline && !isCurrentUserAuditee && (
                         <Button 
                           variant="outline" 
                           size="sm"
@@ -929,6 +951,11 @@ export default function TopicDetail() {
                       Deadline sudah lewat. Penambahan/perubahan temuan dinonaktifkan.
                     </p>
                   )}
+                  {isCurrentUserAuditee && !isFindingLockedByDeadline && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Anda terdaftar sebagai auditee pada forum ini. Penambahan/perubahan temuan dinonaktifkan.
+                    </p>
+                  )}
                   {isClosed && (
                     <p className="text-xs text-muted-foreground">
                       Topik sudah ditutup. Edit temuan akan aktif kembali setelah topik dibuka.
@@ -939,8 +966,8 @@ export default function TopicDetail() {
                     <FindingForm 
                       onSubmit={handleSaveFinding}
                       initialData={findingData}
-                      forumId={topic?.forum?.id || topic?.room?.id || topic?.forum_id || topic?.room_id}
-                      readOnly={isFindingLockedByDeadline}
+                      forumId={forumId}
+                      readOnly={isFindingReadOnly}
                     />
                   ) : findingData ? (
                     <FindingTable 
