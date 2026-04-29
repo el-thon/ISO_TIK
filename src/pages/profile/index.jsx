@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import React, { useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -37,8 +37,7 @@ const TabContent = ({ tab, profileData }) => {
 
 export default function ProfilePage() {
   const location = useLocation()
-  const navigate = useNavigate()
-  const [tab, setTab] = useState(() => getTabFromQuery(location.search))
+  const safeTab = useMemo(() => getTabFromQuery(location.search), [location.search])
 
   const { data: profileData, isLoading, isError, refetch } = useProfile()
   const avatarProps = useProfilePhoto(profileData, refetch)
@@ -53,12 +52,6 @@ export default function ProfilePage() {
            profileData?.profile?.department || 
            'Unknown unit'
   }, [profileData])
-
-  // Sync tab with URL query param
-  useEffect(() => {
-    const newTab = getTabFromQuery(location.search)
-    if (newTab !== tab) setTab(newTab)
-  }, [location.search, tab])
 
   const renderContent = () => {
     if (isLoading) {
@@ -76,7 +69,7 @@ export default function ProfilePage() {
       )
     }
 
-    return <TabContent tab={tab} profileData={profileData} />
+    return <TabContent tab={safeTab} profileData={profileData} />
   }
 
   return (
@@ -86,7 +79,7 @@ export default function ProfilePage() {
           {/* Left Column - Sidebar */}
           <div className="w-72">
             <ProfileSidebar
-              currentTab={tab}
+              currentTab={safeTab}
               displayName={displayName}
               faculty={faculty}
               status={profileData?.status}

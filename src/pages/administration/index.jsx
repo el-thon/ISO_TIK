@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { FileText, ShieldCheck, Users } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import Clauses from './Clauses'
@@ -23,10 +23,8 @@ export default function AdministrationPage() {
     ...(isAdmin ? [{ key: 'otp-login', label: 'OTP Login', Icon: ShieldCheck }] : []),
   ]
 
-  useEffect(() => {
-    if (!tabs.some((item) => item.key === tab)) {
-      setTab('clauses')
-    }
+  const safeTab = useMemo(() => {
+    return tabs.some((item) => item.key === tab) ? tab : 'clauses'
   }, [tab, tabs])
 
   return (
@@ -46,10 +44,10 @@ export default function AdministrationPage() {
                   <button
                     onClick={() => setTab(t.key)}
                     className={`flex items-center gap-2 pb-3 ${
-                      tab === t.key ? 'text-blue-600 border-b-2 border-blue-600' : 'text-foreground'
+                      safeTab === t.key ? 'text-blue-600 border-b-2 border-blue-600' : 'text-foreground'
                     }`}
                   >
-                    <Icon className={`size-4 ${tab === t.key ? 'text-blue-600' : 'text-muted-foreground'}`} />
+                    <Icon className={`size-4 ${safeTab === t.key ? 'text-blue-600' : 'text-muted-foreground'}`} />
                     {t.label}
                   </button>
                 </li>
@@ -59,10 +57,10 @@ export default function AdministrationPage() {
         </div>
 
         <div>
-          {tab === 'clauses' && <Clauses />}
-          {tab === 'masters' && <TopicDocumentMasters />}
-          {tab === 'users' && <UsersManagementTab />}
-          {tab === 'otp-login' && isAdmin && <OtpLoginSettings />}
+          {safeTab === 'clauses' && <Clauses />}
+          {safeTab === 'masters' && <TopicDocumentMasters />}
+          {safeTab === 'users' && <UsersManagementTab />}
+          {safeTab === 'otp-login' && isAdmin && <OtpLoginSettings />}
         </div>
       </div>
     </MainLayout>

@@ -5,13 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Info } from 'lucide-react'
 import { useUpdateEmployment } from '@/services/profileHooks'
-
-const Field = ({ label, children }) => (
-  <div>
-    <div className="text-xs text-muted-foreground">{label}</div>
-    {children}
-  </div>
-)
+import { Field } from './components/common/Field'
+import { StatusMessage } from './components/common/StatusMessage'
 
 const toDefaultValues = (employment) => {
   const data = employment ?? {}
@@ -71,7 +66,7 @@ export default function Employment({ employment, userId }) {
     }
     try {
       await updateEmployment.mutateAsync({ userId, payload })
-    } catch (error) {
+    } catch {
       // handled in onError
     }
   }

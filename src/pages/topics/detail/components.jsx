@@ -36,6 +36,7 @@ import {
   sanitizeHtml,
   REVIEW_FINDING_TYPES,
 } from './utils'
+import { renderInputItemContent } from './renderers.jsx'
 
 const getTypeIcon = (type) => {
   const icons = {
@@ -436,39 +437,18 @@ const FileContent = ({ item }) => {
   )
 }
 
-const DefaultContent = ({ type, value }) => (
-  <div className="mt-3 p-4 border border-dashed rounded-md text-center">
-    <div className="text-sm text-muted-foreground">Tipe konten tidak dikenali: {type}</div>
-    {value && (
-      <div className="mt-2 text-xs text-slate-600">
-        <div className="font-medium">Isi:</div>
-        <code className="block mt-1 p-2 bg-slate-50 rounded border overflow-x-auto">
-          {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-        </code>
-      </div>
-    )}
-  </div>
-)
-
-export const renderInputItemContent = (item) => {
-  const metadata = item?.metadata ?? {}
-  const value = item?.value ?? ''
-  const type = item?.type || 'text'
-
-  const contentRenderers = {
-    link: <LinkContent value={value} />,
-    rich_text: <RichTextContent value={value} />,
-    text: <TextContent value={value} />,
-    form_data: <FormDataContent fields={metadata?.fields} />,
-    image: <ImageContent item={item} />,
-    file: <FileContent item={item} />,
-  }
-
-  return contentRenderers[type] || <DefaultContent type={type} value={value} />
-}
-
 export const InputItem = ({ item }) => {
-  const contentNode = renderInputItemContent(item)
+  const contentNode = renderInputItemContent({
+    item,
+    components: {
+      LinkContent,
+      RichTextContent,
+      TextContent,
+      FormDataContent,
+      ImageContent,
+      FileContent,
+    },
+  })
 
   return (
     <div className="border rounded-md p-4 space-y-3">

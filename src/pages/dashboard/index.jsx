@@ -22,9 +22,24 @@ import {
   Bar,
   LabelList,
 } from 'recharts'
-import { motion } from 'framer-motion'
 import { useDashboardData } from '@/services/dashboardHooks'
 import { toast } from '@/components/ui/use-toast'
+
+const ChildFormulirTooltip = ({ active, payload }) => {
+  if (!active || !payload || !payload.length) return null
+  const item = payload[0]?.payload
+  if (!item) return null
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 max-w-xs">
+      <div className="text-sm font-semibold text-gray-900 wrap-break-word">{item.forumName}</div>
+      <div className="text-xs text-gray-500 mt-1 wrap-break-word">Periode: {item.periodName}</div>
+      <div className="text-sm text-gray-700 mt-1">
+        Total Formulir: <span className="font-semibold">{item.formulirCount}</span>
+      </div>
+    </div>
+  )
+}
 
 const ensureArray = (data) => {
   if (!data) return []
@@ -101,13 +116,9 @@ const truncateLabel = (value, max = 28) => {
   return value.length > max ? `${value.slice(0, max)}…` : value
 }
 
-const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = false }) => {
+const StatCard = ({ title, value, details, trend, loading, isAlt = false, icon: Icon }) => {
   return (
-    <motion.div
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      transition={{ duration: 0.2 }}
-      className="h-full"
-    >
+    <div className="h-full">
       <Card
         className={`border transition-all h-full ${
           isAlt
@@ -154,12 +165,14 @@ const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = f
             </div>
 
             <div className={`p-2 sm:p-3 rounded-full ${isAlt ? 'bg-white/10' : 'bg-gray-100'}`}>
-              <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${isAlt ? 'text-white' : 'text-gray-700'}`} />
+              {Icon ? (
+                <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${isAlt ? 'text-white' : 'text-gray-700'}`} />
+              ) : null}
             </div>
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   )
 }
 
@@ -499,22 +512,6 @@ const ChildForumFormulirChart = ({ periods = [], forums = [], findingType = '', 
       label: truncateLabel(`${item.forumName} • ${item.periodName}`, 30),
     }))
   }, [sortedData, safePage, pageSizeNumber])
-
-  const ChildFormulirTooltip = ({ active, payload }) => {
-    if (!active || !payload || !payload.length) return null
-    const item = payload[0]?.payload
-    if (!item) return null
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 max-w-xs">
-  <div className="text-sm font-semibold text-gray-900 wrap-break-word">{item.forumName}</div>
-  <div className="text-xs text-gray-500 mt-1 wrap-break-word">Periode: {item.periodName}</div>
-        <div className="text-sm text-gray-700 mt-1">
-          Total Formulir: <span className="font-semibold">{item.formulirCount}</span>
-        </div>
-      </div>
-    )
-  }
 
   if (!normalizedData.length) {
     return (

@@ -169,7 +169,7 @@ export async function loadSignatureAsBlobUrl(signaturePath) {
   }
 }
 
-export async function downloadDocument(documentId, filename, onProgress = null) {
+export async function downloadDocument(documentId, filename) {
   if (!documentId) throw new Error('documentId is required')
   
   const token = getAccessToken()
@@ -185,7 +185,7 @@ export async function downloadDocument(documentId, filename, onProgress = null) 
       finalFilename = extractDocumentName(docInfo) || finalFilename
       mimeType = docInfo.mime_type || docInfo.mimeType
     }
-  } catch (err) {
+  } catch {
     // Abaikan error, lanjut dengan filename yang diberikan
   }
   

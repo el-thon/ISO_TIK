@@ -1,5 +1,5 @@
 // pages/dashboard/index.jsx
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,6 @@ import {
   X
 } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
-import { motion, AnimatePresence } from 'framer-motion'
 import { useDashboardData } from '@/services/dashboardHooks'
 
 // Helper function to ensure array
@@ -38,13 +37,11 @@ const ensureArray = (data) => {
 }
 
 // Enhanced Stat Card
-const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = false }) => {
+const StatCard = ({ title, value, icon: _Icon, details, trend, loading, isAlt = false }) => {
+  // Some lint configs don't treat destructured rename as usage; ensure it's referenced.
+  const Icon = _Icon
   return (
-    <motion.div
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      transition={{ duration: 0.2 }}
-      className="h-full"
-    >
+    <div className="h-full">
       <Card className={`border transition-all h-full ${
         isAlt
           ? 'bg-black border-gray-800 text-white hover:shadow-lg'
@@ -104,7 +101,7 @@ const StatCard = ({ title, value, icon: Icon, details, trend, loading, isAlt = f
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   )
 }
 
@@ -120,7 +117,7 @@ const OverviewPieChart = ({ users, periods, masters, onSliceClick }) => {
     { name: 'Data Master', value: mastersCount, color: '#f97316', key: 'masters' }
   ]
 
-  const handleClick = (entry, index) => {
+  const handleClick = (entry) => {
     if (onSliceClick) {
       onSliceClick(entry.payload.key)
     }
@@ -307,7 +304,7 @@ const StatsChart = ({ users = [], periods = [], masters = [], onItemClick }) => 
     return getMonths(parseInt(selectedRange))
   }, [selectedRange])
 
-  const countByBucket = (items) => {
+  const countByBucket = useCallback((items) => {
     const arr = ensureArray(items)
     return buckets.map((bucket) => {
       let count = 0
@@ -324,7 +321,7 @@ const StatsChart = ({ users = [], periods = [], masters = [], onItemClick }) => 
       }
       return count
     })
-  }
+  }, [buckets, selectedRange])
 
   const forumCounts = useMemo(() => {
     const arr = ensureArray(periods)
@@ -344,8 +341,8 @@ const StatsChart = ({ users = [], periods = [], masters = [], onItemClick }) => 
     })
   }, [periods, buckets, selectedRange])
 
-  const userCounts = useMemo(() => countByBucket(users), [users, buckets])
-  const masterCounts = useMemo(() => countByBucket(masters), [masters, buckets])
+  const userCounts = useMemo(() => countByBucket(users), [users, countByBucket])
+  const masterCounts = useMemo(() => countByBucket(masters), [masters, countByBucket])
 
   const allData = buckets.map((bucket, idx) => ({
     name: bucket.label,
@@ -364,7 +361,7 @@ const StatsChart = ({ users = [], periods = [], masters = [], onItemClick }) => 
   const isWeekly = selectedRange === '1'
 
   // Handle dot click
-  const handleDotClick = (dataKey, dataPoint) => {
+  const handleDotClick = (dataKey) => {
     if (onItemClick) {
       onItemClick(dataKey)
     }
@@ -454,7 +451,7 @@ const StatsChart = ({ users = [], periods = [], masters = [], onItemClick }) => 
 }
 
 // Child Forum Bar Chart Component
-const ChildForumChart = ({ childForums, onChildSelect, selectedChildId }) => {
+const ChildForumChart = ({ childForums, onChildSelect }) => {
   const data = ensureArray(childForums).map(child => ({
     name: child.name?.length > 20 ? child.name.substring(0, 20) + '...' : (child.name || 'Unnamed'),
     formulir: child.formulir_count || 0,

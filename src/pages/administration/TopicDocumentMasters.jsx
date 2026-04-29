@@ -8,7 +8,7 @@ import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 function formatDate(d) {
   if (!d) return ''
-  try { return new Date(d).toISOString().slice(0,10) } catch(e) { return d }
+  try { return new Date(d).toISOString().slice(0, 10) } catch { return d }
 }
 
 function MastersList({ masters, onActivate, onEdit, onDelete, readOnly = false }) {
@@ -58,10 +58,10 @@ export default function TopicDocumentMasters() {
   const fetchMasters = async () => {
     setLoading(true)
     try {
-      const res = await api.get('/admin/topic-document-masters')
-      setMasters(res.data?.data || res.data || [])
-    } catch (e) {
-      console.error(e)
+      const response = await api.get('/admin/topic-document-masters')
+      setMasters(response.data?.data || response.data || [])
+    } catch (error) {
+      console.error(error)
     } finally { setLoading(false) }
   }
 
@@ -73,20 +73,22 @@ export default function TopicDocumentMasters() {
     e.preventDefault()
     if (isProductOwner) return
     try {
-      let res
       if (form.id) {
-        res = await api.put(`/admin/topic-document-masters/${form.id}`, form)
+        await api.put(`/admin/topic-document-masters/${form.id}`, form)
       } else {
-        res = await api.post('/admin/topic-document-masters', form)
+        await api.post('/admin/topic-document-masters', form)
       }
       // invalidate active master so other components refresh immediately
       try { 
         queryClient.invalidateQueries({ queryKey: ['topicDocumentMaster', 'active'] }) 
         queryClient.invalidateQueries({ queryKey: ['adminTopicDocumentMasters'] })
-      } catch (e) { /* ignore */ }
+      } catch (error) {
+        // ignore
+        console.error(error)
+      }
       setShowCreate(false)
       fetchMasters()
-    } catch (err) { console.error(err) }
+    } catch (error) { console.error(error) }
   }
 
   const onActivate = async (m) => {
@@ -96,9 +98,12 @@ export default function TopicDocumentMasters() {
       try { 
         queryClient.invalidateQueries({ queryKey: ['topicDocumentMaster', 'active'] }) 
         queryClient.invalidateQueries({ queryKey: ['adminTopicDocumentMasters'] })
-      } catch (e) { }
+      } catch (error) {
+        // ignore
+        console.error(error)
+      }
       fetchMasters()
-    } catch (e) { console.error(e) }
+    } catch (error) { console.error(error) }
   }
 
   const onEdit = (m) => {
@@ -115,9 +120,12 @@ export default function TopicDocumentMasters() {
       try { 
         queryClient.invalidateQueries({ queryKey: ['topicDocumentMaster', 'active'] }) 
         queryClient.invalidateQueries({ queryKey: ['adminTopicDocumentMasters'] })
-      } catch (e) { }
+      } catch (error) {
+        // ignore
+        console.error(error)
+      }
       fetchMasters()
-    } catch (e) { console.error(e) }
+    } catch (error) { console.error(error) }
   }
 
   return (

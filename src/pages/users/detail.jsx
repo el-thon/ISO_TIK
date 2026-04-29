@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent } from '@/components/ui/card'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -46,41 +46,45 @@ export default function UserDetail() {
   const auditLogs = auditData?.logs ?? []
   const isProductOwner = isProductOwnerUser(getUserData())
 
-  useEffect(() => {
-    if (user) {
-      setEditForm({
-        full_name: user?.profile?.full_name || user?.name || '',
-        email: user?.email || '',
-        status: user?.status || 'active',
-        username: user?.username || '',
-      })
+  const initialEditForm = useMemo(() => {
+    if (!user) return null
+    return {
+      full_name: user?.profile?.full_name || user?.name || '',
+      email: user?.email || '',
+      status: user?.status || 'active',
+      username: user?.username || '',
     }
   }, [user])
 
+  const openEditDialog = () => {
+    if (initialEditForm) setEditForm(initialEditForm)
+    setEditOpen(true)
+  }
+
   const displayName = useMemo(() => user?.profile?.full_name || user?.username || 'Pengguna', [user])
   const statusVariant = (user?.status || '').toLowerCase() === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-    const formatTimestamp = (value) => {
-      if (!value) return '-'
-      const date = new Date(value)
-      if (Number.isNaN(date.getTime())) return value
-      return date.toLocaleString('id-ID', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    }
+  const formatTimestamp = (value) => {
+    if (!value) return '-'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return value
+    return date.toLocaleString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
 
-    const formatActionLabel = (action = '') => {
-      const map = {
-        comment_replied: 'Membalas komentar',
-        comment_created: 'Menambahkan komentar',
-        topic_updated: 'Memperbarui topik',
-        login_success: 'Login berhasil',
-      }
-      return map[action] || action.replace(/_/g, ' ')
+  const formatActionLabel = (action = '') => {
+    const map = {
+      comment_replied: 'Membalas komentar',
+      comment_created: 'Menambahkan komentar',
+      topic_updated: 'Memperbarui topik',
+      login_success: 'Login berhasil',
     }
+    return map[action] || action.replace(/_/g, ' ')
+  }
 
   function handleEditSubmit(e) {
     e.preventDefault()
@@ -114,7 +118,7 @@ export default function UserDetail() {
 
             <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => navigate(-1)}>Back</Button>
-            <Button className="bg-amber-500 text-white" onClick={() => setEditOpen(true)} disabled={isProductOwner || isLoading || !user}>
+            <Button className="bg-amber-500 text-white" onClick={openEditDialog} disabled={isProductOwner || isLoading || !user}>
               {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Edit'}
             </Button>
             <Button variant="outline" onClick={() => setDeleteOpen(true)} className="text-red-600" disabled={isProductOwner || isLoading || deleteMutation.isPending || !user}>
@@ -212,61 +216,6 @@ export default function UserDetail() {
                         {log.category && (
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">
                             {log.category}
-                      {/* Role assignment UI for super_admin */}
-                      {isSuperAdmin && (
-                        <div className="mt-6">
-                          <div className="text-sm text-muted-foreground mb-1">Role Pengguna</div>
-                          <div className="mb-2">
-                            {rolesLoading ? (
-                              <span className="text-xs text-muted-foreground">Memuat role...</span>
-                            ) : (
-                              <div className="flex flex-wrap gap-2">
-                                {userRoles.length === 0 ? (
-                                  <span className="text-xs text-muted-foreground">Tidak ada role</span>
-                                ) : (
-                                  userRoles.map((role) => (
-                                    <span key={role} className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700">{role}</span>
-                                  ))
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <form
-                            className="flex gap-2 items-center"
-                            onSubmit={async (e) => {
-                              e.preventDefault()
-                              if (!roleForm.role) return setRoleError('Pilih role')
-                              setRoleAssignLoading(true)
-                              setRoleError('')
-                              try {
-                                await assignUserRole(id, roleForm.role)
-                                setRoleForm({ role: '' })
-                                refetchUserRoles()
-                              } catch (err) {
-                                setRoleError(err?.message || 'Gagal assign role')
-                              } finally {
-                                setRoleAssignLoading(false)
-                              }
-                            }}
-                          >
-                            <select
-                              className="border rounded p-2 min-w-30"
-                              value={roleForm.role}
-                              onChange={(e) => setRoleForm({ role: e.target.value })}
-                              disabled={availableRolesLoading || roleAssignLoading}
-                            >
-                              <option value="">Pilih role</option>
-                              {availableRoles.map((role) => (
-                                <option key={role} value={role}>{role}</option>
-                              ))}
-                            </select>
-                            <Button type="submit" className="bg-blue-600 text-white" disabled={roleAssignLoading || !roleForm.role}>
-                              {roleAssignLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Assign Role'}
-                            </Button>
-                          </form>
-                          {roleError && <div className="text-xs text-red-600 mt-1">{roleError}</div>}
-                        </div>
-                      )}
                           </span>
                         )}
                         {log.severity && (

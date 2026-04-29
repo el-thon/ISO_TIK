@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react'
-import InviteParticipantDialog from "./components/InviteParticipantDialog"
 import { Link } from 'react-router-dom'
 import { TabsContent } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
@@ -23,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { useRoomParticipants, useRoomTopics, useAddRoomParticipant } from '@/services/roomHooks'
+import { useRoomParticipants, useRoomTopics } from '@/services/roomHooks'
 import { useMutation } from '@tanstack/react-query'
 import roomService from '@/services/roomService'
 import { useForumPeriod } from '@/services/forumPeriodHooks'
@@ -80,9 +79,6 @@ const TopicsSkeleton = () => (
 
 export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUserId }) {
   const [page, setPage] = useState(1)
-  const [inviteOpen, setInviteOpen] = useState(false)
-  const [inviteUserId, setInviteUserId] = useState('')
-  const [inviteRole, setInviteRole] = useState('auditee')
   const perPage = 10
   const periodId = room?.forum_period_id
 
@@ -104,14 +100,7 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
 
   const { data: periodDetail } = useForumPeriod(periodId, { enabled: Boolean(periodId) })
 
-  const inviteMutation = useAddRoomParticipant(roomId, {
-    onSuccess: () => {
-      setInviteOpen(false)
-      setInviteUserId('')
-      setInviteRole('auditee')
-      refetchParticipants()
-    },
-  })
+  // Participant invite UI is not implemented in this view yet.
 
   const canManageParticipants = useMemo(() => {
     // Room owner can manage participants; also allow period admins
@@ -131,7 +120,7 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
   const topics = topicsData?.topics ?? []
   const pagination = topicsData?.pagination ?? {}
   const participants = participantsData?.participants ?? []
-  const periodMembers = periodDetail?.members ?? []
+  // const periodMembers = periodDetail?.members ?? []
 
   const topicsErrorMessage =
     topicsErr?.response?.data?.message || topicsErr?.message || 'Gagal memuat daftar formulir.'
@@ -171,12 +160,7 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
     })
   }, [resolvedParticipants])
 
-  const inviteCandidates = useMemo(() => {
-    const existingIds = new Set(resolvedParticipants.map((participant) => String(participant?.user_id || '')))
-    return periodMembers.filter((member) => !existingIds.has(String(member?.user_id || '')))
-  }, [resolvedParticipants, periodMembers])
-
-  // Invite handled by InviteParticipantDialog component
+  // Participant invite UI is not implemented in this view yet.
 
   return (
     <>
@@ -270,34 +254,6 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
       <AttachmentsTab roomId={roomId} />
 
       <TabsContent value="participants" className="mt-4 space-y-4 w-full">
-        {isRoomOwner && (
-        <Card className="w-full">
-            <CardContent className="pt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-                <div className="text-sm font-semibold">Undang Peserta</div>
-                <div className="text-xs text-muted-foreground">
-                Pilih anggota periode untuk diundang ke forum ini.
-                </div>
-            </div>
-            <InviteParticipantDialog
-                open={inviteOpen}
-                onOpenChange={setInviteOpen}
-                candidates={inviteCandidates}
-                onInvite={(userIds, role) => {
-                // Invite multiple users (if backend supports bulk)
-                // For now, invite one by one or modify as needed
-                userIds.forEach(userId => {
-                    inviteMutation.mutate({ user_id: userId, role })
-                })
-                }}
-                isPending={inviteMutation.isPending}
-                roomName={room?.name}
-            />
-            </CardContent>
-        </Card>
-        )}
-
-
         {participantsError && (
           <div className="p-4 rounded-md bg-rose-50 border border-rose-100 text-sm text-rose-700 flex items-center justify-between gap-2">
             <span>{participantsErrorMessage}</span>

@@ -61,7 +61,7 @@ class PDFGenerator {
         if (this.setSignatureDataUrl) this.setSignatureDataUrl(null)
         return null
       }
-    } catch (error) {
+    } catch {
       if (this.setSignatureDataUrl) this.setSignatureDataUrl(null)
       return null
     }
@@ -226,7 +226,7 @@ class PDFGenerator {
       })
       
       return canvas
-    } catch (error) {
+    } catch {
       return null
     }
   }
@@ -265,7 +265,7 @@ class PDFGenerator {
         el.style.filter = 'none'
         el.style.maxWidth = 'none'
         el.style.overflow = 'visible'
-      } catch (e) {
+      } catch {
         // Abaikan error untuk elemen yang tidak bisa diakses
       }
     })
@@ -297,10 +297,8 @@ class PDFGenerator {
   /**
    * Generate PDF dari canvas dengan orientasi yang sesuai
    */
-  generatePDFFromCanvas(canvas, topicId) {
+  generatePDFFromCanvas(canvas) {
     if (!canvas) return null
-
-    const imgData = canvas.toDataURL('image/png')
     
     // Tentukan orientasi berdasarkan lebar canvas
     const orientation = canvas.width > canvas.height ? 'l' : 'p'
@@ -319,8 +317,7 @@ class PDFGenerator {
   const printableHeight = pdfHeight - margin * 2
     
     // Hitung dimensi gambar agar muat di PDF
-    const imgWidth = printableWidth
-    const imgHeight = (canvas.height * imgWidth) / canvas.width
+  const imgWidth = printableWidth
     const pxPerMm = canvas.width / imgWidth
     const pageHeightPx = printableHeight * pxPerMm
 

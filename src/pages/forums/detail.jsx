@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect } from 'react'
-import { useParams, Link, useLocation } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { FileText, Home, Paperclip, Settings, Users } from 'lucide-react'
 import MainLayout from '@/layout/MainLayout'
 import { Card, CardContent, CardTitle, CardDescription } from '@/components/ui/card'
@@ -36,40 +36,8 @@ const formatDateTime = (value) => {
   })
 }
 
-const formatVisibility = (value) => {
-  switch (value) {
-    case 'restricted':
-      return 'Terbatas'
-    case 'public':
-      return 'Publik'
-    default:
-      return value
-  }
-}
-
-const getInitials = (name) => {
-  if (!name) return '??'
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part[0]?.toUpperCase())
-    .slice(0, 2)
-    .join('')
-}
-
-const normalizeRoleKey = (role) => {
-  if (!role) return ''
-  const cleaned = String(role).toLowerCase().replace(/[^a-z]/g, '')
-  if (cleaned === 'auditoree') return 'auditor'
-  if (cleaned === 'auditee') return 'auditee'
-  if (cleaned === 'owner' || cleaned === 'groupowner') return 'group_owner'
-  return cleaned
-}
-
 export default function RoomDetail() {
   const { id: roomId } = useParams()
-  const location = useLocation()
-  const fromGroup = location.state?.fromGroup
   const { data: room, isLoading, isError, error, refetch } = useRoom(roomId)
   const cachedUser = getUserData()
   const shouldFetchMe = !cachedUser?.id && !cachedUser?.user_id && Boolean(getAccessToken())
@@ -93,7 +61,6 @@ export default function RoomDetail() {
 
   const {
     data: participantsData,
-    isLoading: participantsLoading
   } = useRoomParticipants(
     roomId, 
     { per_page: 200 }, 
@@ -102,28 +69,13 @@ export default function RoomDetail() {
     }
   )
 
-  const participantRole = useMemo(() => {
-    if (!normalizedCurrentUserId) return null
-    const participants = participantsData?.participants ?? []
-    const match = participants.find((participant) => String(participant.user_id) === normalizedCurrentUserId)
-    return match?.role || null
-  }, [normalizedCurrentUserId, participantsData])
-
   const currentParticipant = useMemo(() => {
     if (!normalizedCurrentUserId) return null
     const participants = participantsData?.participants ?? []
     return participants.find((participant) => String(participant.user_id) === normalizedCurrentUserId) || null
   }, [normalizedCurrentUserId, participantsData])
 
-  // Find the owner participant by matching room.responsible_user_id (sama seperti ParticipantsTab)
-  const ownerParticipant = useMemo(() => {
-    if (!room?.responsible_user_id) return null
-    const participants = participantsData?.participants ?? []
-    return participants.find((p) => String(p.user_id) === String(room.responsible_user_id)) || null
-  }, [room?.responsible_user_id, participantsData])
-
   const stats = room?.stats ?? { participant_count: 0, topic_count: 0 }
-  const roleKey = normalizeRoleKey(room?.user_role || room?.role || room?.participant_role || participantRole)
   const canCreateTopic = Boolean(currentParticipant && (currentParticipant.role === 'auditor' || String(currentParticipant.role).toLowerCase() === 'auditor'))
   const defaultTab = 'topics' // Default to topics tab
   const isPeriodClosed = Boolean(

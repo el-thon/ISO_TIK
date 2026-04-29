@@ -1,5 +1,4 @@
 import api, { setTokens, clearTokens, getRefreshToken, performRefresh } from './api'
-import axios from 'axios'
 
 function extractTokensFromResponse(data) {
   if (!data) return { access: null, refresh: null }

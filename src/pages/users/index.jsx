@@ -18,7 +18,6 @@ import {
   useCreateAdminUser,
   useUpdateAdminUser,
   useDeleteAdminUser,
-  useBulkStatusUpdate,
   useAssignRole,
   useActivateAdminUser,
   useDeactivateAdminUser,
@@ -32,7 +31,6 @@ const DEFAULT_EDIT = { username: '', email: '', status: 'active', full_name: '' 
 const DEFAULT_PASSWORD = { new_password: '', confirm_password: '', reason: '' }
 const DEFAULT_ROLE = { roleId: '', reason: '' }
 const DEFAULT_DELETE = { userId: null, reason: '' }
-const DEFAULT_BULK = { status: 'inactive', reason: '' }
 
 export default function UsersPage() {
   const queryClient = useQueryClient()
@@ -49,13 +47,11 @@ export default function UsersPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [roleOpen, setRoleOpen] = useState(false)
   const [passwordOpen, setPasswordOpen] = useState(false)
-  const [bulkOpen, setBulkOpen] = useState(false)
   const [createForm, setCreateForm] = useState(DEFAULT_CREATE)
   const [editForm, setEditForm] = useState(DEFAULT_EDIT)
   const [passwordForm, setPasswordForm] = useState(DEFAULT_PASSWORD)
   const [roleForm, setRoleForm] = useState(DEFAULT_ROLE)
   const [deleteForm, setDeleteForm] = useState(DEFAULT_DELETE)
-  const [bulkForm, setBulkForm] = useState(DEFAULT_BULK)
   const [editingId, setEditingId] = useState(null)
   const [roleUserId, setRoleUserId] = useState(null)
   const [passwordUserId, setPasswordUserId] = useState(null)
@@ -79,7 +75,18 @@ export default function UsersPage() {
       refetchRoles()
     }
   }, [roleOpen, refetchRoles])
-  const { data: editingUserData } = useAdminUser(editingId, { enabled: !!editingId && editOpen })
+  useAdminUser(editingId, {
+    enabled: !!editingId && editOpen,
+    onSuccess: (data) => {
+      // Query is an "external system"; syncing it into local UI state is appropriate here.
+      setEditForm({
+        username: data?.username || '',
+        email: data?.email || '',
+        status: data?.status || 'active',
+        full_name: data?.profile?.full_name || '',
+      })
+    },
+  })
 
   const createMutation = useCreateAdminUser({
     onSuccess: () => {
@@ -100,14 +107,6 @@ export default function UsersPage() {
     onSuccess: () => {
       setDeleteOpen(false)
       setDeleteForm(DEFAULT_DELETE)
-    },
-  })
-
-  const bulkMutation = useBulkStatusUpdate({
-    onSuccess: () => {
-      setBulkOpen(false)
-      setBulkForm(DEFAULT_BULK)
-      setSelectedIds(new Set())
     },
   })
 
@@ -139,17 +138,6 @@ export default function UsersPage() {
     })
   }
 
-  useEffect(() => {
-    if (editingUserData) {
-      setEditForm({
-        username: editingUserData.username || '',
-        email: editingUserData.email || '',
-        status: editingUserData.status || 'active',
-        full_name: editingUserData?.profile?.full_name || '',
-      })
-    }
-  }, [editingUserData])
-
   const users = listData?.users ?? []
   const pagination = listData?.pagination ?? { currentPage: page, lastPage: page, total: users.length }
 
@@ -159,9 +147,10 @@ export default function UsersPage() {
     return users.filter((u) => u.username?.toLowerCase().includes(value) || u.status?.toLowerCase().includes(value))
   }, [users, query])
 
-  useEffect(() => {
+  const changePage = (nextPage) => {
+    setPage(nextPage)
     setSelectedIds(new Set())
-  }, [page])
+  }
 
   const allSelected = filtered.length > 0 && filtered.every((u) => selectedIds.has(u.id))
 
@@ -226,21 +215,7 @@ export default function UsersPage() {
     deleteMutation.mutate({ userId: deleteForm.userId, reason: deleteForm.reason || 'Administrative cleanup' })
   }
 
-  function handleBulkSubmit(e) {
-    e.preventDefault()
-    if (isProductOwner) return
-    if (!selectedIds.size) return
-    const ids = new Set(selectedIds)
-    patchAdminUserLists((old) => ({
-      ...old,
-      users: (old.users || []).map((u) => (ids.has(u.id) ? { ...u, status: bulkForm.status } : u)),
-    }))
-    bulkMutation.mutate({
-      user_ids: Array.from(selectedIds),
-      status: bulkForm.status,
-      reason: bulkForm.reason || null,
-    })
-  }
+  // Bulk submit UI is currently disabled/hidden; keep the mutation available for future UI.
 
   function handleAssignRole(e) {
     e.preventDefault()
@@ -282,6 +257,23 @@ export default function UsersPage() {
     { label: 'Aktif', value: stats?.active_users ?? 0, icon: ShieldCheck, tone: 'bg-emerald-50 text-emerald-900' },
     { label: 'Nonaktif', value: stats?.inactive_users ?? 0, icon: RefreshCcw, tone: 'bg-amber-50 text-amber-900' },
   ]
+
+  const openEditDialog = (userId) => {
+    if (isProductOwner) return
+    setEditingId(userId)
+    // Initialize the form immediately from whatever data we already have (list cache),
+    // then the more detailed `useAdminUser()` data will refine it when loaded.
+    const fromList = users.find((u) => u.id === userId)
+    setEditForm({
+      username: fromList?.username || '',
+      email: fromList?.email || '',
+      status: fromList?.status || 'active',
+      full_name: fromList?.profile?.full_name || '',
+    })
+    setEditOpen(true)
+  }
+
+  // Note: edit form is synced via the query `onSuccess` above to satisfy hooks lint rules.
 
   return (
     <MainLayout>
@@ -334,11 +326,10 @@ export default function UsersPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {statsCards.map(({ label, value, icon: Icon, tone }) => (
+            {statsCards.map(({ label, value, tone }) => (
               <Card key={label} className={tone}>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">{label}</CardTitle>
-                  <Icon className="w-5 h-5" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-semibold">{value}</div>
@@ -361,9 +352,9 @@ export default function UsersPage() {
                 {isFetching ? 'Memuat data...' : `${pagination.total ?? users.length} pengguna`} · {selectedIds.size} dipilih
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Sebelumnya</Button>
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => changePage(Math.max(1, page - 1))}>Sebelumnya</Button>
                 <div>Halaman {pagination.currentPage} / {pagination.lastPage}</div>
-                <Button variant="outline" size="sm" disabled={pagination.currentPage >= pagination.lastPage} onClick={() => setPage((p) => p + 1)}>Berikutnya</Button>
+                <Button variant="outline" size="sm" disabled={pagination.currentPage >= pagination.lastPage} onClick={() => changePage(page + 1)}>Berikutnya</Button>
               </div>
             </div>
 
@@ -419,7 +410,7 @@ export default function UsersPage() {
                           <Link to={`/pengguna/${user.id}`} className="text-blue-600 text-sm">Detail</Link>
                           {!isProductOwner && (
                             <>
-                              <Button variant="outline" size="sm" onClick={() => { setEditingId(user.id); setEditOpen(true) }}>
+                              <Button variant="outline" size="sm" onClick={() => openEditDialog(user.id)}>
                                 <Edit2 className="w-4 h-4 mr-1" /> Edit
                               </Button>
                               <Button variant="outline" size="sm" onClick={() => handleStatusToggle(user)} disabled={activateMutation.isLoading || deactivateMutation.isLoading}>
@@ -485,7 +476,7 @@ export default function UsersPage() {
                     <Link to={`/pengguna/${user.id}`} className="text-blue-600 text-sm">Detail</Link>
                     {!isProductOwner && (
                       <>
-                        <Button variant="outline" size="sm" onClick={() => { setEditingId(user.id); setEditOpen(true) }}>
+                        <Button variant="outline" size="sm" onClick={() => openEditDialog(user.id)}>
                           <Edit2 className="w-4 h-4 mr-1" /> Edit
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => handleStatusToggle(user)} disabled={activateMutation.isLoading || deactivateMutation.isLoading}>

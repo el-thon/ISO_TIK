@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react'
+import React, { useMemo, useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -50,13 +50,8 @@ const SignatureSection = ({
     fileInputRef.current?.click()
   }
   
-  // Reset preview error when URL changes
-  useEffect(() => {
-    setPreviewError(false)
-  }, [signatureUrl])
-  
   return (
-    <Card>
+    <Card key={signatureUrl || 'no-signature'}>
       <CardContent>
         <div className="flex items-start justify-between mb-4">
           <div>

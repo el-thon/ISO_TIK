@@ -40,7 +40,7 @@ export const extractFindingFromInputItem = (inputItem) => {
   if (typeof inputItem?.value === 'string' && inputItem.value.trim()) {
     try {
       parsedValue = JSON.parse(inputItem.value)
-    } catch (error) {
+    } catch {
       parsedValue = null
     }
   } else if (typeof inputItem?.value === 'object' && inputItem.value !== null) {

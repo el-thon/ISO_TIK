@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAccessToken } from './api'
 import * as topicService from './topicService'
-import api from './api' // TAMBAHKAN IMPORT INI!
 
 const hasToken = () => Boolean(getAccessToken())
 const computeEnabled = (flag = true, guard = true) => Boolean((flag ?? true) && guard && hasToken())
@@ -406,7 +405,7 @@ export function useDeleteInputItem(options = {}) {
   const { onSuccess, ...rest } = options
   
   return useMutation({
-    mutationFn: ({ inputItemId, topicId }) => {
+    mutationFn: ({ inputItemId }) => {
       if (!inputItemId) throw new Error('inputItemId is required')
       
       // Gunakan service yang sudah ada atau buat fungsi baru di topicService

@@ -127,7 +127,7 @@ export async function listRooms(groupId) {
   return {
     group: payload.group ?? null,
     rooms: ensureArray(payload.rooms ?? []),
-    total: payload.total ?? (payload.rooms?.length ?? 0) ?? 0,
+    total: payload.total ?? (payload.rooms?.length ?? 0),
   }
 }
 

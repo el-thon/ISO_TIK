@@ -1,5 +1,5 @@
 // routes/ProtectedRoute.jsx
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useMe } from '@/services/authHooks'
 import { getAccessToken } from '@/services/api'
@@ -34,47 +34,34 @@ const isUserProductOwner = (userData) => {
 
 export default function ProtectedRoute({ children, requireAdmin = false }) {
   const location = useLocation()
-  const [isChecking, setIsChecking] = useState(true)
-  const [isAuthorized, setIsAuthorized] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isProductOwner, setIsProductOwner] = useState(false)
   const hasShownExpiredToast = useRef(false)
-  
-  // Cek token dari berbagai sumber
-  const checkAuth = () => {
-    // 1. Coba dari getAccessToken()
+
+  // Derive auth state synchronously from localStorage.
+  // This avoids calling setState inside an effect (react-hooks/set-state-in-effect).
+  const authState = useMemo(() => {
     let token = getAccessToken()
-    
-    // 2. Jika tidak ada, coba langsung dari localStorage
+
     if (!token) {
       token = localStorage.getItem('iso_tik_access_token')
-      console.log('[ProtectedRoute] Token from direct localStorage:', !!token)
     }
-    
-    // 3. Cek user data di localStorage
-    const user = getUserData()
-    
-    // Jika punya token DAN user data, anggap authorized
-    if (token && user) {
-      setIsAuthorized(true)
-      setIsAdmin(isUserAdmin(user))
-      setIsProductOwner(isUserProductOwner(user))
-    } else {
-      setIsAuthorized(false)
-      setIsAdmin(false)
-      setIsProductOwner(false)
+
+    const storedUser = getUserData()
+    const isAuthorized = Boolean(token && storedUser)
+    const isAdmin = isAuthorized ? isUserAdmin(storedUser) : false
+    const isProductOwner = isAuthorized ? isUserProductOwner(storedUser) : false
+
+    return {
+      token,
+      storedUser,
+      isAuthorized,
+      isAdmin,
+      isProductOwner,
     }
-    
-    setIsChecking(false)
-  }
-  
-  useEffect(() => {
-    checkAuth()
   }, [location.pathname])
   
   // Gunakan useMe untuk validasi server-side (opsional)
-  const { data: user, isLoading, isError } = useMe({ 
-    enabled: isAuthorized, // Hanya jalankan jika sudah authorized dari localStorage
+  const { isLoading, isError } = useMe({
+    enabled: authState.isAuthorized, // Hanya jalankan jika sudah authorized dari localStorage
     retry: 1,
     staleTime: 1000 * 60 * 5, // 5 menit
     gcTime: 1000 * 60 * 10, // 10 menit
@@ -96,25 +83,13 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
     }
   }, [isError])
   
-  // Kasus 1: Masih checking awal (dari localStorage)
-  if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mx-auto mb-4"></div>
-          <p className="text-sm text-muted-foreground">Memeriksa otorisasi...</p>
-        </div>
-      </div>
-    )
-  }
-  
   // Kasus 2: Tidak authorized berdasarkan localStorage
-  if (!isAuthorized) {
+  if (!authState.isAuthorized) {
     // Redirect ke halaman root, bukan langsung ke login
     return <Navigate to="/" replace state={{ from: location }} />
   }
 
-  if (requireAdmin && !(isAdmin || isProductOwner)) {
+  if (requireAdmin && !(authState.isAdmin || authState.isProductOwner)) {
     return <Navigate to="/beranda" replace state={{ from: location }} />
   }
   
@@ -146,7 +121,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
         let cachedUser = null
         try {
           cachedUser = JSON.parse(userData)
-        } catch (e) {
+        } catch {
           cachedUser = null
         }
         if (!isUserAdmin(cachedUser) && !isUserProductOwner(cachedUser)) {

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as authService from './authService'
-import { clearTokens, setTokens, getAccessToken, getRefreshToken, getAccessExpiresAt } from './api'
+import { clearTokens, setTokens, getAccessToken, getRefreshToken } from './api'
 
 /**
  * useLogin - Hook untuk login
@@ -165,49 +165,42 @@ export function useMe(options = {}) {
   return useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      
-      // Jika tidak ada di cache, fetch dari server
-      try {
-        const response = await authService.me()
-        
-        // Ekstrak user data dari berbagai format response
-        let userData = null
-        
-        // Format 1: { data: { user: { ... } } } - dari endpoint /me
-        if (response?.data?.user) {
-          userData = response.data.user
-        }
-        // Format 2: { user: { ... } } - dari response login
-        else if (response?.user) {
-          userData = response.user
-        }
-        // Format 3: Langsung user object (punya id)
-        else if (response?.id) {
-          userData = response
-        }
-        // Format 4: { data: { id, username, ... } }
-        else if (response?.data?.id) {
-          userData = response.data
-        }
-        
-        if (userData) {
-          const rolesFromResponse = response?.data?.roles || response?.roles
-          if (Array.isArray(rolesFromResponse) && rolesFromResponse.length) {
-            userData = { ...userData, roles: rolesFromResponse }
-          }
-        }
+      const response = await authService.me()
 
-        // Simpan ke localStorage untuk cache
-        if (userData?.id || userData?.user_id) {
-          localStorage.setItem('user_data', JSON.stringify(userData))
-        }
-        
-        // RETURN LANGSUNG USER DATA, BUKAN OBJECT BERSARANG
-        return userData
-        
-      } catch (error) {
-        throw error
+      // Ekstrak user data dari berbagai format response
+      let userData = null
+
+      // Format 1: { data: { user: { ... } } } - dari endpoint /me
+      if (response?.data?.user) {
+        userData = response.data.user
       }
+      // Format 2: { user: { ... } } - dari response login
+      else if (response?.user) {
+        userData = response.user
+      }
+      // Format 3: Langsung user object (punya id)
+      else if (response?.id) {
+        userData = response
+      }
+      // Format 4: { data: { id, username, ... } }
+      else if (response?.data?.id) {
+        userData = response.data
+      }
+
+      if (userData) {
+        const rolesFromResponse = response?.data?.roles || response?.roles
+        if (Array.isArray(rolesFromResponse) && rolesFromResponse.length) {
+          userData = { ...userData, roles: rolesFromResponse }
+        }
+      }
+
+      // Simpan ke localStorage untuk cache
+      if (userData?.id || userData?.user_id) {
+        localStorage.setItem('user_data', JSON.stringify(userData))
+      }
+
+      // RETURN LANGSUNG USER DATA, BUKAN OBJECT BERSARANG
+      return userData
     },
     enabled,
     retry: 1,
@@ -224,85 +217,54 @@ export function useMe(options = {}) {
  */
 export function useBootstrapSession(options = {}) {
   const { enabled = true, onSuccess, onError, onSettled } = options
-  const [state, setState] = useState(() => ({
-    status: getAccessToken() ? 'ready' : 'idle',
-    error: null,
-  }))
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    if (!enabled) return
+  const shouldAttemptRefresh = useMemo(() => {
+    if (!enabled) return false
 
     const accessToken = getAccessToken()
-    const accessExpiresAt = getAccessExpiresAt()
+    const refreshToken = getRefreshToken()
+    if (!refreshToken) return false
 
-    const parseExpiry = (value) => {
-      if (!value) return null
-      const parsed = Date.parse(value)
-      return Number.isNaN(parsed) ? null : parsed
-    }
+    // Avoid Date.now() (impure) during render. We'll only bootstrap-refresh when there's
+    // no access token at all; expiry-based refresh is handled by api interceptor.
+    return !accessToken
+  }, [enabled])
 
-    const isExpiringSoon = (expiresAt, skewMs = 60000) => {
-      const parsed = parseExpiry(expiresAt)
-      if (!parsed) return false
-      return parsed <= Date.now() + skewMs
-    }
+  const refreshQuery = useQuery({
+    queryKey: ['bootstrap-session'],
+    enabled: shouldAttemptRefresh,
+    retry: 0,
+    queryFn: async () => {
+      const data = await authService.refresh()
+      if (data?.user) {
+        queryClient.setQueryData(['me'], data.user)
+        localStorage.setItem('user_data', JSON.stringify(data.user))
+      }
+      if (onSuccess) onSuccess(data)
+      return data
+    },
+  })
 
-    // Jika sudah punya access token dan belum kedaluwarsa, langsung ready
-    if (accessToken && !isExpiringSoon(accessExpiresAt)) {
-      setState({ status: 'ready', error: null })
-      return
-    }
+  const isRefreshing = refreshQuery.isFetching
+  const isError = refreshQuery.isError
+  const error = refreshQuery.error
 
-    // Jika tidak punya refresh token, langsung ready (akan redirect ke login)
-  const refreshToken = getRefreshToken()
-    if (!refreshToken) {
-      setState({ status: 'ready', error: null })
-      return
-    }
-
-    // Proses refresh token
-    let cancelled = false
-    setState({ status: 'refreshing', error: null })
-
-    authService
-      .refresh()
-      .then((data) => {
-        if (cancelled) return
-        
-        // Update user data di cache jika ada
-        if (data?.user) {
-          // Gunakan QueryClient yang sudah ada
-          const queryClient = new QueryClient()
-          queryClient.setQueryData(['me'], data.user)
-          localStorage.setItem('user_data', JSON.stringify(data.user))
-        }
-        
-        setState({ status: 'ready', error: null })
-        if (onSuccess) onSuccess(data)
-      })
-      .catch((error) => {
-        if (cancelled) return
-        clearTokens()
-        localStorage.removeItem('user_data')
-        setState({ status: 'error', error })
-        if (onError) onError(error)
-      })
-      .finally(() => {
-        if (cancelled) return
-        if (onSettled) onSettled()
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, onError, onSettled, onSuccess])
+  if (isError) {
+    clearTokens()
+    localStorage.removeItem('user_data')
+    if (onError) onError(error)
+  }
+  if (refreshQuery.isFetched && onSettled) {
+    onSettled()
+  }
 
   return {
-    status: state.status,
-    error: state.error,
-    isRefreshing: state.status === 'refreshing' || state.status === 'idle',
-    isReady: state.status === 'ready',
-    isError: state.status === 'error',
+    status: isRefreshing ? 'refreshing' : 'ready',
+    error,
+    isRefreshing,
+    isReady: !isRefreshing,
+    isError,
   }
 }
 

@@ -101,7 +101,9 @@ export const extractFromObject = (obj, fields) => {
 }
 
 export const getStorageBaseUrl = () => {
-  return process.env.REACT_APP_STORAGE_URL || ''
+  // Vite uses `import.meta.env` (not `process.env`).
+  // Support both just in case this file is used in non-vite contexts.
+  return (import.meta?.env?.VITE_STORAGE_URL ?? import.meta?.env?.VITE_PUBLIC_STORAGE_URL ?? '') || ''
 }
 
 export const normalizeUrl = (url) => {
@@ -229,7 +231,7 @@ export const getFileName = (metadata, value, item) => {
       const pathname = urlObj.pathname || ''
       const lastSegment = pathname.split('/').filter(Boolean).pop()
       if (lastSegment) return decodeURIComponent(lastSegment)
-    } catch (e) {
+    } catch {
       const parts = url.split('?')[0].split('/')
       const lastSegment = parts.filter(Boolean).pop()
       if (lastSegment) return decodeURIComponent(lastSegment)

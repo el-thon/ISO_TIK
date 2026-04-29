@@ -182,7 +182,7 @@ api.interceptors.request.use(async (config) => {
         config.headers.Timezone = tz
       }
     }
-  } catch (e) {
+  } catch {
     // ignore timezone errors
   }
   if (token && refreshToken && isExpiringSoon(accessExpiresAt)) {

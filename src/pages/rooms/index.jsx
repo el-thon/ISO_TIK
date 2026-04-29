@@ -90,7 +90,6 @@ export default function RoomsPage() {
   // Join Requests - langsung digunakan di InvitationTab tanpa dialog terpisah
   const {
     data: periodJoinRequestsData,
-    isLoading: periodJoinRequestsLoading,
   } = usePeriodJoinRequests(
     periodDetailId,
     { status: 'all' },

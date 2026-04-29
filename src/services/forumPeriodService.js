@@ -7,7 +7,6 @@ const unwrap = (response) => response?.data?.data ?? response?.data ?? null
 
 const PERIOD_ROUTE = '/period'
 
-const isNotFoundError = (error) => Number(error?.response?.status) === 404
 const isForbiddenError = (error) => Number(error?.response?.status) === 403
 
 const normalizeId = (value) => String(value ?? '').trim()

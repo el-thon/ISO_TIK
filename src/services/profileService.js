@@ -6,34 +6,6 @@ function unwrap(response) {
   return body
 }
 
-function unwrapArray(body, key) {
-  if (!body) return []
-  const data = body.data ?? body
-  const value = key ? data?.[key] : data
-  if (Array.isArray(value)) return value
-  if (Array.isArray(data)) return data
-  return []
-}
-
-function unwrapPaginator(body) {
-  const data = body?.data ?? body ?? {}
-  const items = Array.isArray(data.data) ? data.data : Array.isArray(data.items) ? data.items : []
-  return {
-    items,
-    pagination: {
-      currentPage: data.current_page ?? data.currentPage ?? 1,
-      perPage: data.per_page ?? data.perPage ?? items.length ?? 0,
-      total: data.total ?? items.length ?? 0,
-      lastPage: data.last_page ?? data.lastPage ?? 1,
-    },
-    meta: {
-      path: data.path,
-      prevPageUrl: data.prev_page_url ?? data.prevPageUrl,
-      nextPageUrl: data.next_page_url ?? data.nextPageUrl,
-    },
-  }
-}
-
 function stripSignaturePaths(signature) {
   if (!signature || typeof signature !== 'object') return signature
   const cleaned = { ...signature }
@@ -120,7 +92,7 @@ export async function getSessions(params = {}) {
     const res = await api.get('/profile/sessions', { params })
     const payload = unwrap(res) ?? {}
     return toPaginator(payload)
-  } catch (err) {
+  } catch {
     const res = await api.get('/profile/security/sessions', { params })
     const payload = unwrap(res) ?? {}
     return toPaginator(payload)
@@ -132,7 +104,7 @@ export async function getLoginHistory(params = {}) {
     const res = await api.get('/profile/login-history', { params })
     const payload = unwrap(res) ?? {}
     return toPaginator(payload)
-  } catch (err) {
+  } catch {
     const res = await api.get('/profile/security/login-history', { params })
     const payload = unwrap(res) ?? {}
     return toPaginator(payload)
@@ -144,7 +116,7 @@ export async function revokeSession(sessionId, payload = {}) {
   try {
     const res = await api.delete(`/profile/sessions/${sessionId}`, { data: payload })
     return res?.data ?? {}
-  } catch (err) {
+  } catch {
     const res = await api.delete(`/profile/security/sessions/${sessionId}`, { data: payload })
     return res?.data ?? {}
   }
@@ -154,7 +126,7 @@ export async function revokeAllSessions(payload) {
   try {
     const res = await api.delete('/profile/sessions/all', { data: payload })
     return res?.data ?? {}
-  } catch (err) {
+  } catch {
     const res = await api.delete('/profile/security/sessions', { data: payload })
     return res?.data ?? {}
   }

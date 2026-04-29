@@ -9,7 +9,6 @@ const FindingTable = ({ findings, auditInfo }) => {
   const [loadingNames, setLoadingNames] = useState({})
   const [documentsLoaded, setDocumentsLoaded] = useState(false)
   const knownDocumentIdsRef = useRef(new Set())
-  const missingDocumentIdsRef = useRef(new Set())
   const { data: clauseData } = useAdminClauses({ per_page: 100, is_active: true })
 
   const clauseMap = useMemo(() => {

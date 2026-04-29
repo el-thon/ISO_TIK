@@ -106,15 +106,6 @@ function Login() {
   }, [remember, REMEMBER_KEY, REMEMBER_USERNAME_KEY])
 
   useEffect(() => {
-    const remaining = loginError?.response?.data?.otp_attempts_remaining
-    const maxAttempts = loginError?.response?.data?.otp_max_attempts
-    if (remaining !== undefined) {
-      setOtpAttemptsRemaining(remaining)
-    }
-    if (maxAttempts !== undefined) {
-      setOtpMaxAttempts(maxAttempts)
-    }
-
     if (loginError) {
       const rawMessage = loginError?.response?.data?.message || loginError?.message || 'Gagal masuk. Periksa kembali username dan password Anda.'
       const lowerRawMessage = String(rawMessage).toLowerCase()

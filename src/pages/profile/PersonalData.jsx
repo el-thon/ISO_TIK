@@ -4,6 +4,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useUpdateProfile } from '@/services/profileHooks'
+import { Field } from './components/common/Field'
+import { StatusMessage } from './components/common/StatusMessage'
 
 const toDefaultValues = (profileData) => {
   const profile = profileData?.profile ?? {}
@@ -98,7 +100,7 @@ export default function PersonalData({ profileData }) {
     }
     try {
       await updateProfile.mutateAsync(payload)
-    } catch (error) {
+    } catch {
       // handled via onError callback
     }
   }

@@ -818,10 +818,9 @@ export default function CreateTopic() {
   const [documentsError, setDocumentsError] = useState(null)
 
   // Master document auto-fill state (use dedicated query hook)
-  const { data: activeMaster, isLoading: activeMasterLoading, refetch: refetchActiveMaster } = useActiveDocumentMaster({ enabled: true })
+  const { data: activeMaster, isLoading: activeMasterLoading } = useActiveDocumentMaster({ enabled: true })
 
-  const { data: me } = useMe({ enabled: true })
-  const isAdminUser = !!(me && ((me.roles && me.roles.includes && me.roles.includes('admin')) || me.is_admin))
+  useMe({ enabled: true })
 
   // Sync active master into form fields when it becomes available, but don't overwrite user edits
   useEffect(() => {
@@ -843,10 +842,6 @@ export default function CreateTopic() {
   // Load rooms
   const {
     data: roomsData,
-    isLoading: roomsLoading,
-    isError: roomsError,
-    error: roomsErrorObj,
-    refetch: refetchRooms,
   } = useRooms({ per_page: 100 })
   
   const rooms = roomsData?.rooms ?? []
@@ -1172,7 +1167,7 @@ export default function CreateTopic() {
     }
   }
 
-  const roomsErrorMessage = roomsErrorObj?.response?.data?.message || roomsErrorObj?.message || ''
+  // roomsErrorObj is still used in UI below for helper text.
 
   return (
     <MainLayout>

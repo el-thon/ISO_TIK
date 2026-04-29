@@ -16,7 +16,6 @@ import {
   useAdminUserStatistics,
   useAdminUsersList,
   useAssignRole,
-  useBulkStatusUpdate,
   useCreateAdminUser,
   useDeactivateAdminUser,
   useDeleteAdminUser,
@@ -126,14 +125,12 @@ export default function UsersManagementTab() {
     })
   }
 
-  useEffect(() => {
-    if (editingUserData) {
-      setEditForm({
-        username: editingUserData.username || '',
-        email: editingUserData.email || '',
-        status: editingUserData.status || 'active',
-        full_name: editingUserData?.profile?.full_name || '',
-      })
+  const derivedEditForm = useMemo(() => {
+    return {
+      username: editingUserData?.username || '',
+      email: editingUserData?.email || '',
+      status: editingUserData?.status || 'active',
+      full_name: editingUserData?.profile?.full_name || '',
     }
   }, [editingUserData])
 
@@ -146,11 +143,11 @@ export default function UsersManagementTab() {
     return users.filter((u) => u.username?.toLowerCase().includes(value) || u.status?.toLowerCase().includes(value))
   }, [users, query])
 
-  useEffect(() => {
-    setSelectedIds(new Set())
-  }, [page])
+  const selectedIdsForPage = useMemo(() => {
+    return selectedIds
+  }, [selectedIds, page])
 
-  const allSelected = filtered.length > 0 && filtered.every((u) => selectedIds.has(u.id))
+  const allSelected = filtered.length > 0 && filtered.every((u) => selectedIdsForPage.has(u.id))
 
   const toggleSelect = (userId) => {
     if (isProductOwner) return
@@ -166,6 +163,11 @@ export default function UsersManagementTab() {
     if (isProductOwner) return
     if (checked) setSelectedIds(new Set(filtered.map((u) => u.id)))
     else setSelectedIds(new Set())
+  }
+
+  const handlePageChange = (nextPage) => {
+    setPage(nextPage)
+    setSelectedIds(new Set())
   }
 
   const handleCreateSubmit = (e) => {
@@ -186,10 +188,10 @@ export default function UsersManagementTab() {
     updateMutation.mutate({
       userId: editingId,
       payload: {
-        username: editForm.username,
-        email: editForm.email,
-        status: editForm.status,
-        profile: { full_name: editForm.full_name },
+        username: derivedEditForm.username,
+        email: derivedEditForm.email,
+        status: derivedEditForm.status,
+        profile: { full_name: derivedEditForm.full_name },
       },
     })
   }
@@ -286,11 +288,10 @@ export default function UsersManagementTab() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {statsCards.map(({ label, value, icon: Icon, tone }) => (
+          {statsCards.map(({ label, value, tone }) => (
             <Card key={label} className={tone}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">{label}</CardTitle>
-                <Icon className="w-5 h-5" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-semibold">{value}</div>
@@ -311,9 +312,9 @@ export default function UsersManagementTab() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-0 py-4 text-sm text-muted-foreground">
             <div>{isFetching ? 'Memuat data...' : `${pagination.total ?? users.length} pengguna`} · {selectedIds.size} dipilih</div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Sebelumnya</Button>
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => handlePageChange(Math.max(1, page - 1))}>Sebelumnya</Button>
               <div>Halaman {pagination.currentPage} / {pagination.lastPage}</div>
-              <Button variant="outline" size="sm" disabled={pagination.currentPage >= pagination.lastPage} onClick={() => setPage((p) => p + 1)}>Berikutnya</Button>
+              <Button variant="outline" size="sm" disabled={pagination.currentPage >= pagination.lastPage} onClick={() => handlePageChange(page + 1)}>Berikutnya</Button>
             </div>
           </div>
 

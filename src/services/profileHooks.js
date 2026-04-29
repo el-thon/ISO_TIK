@@ -290,7 +290,13 @@ export function useProfilePhoto(profileData, refetch) {
   const [photoMessage, setPhotoMessage] = useState(null)
   const [avatarError, setAvatarError] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState(null)
-  const [photoOverride, setPhotoOverride] = useState(null)
+  const [photoOverride, setPhotoOverride] = useState(() => {
+    try {
+      return localStorage.getItem(PHOTO_OVERRIDE_KEY)
+    } catch {
+      return null
+    }
+  })
   const [photoVersion, setPhotoVersion] = useState(() => {
     try {
       return localStorage.getItem(PHOTO_VERSION_KEY) || Date.now().toString()
@@ -387,21 +393,6 @@ export function useProfilePhoto(profileData, refetch) {
     await refetch()
     setTimeout(() => setPhotoMessage(null), 2000)
   }
-
-  // Load saved override on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(PHOTO_OVERRIDE_KEY)
-      const storedVersion = localStorage.getItem(PHOTO_VERSION_KEY)
-      if (stored) setPhotoOverride(stored)
-      if (storedVersion) setPhotoVersion(storedVersion)
-    } catch { /* ignore */ }
-  }, [])
-
-  // Reset error when source changes
-  useEffect(() => {
-    if (avatarSrc) setAvatarError(false)
-  }, [avatarSrc])
 
   // Cleanup preview URL on unmount
   useEffect(() => {
