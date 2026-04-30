@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-
 export const DEADLINE_ERROR_MESSAGE_ID = 'Deadline periode sudah lewat'
 export const DEADLINE_ERROR_MESSAGE_EN = 'Period deadline has passed'
 

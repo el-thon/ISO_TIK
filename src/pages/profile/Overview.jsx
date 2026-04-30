@@ -4,8 +4,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useUpdateProfile } from '@/services/profileHooks'
-import { InfoPair } from './components/common/InfoPair'
 import { StatusMessage } from './components/common/StatusMessage'
+import { InfoPair } from './components/common/InfoPair'
 
 const toDefaultValues = (profileData) => {
   const profile = profileData?.profile ?? {}

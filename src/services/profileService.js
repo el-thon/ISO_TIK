@@ -6,24 +6,6 @@ function unwrap(response) {
   return body
 }
 
-function stripSignaturePaths(signature) {
-  if (!signature || typeof signature !== 'object') return signature
-  const cleaned = { ...signature }
-  delete cleaned.signature_url
-  delete cleaned.url
-  delete cleaned.path
-  delete cleaned.download_url
-  return cleaned
-}
-
-function sanitizeSignaturePayload(payload) {
-  if (!payload || typeof payload !== 'object') return payload
-  if (payload.signature && typeof payload.signature === 'object') {
-    return { ...payload, signature: stripSignaturePaths(payload.signature) }
-  }
-  return stripSignaturePaths(payload)
-}
-
 function toPaginator(payload = {}) {
   const items = Array.isArray(payload.data) ? payload.data : []
   return {
@@ -141,7 +123,11 @@ export async function getSignature() {
     })
 
     if (res.status === 404) return {}
-    return sanitizeSignaturePayload(unwrap(res) ?? {})
+    // Return the raw unwrapped signature payload so the frontend can access
+    // signature_url / url / download_url / stored_path and build a stable preview URL.
+    // Previously we sanitized (removed URL fields) which caused previews to disappear
+    // after a full page reload because the client couldn't derive the image URL.
+    return unwrap(res) ?? {}
   } catch (err) {
     if (err?.response?.status === 404) return {}
     throw err
@@ -172,7 +158,8 @@ export async function uploadSignature(fileOrFormData) {
   const res = await api.post('/profile/signature', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
-  return sanitizeSignaturePayload(unwrap(res) ?? {})
+  // Return raw unwrapped response so frontend receives signature_url or stored_path.
+  return unwrap(res) ?? {}
 }
 
 export async function deleteSignature() {

@@ -1,8 +1,6 @@
-// ============ CONSTANTS ============
 export const PHOTO_OVERRIDE_KEY = 'iso_tik_profile_photo_override'
 export const PHOTO_VERSION_KEY = 'iso_tik_photo_version'
 
-// ============ STORAGE BASE URL ============
 const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
 const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?.*$/, '') : ''
 const proxyTarget = (import.meta.env.VITE_PROXY_TARGET || '').trim()
@@ -11,7 +9,6 @@ const runtimeFallback = typeof window !== 'undefined' ? window.location.origin :
 
 const STORAGE_BASE = (explicitStorageBase || apiOrigin || proxyTarget || (import.meta.env.DEV ? 'http://localhost:8000' : runtimeFallback)).replace(/\/$/, '')
 
-// ============ PHOTO URL RESOLVER ============
 export const resolvePhotoUrl = (path, bypassCache = false) => {
   if (!path) return null
   

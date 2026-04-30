@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react'
+import React, { useMemo, useState, useRef, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -172,6 +172,10 @@ export default function Security() {
   
   // Signature state
   const [signatureStatus, setSignatureStatus] = useState(null)
+  // Local signature URL state - derived directly from backend payload to
+  // ensure the UI uses the canonical file path (no client cache) after a
+  // full page refresh. This avoids reliance on ephemeral object URLs.
+  const [localSignatureUrl, setLocalSignatureUrl] = useState(null)
   
   // Forms
   const changePasswordForm = useForm({
@@ -196,10 +200,16 @@ export default function Security() {
 
   // ========== SIGNATURE HANDLING (Menggunakan utilities dari profileHooks) ==========
   const signatureData = signatureQuery.data || {}
-  
-  // Gunakan utility dari profileHooks
-  const signatureUrl = useMemo(() => getSignatureUrl(signatureData), [signatureData])
+
+  // Derive signature URL and presence from backend data. We also mirror the
+  // computed URL into a local state so that a full page reload will immediately
+  // display the backend-provided path (no cache/override required).
+  const computedSignatureUrl = useMemo(() => getSignatureUrl(signatureData), [signatureData])
   const hasSig = useMemo(() => hasSignature(signatureData), [signatureData])
+
+  useEffect(() => {
+    setLocalSignatureUrl(computedSignatureUrl)
+  }, [computedSignatureUrl])
 
   // Upload handler
   const handleUploadSignature = async (file) => {
@@ -225,7 +235,7 @@ export default function Security() {
     }
 
     try {
-      await uploadSignature.mutateAsync(file)
+      const res = await uploadSignature.mutateAsync(file)
       setSignatureStatus({ 
         type: 'success', 
         text: 'Tanda tangan berhasil diunggah' 
@@ -233,6 +243,11 @@ export default function Security() {
       
       // Refetch untuk mendapatkan data terbaru
       await signatureQuery.refetch()
+      // If backend returned a canonical URL, prefer that immediately
+  const returnedSig = res?.signature || res?.data?.signature || res
+  // Ensure getSignatureUrl can extract the signature object by wrapping it
+  const immediateUrl = returnedSig ? getSignatureUrl({ signature: returnedSig }) : null
+      if (immediateUrl) setLocalSignatureUrl(immediateUrl)
       
     } catch (error) {
       const message = error?.response?.data?.message || 'Gagal mengunggah tanda tangan'
@@ -300,6 +315,8 @@ export default function Security() {
       })
       
       await signatureQuery.refetch()
+      // Clear local URL so UI updates immediately
+      setLocalSignatureUrl(null)
     } catch (error) {
       const message = error?.response?.data?.message || 'Gagal menghapus tanda tangan'
       setSignatureStatus({ type: 'error', text: message })
@@ -428,7 +445,7 @@ export default function Security() {
 
       {/* Signature Section WITH PREVIEW */}
       <SignatureSection
-        signatureUrl={signatureUrl}
+        signatureUrl={localSignatureUrl}
         hasSig={hasSig}
         onUpload={handleUploadSignature}
         onDownload={handleDownloadSignature}

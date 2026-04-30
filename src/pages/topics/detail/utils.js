@@ -101,8 +101,7 @@ export const extractFromObject = (obj, fields) => {
 }
 
 export const getStorageBaseUrl = () => {
-  // Vite uses `import.meta.env` (not `process.env`).
-  // Support both just in case this file is used in non-vite contexts.
+
   return (import.meta?.env?.VITE_STORAGE_URL ?? import.meta?.env?.VITE_PUBLIC_STORAGE_URL ?? '') || ''
 }
 

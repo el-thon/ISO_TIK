@@ -1,9 +1,6 @@
-// This file contains non-component helpers for the topic detail page.
-// Keeping it separate helps React Fast Refresh (react-refresh/only-export-components).
-
 import React from 'react'
 
-const DefaultContent = ({ type, value }) => (
+const renderDefaultContent = (type, value) => (
   <div className="mt-3 p-4 border border-dashed rounded-md text-center">
     <div className="text-sm text-muted-foreground">Tipe konten tidak dikenali: {type}</div>
     {value && (
@@ -40,5 +37,5 @@ export const renderInputItemContent = ({ item, components }) => {
     file: <FileContent item={item} />,
   }
 
-  return contentRenderers[type] || <DefaultContent type={type} value={value} />
+  return contentRenderers[type] || renderDefaultContent(type, value)
 }

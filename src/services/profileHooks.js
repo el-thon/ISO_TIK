@@ -356,6 +356,11 @@ export function useProfilePhoto(profileData, refetch) {
     try {
       await uploadMutation.mutateAsync(file)
       setPhotoMessage('Foto profil berhasil diperbarui')
+      
+      // ✅ TAMBAHKAN 3 BARIS INI:
+      setPhotoOverride(null)                          // Reset state
+      localStorage.removeItem(PHOTO_OVERRIDE_KEY)    // Clear localStorage override
+      
       updatePhotoVersion()
       setTimeout(() => setPhotoMessage(null), 3000)
       setTimeout(() => refetch(), 1000)
