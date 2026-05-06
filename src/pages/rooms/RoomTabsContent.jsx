@@ -3,42 +3,18 @@ import { Link } from 'react-router-dom'
 import { TabsContent } from '@/components/ui/tabs'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { useRoomParticipants, useRoomTopics } from '@/services/roomHooks'
-import { useMutation } from '@tanstack/react-query'
+import { useRoomParticipants, useRoomTopics, useAddRoomParticipant } from '@/services/roomHooks'
+import InviteParticipantDialog from '@/pages/rooms/components/InviteParticipantDialog'
+import { toast } from '@/components/ui/use-toast'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import roomService from '@/services/roomService'
 import { useForumPeriod } from '@/services/forumPeriodHooks'
 import AttachmentsTab from './tabs/AttachmentsTab'
 import SettingsTab from './tabs/SettingsTab'
-
-const formatDate = (value) => {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-}
+import { formatDate } from '@/pages/rooms/constants'
 
 const getInitials = (name) => {
   if (!name) return '??'
@@ -50,35 +26,8 @@ const getInitials = (name) => {
     .join('')
 }
 
-const getStatusClass = (status) => {
-  const normalized = String(status || '').toLowerCase()
-  if (normalized === 'approved') return 'bg-emerald-50 text-emerald-700'
-  if (normalized === 'in_review' || normalized === 'in review') return 'bg-amber-50 text-amber-700'
-  if (normalized === 'changes_requested' || normalized === 'changes requested') return 'bg-rose-50 text-rose-700'
-  if (normalized === 'closed') return 'bg-slate-100 text-slate-700'
-  return 'bg-slate-50 text-slate-600'
-}
-
-const TopicsSkeleton = () => (
-  <div className="space-y-4">
-    {Array.from({ length: 4 }).map((_, idx) => (
-      <Card key={`room-topic-skeleton-${idx}`}>
-        <CardContent className="pt-6 space-y-3">
-          <Skeleton className="h-5 w-1/3" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-          <div className="flex gap-2">
-            <Skeleton className="h-6 w-20" />
-            <Skeleton className="h-6 w-24" />
-          </div>
-        </CardContent>
-      </Card>
-    ))}
-  </div>
-)
-
 export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUserId }) {
-  const [page, setPage] = useState(1)
+  const page = 1
   const perPage = 10
   const periodId = room?.forum_period_id
 
@@ -100,35 +49,41 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
 
   const { data: periodDetail } = useForumPeriod(periodId, { enabled: Boolean(periodId) })
 
-  // Participant invite UI is not implemented in this view yet.
-
   const canManageParticipants = useMemo(() => {
-    // Room owner can manage participants; also allow period admins
     if (isRoomOwner) return true
     if (!periodDetail || !periodDetail.members) return false
     const me = periodDetail.members.find((m) => String(m.user_id) === String(currentUserId))
     return me && me.role === 'admin'
   }, [isRoomOwner, periodDetail, currentUserId])
 
-  const updateParticipantMutation = useMutation({
+  const queryClient = useQueryClient()
+  const updateParticipant = useMutation({
     mutationFn: ({ participantId, payload }) => roomService.updateParticipant(roomId, participantId, payload),
     onSuccess: () => {
-      refetchParticipants()
+      queryClient.invalidateQueries({ queryKey: ['rooms', roomId, 'participants'] })
+      queryClient.invalidateQueries({ queryKey: ['rooms', roomId] })
+      if (refetchParticipants) refetchParticipants()
+      toast({ title: 'Berhasil', description: 'Perubahan peserta tersimpan.' })
     },
+    onError: (err) => {
+      toast({ variant: 'destructive', title: 'Gagal', description: err?.response?.data?.message || 'Gagal memperbarui peserta.' })
+    }
   })
 
   const topics = topicsData?.topics ?? []
-  const pagination = topicsData?.pagination ?? {}
   const participants = participantsData?.participants ?? []
-  // const periodMembers = periodDetail?.members ?? []
+  const periodMembers = periodDetail?.members ?? []
 
-  const topicsErrorMessage =
-    topicsErr?.response?.data?.message || topicsErr?.message || 'Gagal memuat daftar formulir.'
-  const participantsErrorMessage =
-    participantsErr?.response?.data?.message || participantsErr?.message || 'Gagal memuat daftar peserta.'
+  const candidates = useMemo(() => {
+    const existing = (participants || []).map((p) => String(p?.user_id ?? p?.user?.id ?? ''))
+    return (periodMembers || []).filter((m) => {
+      const id = String(m?.user_id ?? m?.user?.id ?? '')
+      return id && !existing.includes(id)
+    })
+  }, [periodMembers, participants])
 
-  const canPrev = page > 1
-  const canNext = pagination.last_page ? page < pagination.last_page : topics.length === perPage
+  const topicsErrorMessage = topicsErr?.response?.data?.message || topicsErr?.message || 'Gagal memuat daftar formulir.'
+  const participantsErrorMessage = participantsErr?.response?.data?.message || participantsErr?.message || 'Gagal memuat daftar peserta.'
 
   const resolvedParticipants = useMemo(() => {
     const base = [...participants]
@@ -160,7 +115,29 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
     })
   }, [resolvedParticipants])
 
-  // Participant invite UI is not implemented in this view yet.
+  const addParticipantMutation = useAddRoomParticipant(roomId, {
+    onSuccess: () => {
+      refetchParticipants()
+      toast({ title: 'Berhasil', description: 'Peserta berhasil diundang.' })
+    },
+    onError: (error) => {
+      toast({ variant: 'destructive', title: 'Gagal', description: error?.response?.data?.message || 'Gagal mengundang peserta.' })
+    },
+  })
+
+  const [inviteOpen, setInviteOpen] = useState(false)
+
+  const handleInvite = async (selectedUserIds = [], role = 'auditee') => {
+    if (!selectedUserIds?.length || addParticipantMutation.isPending) return
+    try {
+      await Promise.all(selectedUserIds.map((userId) => addParticipantMutation.mutateAsync({ user_id: String(userId), role })))
+      setInviteOpen(false)
+    } catch {
+      // onError will show toast
+    } finally {
+      refetchParticipants()
+    }
+  }
 
   return (
     <>
@@ -175,7 +152,17 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
         )}
 
         {topicsLoading ? (
-          <TopicsSkeleton />
+          <div className="space-y-4">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <Card key={`room-topic-skeleton-${idx}`}>
+                <CardContent className="pt-6 space-y-3">
+                  <Skeleton className="h-5 w-1/3" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         ) : topics.length === 0 ? (
           <div className="border border-dashed rounded-lg p-10 text-center text-muted-foreground bg-white">
             Belum ada formulir di forum ini.
@@ -191,7 +178,7 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="text-lg font-semibold">{topic.title || 'Formulir Ketidaksesuaian'}</div>
                           {topic.status && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusClass(topic.status)}`}>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${topic.status ? 'bg-slate-50 text-slate-600' : ''}`}>
                               {String(topic.status).replace('_', ' ')}
                             </span>
                           )}
@@ -221,32 +208,6 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
                 </Link>
               </Card>
             ))}
-
-            {pagination.last_page > 1 && (
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  Halaman {pagination.current_page || page} / {pagination.last_page || 1}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!canPrev}
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                  >
-                    Sebelumnya
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!canNext}
-                    onClick={() => setPage((prev) => (pagination.last_page ? Math.min(pagination.last_page, prev + 1) : prev + 1))}
-                  >
-                    Berikutnya
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </TabsContent>
@@ -278,13 +239,24 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
         ) : (
           <Card className="w-full">
             <CardContent className="pt-6 space-y-4">
+              {canManageParticipants && (
+                <div className="mb-2 flex justify-end">
+                  <InviteParticipantDialog
+                    open={inviteOpen}
+                    onOpenChange={setInviteOpen}
+                    candidates={candidates}
+                    onInvite={handleInvite}
+                    isPending={addParticipantMutation.isPending}
+                    roomName={room?.name}
+                  />
+                </div>
+              )}
               {orderedParticipants.map((participant) => {
                 const user = participant?.user ?? {}
                 const displayName = user?.profile?.full_name || user?.username || user?.email || 'Pengguna'
                 const isOwner =
                   String(participant?.user_id) === String(room?.responsible_user_id) ||
                   participant?.is_responsible_user === true
-                // Display the forum-specific role (auditor/auditee) even for responsible user
                 const roleLabel = participant?.role || (isOwner ? 'auditor' : 'member')
                 const isCurrentUser = currentUserId && String(participant?.user_id) === String(currentUserId)
                 return (
@@ -304,21 +276,29 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
                     <div>
                       {canManageParticipants ? (
                         <div className="flex items-center gap-2">
-                          <Select
-                            value={participant?.role || 'auditee'}
-                            onValueChange={(val) => {
-                              if (!participant?.id) return
-                              updateParticipantMutation.mutate({ participantId: participant.id, payload: { role: val } })
-                            }}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder={participant?.role || 'member'} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="auditor">Auditor</SelectItem>
-                              <SelectItem value="auditee">Auditee</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="flex items-center gap-2">
+                            {String(participant.id).startsWith('owner-') ? (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{participant.role || 'owner'}</span>
+                            ) : (
+                              <>
+                                <Select
+                                  value={participant?.role || 'auditee'}
+                                  onValueChange={(val) => {
+                                    if (!participant?.id) return
+                                    updateParticipant.mutate({ participantId: participant.id, payload: { role: val } })
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder={participant?.role || 'member'} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="auditor">Auditor</SelectItem>
+                                    <SelectItem value="auditee">Auditee</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <span className={`text-xs px-2 py-0.5 rounded-full ${isOwner ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>

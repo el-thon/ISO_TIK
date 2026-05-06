@@ -4,8 +4,10 @@ services:
   iso-tik-fe:
     build: .
     image: iso-tik-fe:latest
+    container_name: iso-tik-fe-prod
     ports:
       - "5173:80"
     environment:
       - NODE_ENV=production
+      - VITE_API_BASE_URL=http://localhost:8000
     restart: unless-stopped

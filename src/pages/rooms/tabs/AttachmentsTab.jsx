@@ -14,6 +14,8 @@ import { useBootstrapSession } from '@/services/authHooks';
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 const ITEMS_PER_PAGE = 20;
+// Server-side validation uses 'max:51200' (in kilobytes) which equals 50 MB
+const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
 const formatDate = (value) => {
   if (!value) return '-';
@@ -202,8 +204,32 @@ export default function AttachmentsTab({ roomId }) {
   };
 
   const handleFileChange = (e) => {
-    setSelectedFile(e.target.files?.[0] || null);
+    const file = e.target.files?.[0] || null;
     setUploadError(null);
+    if (file) {
+      // client-side allowed extensions (keep in sync with backend)
+      const allowedExt = ['pdf','doc','docx','odt','rtf','txt','xls','xlsx'];
+      const fileExt = (file.name || '').split('.').pop().toLowerCase();
+      if (!allowedExt.includes(fileExt)) {
+        setSelectedFile(null);
+        setUploadError(`Format file tidak didukung (${fileExt}). Hanya: ${allowedExt.join(', ').toUpperCase()}`);
+        const fileInput = document.querySelector('#document-upload');
+        if (fileInput) fileInput.value = '';
+        return;
+      }
+
+      if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+        // show inline error and clear selection
+        setSelectedFile(null);
+        const readable = formatFileSize(file.size);
+        setUploadError(`Ukuran file terlalu besar: ${readable}. Maksimal ${formatFileSize(MAX_UPLOAD_SIZE_BYTES)}.`);
+        // also reset the input so it doesn't keep the file
+        const fileInput = document.querySelector('#document-upload');
+        if (fileInput) fileInput.value = '';
+        return;
+      }
+    }
+    setSelectedFile(file);
   };
 
   const handleUpload = async () => {
@@ -418,9 +444,10 @@ export default function AttachmentsTab({ roomId }) {
               )}
             </Button>
 
-            <p className="text-xs text-muted-foreground text-center">
-              Format: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max. 10MB)
-            </p>
+            <div className="text-xs text-muted-foreground text-center">
+              <div>Format: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG</div>
+              <div className="mt-1">Maks. ukuran file: {formatFileSize(MAX_UPLOAD_SIZE_BYTES)}</div>
+            </div>
           </CardContent>
         </Card>
 

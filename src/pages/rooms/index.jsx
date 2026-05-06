@@ -33,6 +33,7 @@ export default function RoomsPage() {
   const [selectedPeriodId, setSelectedPeriodId] = useState('')
   const [periodDetailId, setPeriodDetailId] = useState('')
   const [childForumPage, setChildForumPage] = useState(1)
+  const [localPendingJoinIds, setLocalPendingJoinIds] = useState([])
   const lastDeadlineToastKeyRef = useRef('')
   const localDeadlineToastShownRef = useRef('')
 
@@ -110,11 +111,21 @@ export default function RoomsPage() {
         description: 'Anda telah melakukan request join ruangan dan sedang menunggu persetujuan owner.',
       })
     },
+    onError: (error) => {
+      const message = error?.response?.data?.message || error?.message || 'Gagal mengirim permintaan join.'
+      toast({
+        variant: 'destructive',
+        title: 'Permintaan gagal',
+        description: message,
+      })
+    },
   })
 
   const handleJoinPeriodRequest = (period) => {
     const periodId = String(period?.id || '').trim()
     if (!periodId || joinMutation.isPending) return
+    if (localPendingJoinIds.includes(periodId)) return
+    setLocalPendingJoinIds((prev) => (prev.includes(periodId) ? prev : [...prev, periodId]))
     joinMutation.mutate({ period_id: periodId })
   }
 
@@ -225,11 +236,8 @@ export default function RoomsPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" className="px-4 py-2" onClick={() => setAccessDeniedOpen(false)}>
+                  <Button variant="outline" className="px-4 py-2 w-full" onClick={() => setAccessDeniedOpen(false)}>
                     Tutup
-                  </Button>
-                  <Button className="px-4 py-2" onClick={() => setAccessDeniedOpen(false)}>
-                    Mengerti
                   </Button>
                 </div>
               </DialogContent>
@@ -288,12 +296,15 @@ export default function RoomsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {periods.map((period) => {
                 const isDisabled = period?.is_related === false && !isProductOwner
+                const serverPending = String(period?.my_join_request?.status || '').toLowerCase() === 'pending'
+                const isJoinPending = localPendingJoinIds.includes(String(period?.id || '')) || serverPending
                 return (
                   <PeriodCard
                     key={period.id}
                     period={period}
                     isDisabled={isDisabled}
                     isProductOwner={isProductOwner}
+                    isJoinPending={isJoinPending}
                     joinMutation={joinMutation}
                     onJoin={handleJoinPeriodRequest}
                     onSelect={handleSelectPeriod}

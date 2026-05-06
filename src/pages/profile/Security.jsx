@@ -18,7 +18,6 @@ import {
 } from '@/services/profileHooks'
 import { Loader2, ImageIcon, Download, Trash2, Upload } from 'lucide-react'
 
-// ==================== UTILS ====================
 const formatDate = (value) => {
   if (!value) return '-'
   const date = new Date(value)
@@ -26,7 +25,6 @@ const formatDate = (value) => {
   return date.toLocaleString()
 }
 
-// ==================== SIGNATURE SECTION WITH PREVIEW ====================
 const SignatureSection = ({ 
   signatureUrl,
   hasSig,
@@ -51,9 +49,9 @@ const SignatureSection = ({
   }
   
   return (
-    <Card key={signatureUrl || 'no-signature'}>
-      <CardContent>
-        <div className="flex items-start justify-between mb-4">
+    <Card className="w-full">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-4">
           <div>
             <h4 className="font-medium">Tanda Tangan Digital</h4>
             <p className="text-xs text-muted-foreground">Kelola unggahan tanda tangan Anda</p>
@@ -75,83 +73,96 @@ const SignatureSection = ({
           disabled={isUploading}
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* PREVIEW AREA - Menampilkan gambar signature */}
-          <div className="md:col-span-2 border rounded-lg bg-white min-h-40 flex flex-col items-center justify-center p-4">
-            {hasSig && signatureUrl && !previewError ? (
-              <div className="w-full">
-                <img
-                  src={signatureUrl}
-                  alt="Tanda Tangan"
-                  className="max-h-32 max-w-full object-contain mx-auto border border-slate-200 rounded-md p-2 bg-white"
-                  onError={() => setPreviewError(true)}
-                />
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  Tanda tangan aktif
-                </p>
-              </div>
-            ) : hasSig && previewError ? (
-              <div className="text-center">
-                <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">
-                  Gambar tidak dapat dimuat
-                </p>
-                <Button 
-                  variant="link" 
-                  size="sm" 
-                  className="text-xs mt-1"
-                  onClick={onDownload}
-                >
-                  Coba unduh
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center">
-                <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">
-                  Belum ada tanda tangan
-                </p>
-              </div>
-            )}
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* PREVIEW AREA - Menampilkan gambar signature dengan overflow handling */}
+          <div className="lg:flex-1 border rounded-lg bg-white p-4">
+            <div className="w-full overflow-hidden">
+              {hasSig && signatureUrl && !previewError ? (
+                <div className="flex flex-col items-center">
+                  <div className="w-full max-w-full overflow-x-auto overflow-y-auto flex justify-center items-center bg-gray-50 rounded-md p-4 min-h-[160px]">
+                    <img
+                      src={signatureUrl}
+                      alt="Tanda Tangan"
+                      className="max-w-full h-auto max-h-[120px] object-contain border border-slate-200 rounded-md p-2 bg-white"
+                      style={{ width: 'auto', height: 'auto' }}
+                      onError={() => setPreviewError(true)}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center mt-2">
+                    Tanda tangan aktif
+                  </p>
+                </div>
+              ) : hasSig && previewError ? (
+                <div className="text-center py-8">
+                  <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">
+                    Gambar tidak dapat dimuat
+                  </p>
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    className="text-xs mt-1"
+                    onClick={onDownload}
+                  >
+                    Coba unduh
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">
+                    Belum ada tanda tangan
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
           
-          {/* ACTION BUTTONS */}
-          <div className="flex flex-col gap-2 justify-start">
-            <Button 
-              variant="outline" 
-              onClick={handleSelectClick} 
-              disabled={isUploading}
-              className="flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              {isUploading ? 'Mengunggah...' : 'Unggah Tanda Tangan'}
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              onClick={onDownload} 
-              disabled={isDownloading || !hasSig}
-              className="flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              {isDownloading ? 'Mengunduh...' : 'Unduh'}
-            </Button>
-            
-            <Button 
-              variant="ghost" 
-              className="text-red-600 hover:text-red-700 flex items-center gap-2" 
-              onClick={onDelete} 
-              disabled={isDeleting || !hasSig}
-            >
-              <Trash2 className="w-4 h-4" />
-              {isDeleting ? 'Menghapus...' : 'Hapus'}
-            </Button>
-            
-            {status && (
-              <p className={`text-xs ${status.type === 'success' ? 'text-emerald-600' : 'text-red-600'} text-center mt-2`}>
-                {status.text}
-              </p>
-            )}
+          {/* ACTION BUTTONS - Responsive dengan wrap dan gap yang baik */}
+          <div className="lg:w-[280px] flex-shrink-0">
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-2">
+              <Button 
+                variant="outline" 
+                onClick={handleSelectClick} 
+                disabled={isUploading}
+                className="flex items-center gap-2 flex-1 sm:flex-none"
+              >
+                <Upload className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">
+                  {isUploading ? 'Mengunggah...' : 'Unggah Tanda Tangan'}
+                </span>
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                onClick={onDownload} 
+                disabled={isDownloading || !hasSig}
+                className="flex items-center gap-2 flex-1 sm:flex-none"
+              >
+                <Download className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">
+                  {isDownloading ? 'Mengunduh...' : 'Unduh'}
+                </span>
+              </Button>
+              
+              <Button 
+                variant="ghost" 
+                className="text-red-600 hover:text-red-700 flex items-center gap-2 flex-1 sm:flex-none" 
+                onClick={onDelete} 
+                disabled={isDeleting || !hasSig}
+              >
+                <Trash2 className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">
+                  {isDeleting ? 'Menghapus...' : 'Hapus'}
+                </span>
+              </Button>
+              
+              {status && (
+                <p className={`text-xs ${status.type === 'success' ? 'text-emerald-600' : 'text-red-600'} text-center mt-2`}>
+                  {status.text}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>

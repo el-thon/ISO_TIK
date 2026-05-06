@@ -22,17 +22,17 @@ Sistem memiliki 3 role global:
 
 ### Matriks Hak Akses Utama
 
-| Fitur / Aksi | member | admin | product_owner |
-| --- | --- | --- | --- |
-| Lihat daftar ruangan | ✅ | ✅ | ✅ |
-| Buat ruangan | ✅ | ✅ | ❌ |
-| Ubah ruangan (jika owner/creator) | ✅ | ✅ | ❌ |
-| Lihat detail ruangan (list forum) | Terbatas sesuai keanggotaan | Terbatas sesuai keanggotaan | ✅ |
-| Lihat detail forum (list formulir ketidaksesuaian) | Hanya forum yang menjadi bagiannya | Hanya forum yang menjadi bagiannya | ✅ |
-| Dashboard ringkasan | ✅ | ✅ | ✅ |
-| CRUD Dokumen Header formulir | ❌ | ✅ | Read-only di UI |
-| CRUD Pengguna (role lain) | ❌ | ✅ | ❌ |
-| CRUD Klausul | ❌ | ✅ | ❌ |
+| Fitur / Aksi                                       | member                             | admin                              | product_owner   |
+| -------------------------------------------------- | ---------------------------------- | ---------------------------------- | --------------- |
+| Lihat daftar ruangan                               | ✅                                 | ✅                                 | ✅              |
+| Buat ruangan                                       | ✅                                 | ✅                                 | ❌              |
+| Ubah ruangan (jika owner/creator)                  | ✅                                 | ✅                                 | ❌              |
+| Lihat detail ruangan (list forum)                  | Terbatas sesuai keanggotaan        | Terbatas sesuai keanggotaan        | ✅              |
+| Lihat detail forum (list formulir ketidaksesuaian) | Hanya forum yang menjadi bagiannya | Hanya forum yang menjadi bagiannya | ✅              |
+| Dashboard ringkasan                                | ✅                                 | ✅                                 | ✅              |
+| CRUD Dokumen Header formulir                       | ❌                                 | ✅                                 | Read-only di UI |
+| CRUD Pengguna (role lain)                          | ❌                                 | ✅                                 | ❌              |
+| CRUD Klausul                                       | ❌                                 | ✅                                 | ❌              |
 
 > Catatan: rule final tetap ditentukan backend authorization. README ini mendokumentasikan alur sistem yang saat ini digunakan pada frontend.
 
@@ -130,6 +130,20 @@ docker run -d -p 5173:80 --name iso-tik-fe iso-tik-fe
 ```
 
 ### Docker Compose
+
+### Development (hot reload)
+
+Gunakan docker compose versi development agar Vite dev server berjalan dengan hot reload.
+
+```
+docker compose -f docker-compose.dev.yml up --build
+```
+
+Catatan:
+
+- Port dev server: `http://localhost:5173`
+- Source code di-mount ke container (`.:/app`), jadi perubahan file langsung ter-refresh.
+- Jika Anda ingin akses API lokal, pastikan backend berjalan di `http://localhost:8000` atau ubah env di `docker-compose.dev.yml`.
 
 ```bash
 docker-compose up --build -d

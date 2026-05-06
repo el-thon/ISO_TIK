@@ -485,33 +485,24 @@ export default function TopicDetail() {
       setIsExporting(true)
       const { auditorBlob, auditeeBlob } = await resolveSignatures()
 
-      const missingSignatures = []
-      if (!auditorBlob) missingSignatures.push('Auditor')
-      if (!auditeeBlob) missingSignatures.push('Auditee')
-
-      if (missingSignatures.length > 0) {
-        toast({
-          variant: 'destructive',
-          title: 'Tanda tangan belum lengkap',
-          description: `${missingSignatures.join(' atau ')} belum memiliki tanda tangan.`,
-        })
-        setAuditeeSignatureDataUrl(null)
-        return
-      }
+      setAuditeeSignatureDataUrl(null)
+      setSignatureDataUrl(null)
 
       if (auditeeBlob) {
         const auditeeDataUrl = await toDataUrl(auditeeBlob)
         setAuditeeSignatureDataUrl(typeof auditeeDataUrl === 'string' ? auditeeDataUrl : null)
       }
 
-      const auditorSignatureDownloader = {
-        mutateAsync: async () => auditorBlob,
-      }
+      const auditorSignatureDownloader = auditorBlob
+        ? {
+            mutateAsync: async () => auditorBlob,
+          }
+        : null
 
       await generatePDF({
         printRef,
         topicId,
-        hasSignature: true,
+        hasSignature: Boolean(auditorBlob),
         downloadSignature: auditorSignatureDownloader,
         toDataUrl,
         setSignatureDataUrl,
@@ -550,33 +541,24 @@ export default function TopicDetail() {
       setIsPreviewing(true)
       const { auditorBlob, auditeeBlob } = await resolveSignatures()
 
-      const missingSignatures = []
-      if (!auditorBlob) missingSignatures.push('Auditor')
-      if (!auditeeBlob) missingSignatures.push('Auditee')
-
-      if (missingSignatures.length > 0) {
-        toast({
-          variant: 'destructive',
-          title: 'Tanda tangan belum lengkap',
-          description: `${missingSignatures.join(' atau ')} belum memiliki tanda tangan.`,
-        })
-        setAuditeeSignatureDataUrl(null)
-        return
-      }
+      setAuditeeSignatureDataUrl(null)
+      setSignatureDataUrl(null)
 
       if (auditeeBlob) {
         const auditeeDataUrl = await toDataUrl(auditeeBlob)
         setAuditeeSignatureDataUrl(typeof auditeeDataUrl === 'string' ? auditeeDataUrl : null)
       }
 
-      const auditorSignatureDownloader = {
-        mutateAsync: async () => auditorBlob,
-      }
+      const auditorSignatureDownloader = auditorBlob
+        ? {
+            mutateAsync: async () => auditorBlob,
+          }
+        : null
 
       await generatePDF({
         printRef,
         topicId,
-        hasSignature: true,
+        hasSignature: Boolean(auditorBlob),
         downloadSignature: auditorSignatureDownloader,
         toDataUrl,
         setSignatureDataUrl,

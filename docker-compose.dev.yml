@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  iso-tik-fe-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: iso-tik-fe:dev
+    container_name: iso-tik-fe-dev
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+      # Use relative API path so Vite proxy handles /api -> backend
+      - VITE_API_BASE_URL=/api/v1
+      # Point proxy to host backend (adjust if backend runs in another container)
+      - VITE_PROXY_TARGET=http://host.docker.internal:8000
+      - VITE_STORAGE_BASE_URL=http://host.docker.internal:8000
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
