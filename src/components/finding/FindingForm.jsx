@@ -382,6 +382,32 @@ const getIdentityText = (identity) => {
   return `${name}${nip ? ` (${nip})` : ''}`.trim()
 }
 
+const getParticipantIdentity = (participant) => {
+  if (!participant) return { name: '', nip: '' }
+  const user = participant?.user ?? {}
+  const profile = user?.profile ?? {}
+  const name =
+    profile?.full_name ||
+    user?.name ||
+    participant?.name ||
+    user?.username ||
+    ''
+  const nip = participant?.nip ?? user?.nip ?? ''
+  return { name: String(name || ''), nip: String(nip || '') }
+}
+
+const getParticipantLabel = (participant) => {
+  if (!participant) return ''
+  const user = participant?.user ?? {}
+  const profile = user?.profile ?? {}
+  const fullName = profile?.full_name
+  const username = user?.username
+  const name = fullName || user?.name || participant?.name || username || ''
+  const nip = participant?.nip ?? user?.nip ?? ''
+  const withUsername = name && username && name !== username ? `${name} (${username})` : name
+  return `${withUsername}${nip ? ` - ${nip}` : ''}`.trim()
+}
+
 const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
   const { data: clauseData, isLoading: clausesLoading } = useAdminClauses({ per_page: 100, is_active: true })
   const [documents, setDocuments] = useState([])
@@ -554,9 +580,7 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
     setSelectedAuditorId(String(userId || ''))
     const match = participants.find((p) => String(p?.user_id ?? p?.user?.id) === String(userId))
     if (!match) return
-    const user = match?.user ?? {}
-    const name = match?.name ?? user?.name ?? ''
-    const nip = match?.nip ?? user?.nip ?? ''
+    const { name, nip } = getParticipantIdentity(match)
     setFormData((prev) => ({
       ...prev,
       auditor: { name: String(name || ''), nip: String(nip || '') }
@@ -567,9 +591,7 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
     setSelectedAuditeeId(String(userId || ''))
     const match = participants.find((p) => String(p?.user_id ?? p?.user?.id) === String(userId))
     if (!match) return
-    const user = match?.user ?? {}
-    const name = match?.name ?? user?.name ?? ''
-    const nip = match?.nip ?? user?.nip ?? ''
+    const { name, nip } = getParticipantIdentity(match)
     setFormData((prev) => ({
       ...prev,
       auditee: { name: String(name || ''), nip: String(nip || '') }
@@ -659,10 +681,9 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                       {auditorCandidates.map((p) => {
                         const userId = p?.user_id ?? p?.user?.id
                         if (!userId) return null
-                        const user = p?.user ?? {}
-                        const label = getIdentityText({
-                          name: p?.name ?? user?.name,
-                          nip: p?.nip ?? user?.nip,
+                        const label = getParticipantLabel(p) || getIdentityText({
+                          name: p?.name ?? p?.user?.name,
+                          nip: p?.nip ?? p?.user?.nip,
                         })
                         return (
                           <SelectItem key={String(userId)} value={String(userId)}>
@@ -719,10 +740,9 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                       {auditeeCandidates.map((p) => {
                         const userId = p?.user_id ?? p?.user?.id
                         if (!userId) return null
-                        const user = p?.user ?? {}
-                        const label = getIdentityText({
-                          name: p?.name ?? user?.name,
-                          nip: p?.nip ?? user?.nip,
+                        const label = getParticipantLabel(p) || getIdentityText({
+                          name: p?.name ?? p?.user?.name,
+                          nip: p?.nip ?? p?.user?.nip,
                         })
                         return (
                           <SelectItem key={String(userId)} value={String(userId)}>

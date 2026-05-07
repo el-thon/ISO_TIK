@@ -130,7 +130,7 @@ export function useUpdateProfile(options = {}) {
 export function useUpdateEmployment(options = {}) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ userId, payload }) => profileService.updateEmployment({ userId, payload }),
+    mutationFn: ({ payload }) => profileService.updateEmployment({ payload }),
     onSuccess: (data, variables, context) => {
       queryClient.invalidateQueries({ queryKey: ['profile'] })
       if (options.onSuccess) options.onSuccess(data, variables, context)

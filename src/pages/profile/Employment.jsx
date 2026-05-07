@@ -6,14 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Info } from 'lucide-react'
 import { useUpdateEmployment } from '@/services/profileHooks'
 import { Field } from './components/common/Field'
-import { StatusMessage } from './components/common/StatusMessage'
 
 const toDefaultValues = (employment) => {
   const data = employment ?? {}
   return {
     employee_id: data.employee_id || '',
     lecturer_id: data.lecturer_id || '',
-    student_id: data.student_id || '',
     faculty: data.faculty || '',
     department: data.department || '',
     study_program: data.study_program || '',
@@ -34,9 +32,10 @@ const cleanPayload = (obj = {}) => {
   )
 }
 
-export default function Employment({ employment, userId }) {
+export default function Employment({ employment, onRefetch }) {
   const [editing, setEditing] = useState(false)
   const [statusMessage, setStatusMessage] = useState(null)
+  const formId = 'employment-form'
   const data = useMemo(() => toDefaultValues(employment), [employment])
   const form = useForm({
     defaultValues: data,
@@ -50,6 +49,7 @@ export default function Employment({ employment, userId }) {
     onSuccess: () => {
       setStatusMessage({ type: 'success', text: 'Data kepegawaian diperbarui' })
       setEditing(false)
+      if (onRefetch) onRefetch()
     },
     onError: (error) => {
       const message = error?.response?.data?.message || 'Gagal memperbarui data kepegawaian'
@@ -65,9 +65,11 @@ export default function Employment({ employment, userId }) {
       return
     }
     try {
-      await updateEmployment.mutateAsync({ userId, payload })
-    } catch {
-      // handled in onError
+      await updateEmployment.mutateAsync({ payload })
+      form.reset(toDefaultValues(employment))
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Gagal memperbarui data kepegawaian'
+      setStatusMessage({ type: 'error', text: message })
     }
   }
 
@@ -77,8 +79,7 @@ export default function Employment({ employment, userId }) {
 
   const fields = [
     { label: 'NIP / Employee ID', value: data.employee_id, name: 'employee_id' },
-    { label: 'NIDN / Lecturer ID', value: data.lecturer_id || data.student_id, name: 'lecturer_id' },
-    { label: 'NIM / Student ID', value: data.student_id, name: 'student_id' },
+    { label: 'NIDN / Lecturer ID', value: data.lecturer_id, name: 'lecturer_id' },
     { label: 'Fakultas', value: data.faculty, name: 'faculty' },
     { label: 'Departemen', value: data.department, name: 'department' },
     { label: 'Program Studi', value: data.study_program, name: 'study_program' },
@@ -138,14 +139,17 @@ export default function Employment({ employment, userId }) {
                 <Button
                   size="sm"
                   type="submit"
-                  disabled={updateEmployment.isPending || !form.formState.isDirty || !userId}
+                  form={formId}
+                  disabled={updateEmployment.isPending || !form.formState.isDirty}
+                  onClick={() => {
+                    return form.handleSubmit(onSubmit)()
+                  }}
                 >
                   {updateEmployment.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
                 </Button>
               </div>
             )}
           </div>
-
           {!hasData && (
             <div className="mb-4 flex items-center gap-2 text-xs text-amber-600">
               <Info className="w-4 h-4" /> Data kepegawaian belum tersedia untuk akun ini.
@@ -163,7 +167,7 @@ export default function Employment({ employment, userId }) {
           )}
 
           {editing && (
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {fields.map((field) => (
                 <Field key={field.label} label={field.label}>
                   <Input className="mt-1" {...form.register(field.name)} />

@@ -36,10 +36,9 @@ export async function updateProfile(payload) {
   return unwrap(res) ?? {}
 }
 
-export async function updateEmployment({ userId, payload }) {
-  if (!userId) throw new Error('userId is required to update employment')
+export async function updateEmployment({ payload }) {
   // Backend expects flat fields, not nested under "employment"
-  const res = await api.put(`/admin/users/${userId}/employment`, payload)
+  const res = await api.put('/profile/employment', payload)
   return unwrap(res) ?? {}
 }
 

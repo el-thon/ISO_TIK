@@ -384,74 +384,75 @@ export default function AttachmentsTab({ roomId }) {
   return (
     <TabsContent value="attachments" className="mt-4 w-full">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
-        <Card className="lg:col-span-1 w-full">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <UploadCloud className="h-4 w-4" />
-              Upload Dokumen
-            </CardTitle>
-          </CardHeader>
-          
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="document-upload">Pilih File</Label>
-              <Input
-                id="document-upload"
-                type="file"
-                onChange={handleFileChange}
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                disabled={uploading || isProductOwner}
-              />
-              
-              {selectedFile && (
-                <div className="flex items-center justify-between text-xs p-2 bg-muted rounded-md">
-                  <div className="truncate flex-1">
-                    <span className="font-medium">{selectedFile.name}</span>
-                    <span className="text-muted-foreground ml-2">
-                      ({formatFileSize(selectedFile.size)})
-                    </span>
+        {!isProductOwner && (
+          <Card className="lg:col-span-1 w-full">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <UploadCloud className="h-4 w-4" />
+                Upload Dokumen
+              </CardTitle>
+            </CardHeader>
+            
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="document-upload">Pilih File</Label>
+                <Input
+                  id="document-upload"
+                  type="file"
+                  onChange={handleFileChange}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  disabled={uploading}
+                />
+                
+                {selectedFile && (
+                  <div className="flex items-center justify-between text-xs p-2 bg-muted rounded-md">
+                    <div className="truncate flex-1">
+                      <span className="font-medium">{selectedFile.name}</span>
+                      <span className="text-muted-foreground ml-2">
+                        ({formatFileSize(selectedFile.size)})
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedFile(null)}
+                      className="ml-2 text-muted-foreground hover:text-foreground"
+                      disabled={uploading}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setSelectedFile(null)}
-                    className="ml-2 text-muted-foreground hover:text-foreground"
-                    disabled={uploading}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                )}
+              </div>
+
+              {uploadError && (
+                <div className="text-xs text-rose-600 bg-rose-50 p-2 rounded-md">
+                  {uploadError}
                 </div>
               )}
-            </div>
 
-            {uploadError && (
-              <div className="text-xs text-rose-600 bg-rose-50 p-2 rounded-md">
-                {uploadError}
+              <Button
+                onClick={handleUpload}
+                disabled={!selectedFile || uploading}
+                className="w-full"
+              >
+                {uploading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Mengunggah...
+                  </>
+                ) : (
+                  'Upload Dokumen'
+                )}
+              </Button>
+
+              <div className="text-xs text-muted-foreground text-center">
+                <div>Format: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG</div>
+                <div className="mt-1">Maks. ukuran file: {formatFileSize(MAX_UPLOAD_SIZE_BYTES)}</div>
               </div>
-            )}
+            </CardContent>
+          </Card>
+        )}
 
-            <Button
-              onClick={handleUpload}
-              disabled={isProductOwner || !selectedFile || uploading}
-              className="w-full"
-              title={isProductOwner ? 'Role product_owner hanya bisa melihat lampiran (read-only)' : undefined}
-            >
-              {uploading ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Mengunggah...
-                </>
-              ) : (
-                'Upload Dokumen'
-              )}
-            </Button>
-
-            <div className="text-xs text-muted-foreground text-center">
-              <div>Format: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG</div>
-              <div className="mt-1">Maks. ukuran file: {formatFileSize(MAX_UPLOAD_SIZE_BYTES)}</div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2 w-full">
+        <Card className={isProductOwner ? 'lg:col-span-3 w-full' : 'lg:col-span-2 w-full'}>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="text-sm font-medium flex items-center gap-2">

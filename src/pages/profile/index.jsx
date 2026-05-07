@@ -18,20 +18,20 @@ import PersonalDataTab from './PersonalData'
 import EmploymentTab from './Employment'
 import SecurityTab from './Security'
 
-const TabContent = ({ tab, profileData }) => {
+const TabContent = ({ tab, profileData, onRefetch }) => {
   if (!profileData) return null
   
   switch (tab) {
     case 'overview':
-      return <OverviewTab profileData={profileData} />
+      return <OverviewTab profileData={profileData} onRefetch={onRefetch} />
     case 'personal':
-      return <PersonalDataTab profileData={profileData} />
+      return <PersonalDataTab profileData={profileData} onRefetch={onRefetch} />
     case 'employment':
-      return <EmploymentTab userId={profileData?.id} employment={profileData?.employment} />
+      return <EmploymentTab employment={profileData?.employment} onRefetch={onRefetch} />
     case 'security':
       return <SecurityTab />
     default:
-      return <OverviewTab profileData={profileData} />
+      return <OverviewTab profileData={profileData} onRefetch={onRefetch} />
   }
 }
 
@@ -69,7 +69,7 @@ export default function ProfilePage() {
       )
     }
 
-    return <TabContent tab={safeTab} profileData={profileData} />
+    return <TabContent tab={safeTab} profileData={profileData} onRefetch={refetch} />
   }
 
   return (

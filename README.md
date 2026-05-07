@@ -6,7 +6,7 @@ Frontend aplikasi **Sistem Formulir Ketidaksesuaian ISO-TIK** berbasis React + V
 
 Sistem ini mengelola hierarki data berikut:
 
-1. **Ruangan** (periode/ruang kerja utama)
+1. **Periode** (periode/ruang kerja utama)
 2. **Forum** (bagian diskusi/kerja di dalam ruangan)
 3. **Formulir Ketidaksesuaian** (entri formulir di dalam forum)
 
@@ -24,10 +24,10 @@ Sistem memiliki 3 role global:
 
 | Fitur / Aksi                                       | member                             | admin                              | product_owner   |
 | -------------------------------------------------- | ---------------------------------- | ---------------------------------- | --------------- |
-| Lihat daftar ruangan                               | ✅                                 | ✅                                 | ✅              |
-| Buat ruangan                                       | ✅                                 | ✅                                 | ❌              |
-| Ubah ruangan (jika owner/creator)                  | ✅                                 | ✅                                 | ❌              |
-| Lihat detail ruangan (list forum)                  | Terbatas sesuai keanggotaan        | Terbatas sesuai keanggotaan        | ✅              |
+| Lihat daftar Periode                               | ✅                                 | ✅                                 | ✅              |
+| Buat Periode                                       | ✅                                 | ✅                                 | ❌              |
+| Ubah Periode (jika owner/creator)                  | ✅                                 | ✅                                 | ❌              |
+| Lihat detail Periode (list forum)                  | Terbatas sesuai keanggotaan        | Terbatas sesuai keanggotaan        | ✅              |
 | Lihat detail forum (list formulir ketidaksesuaian) | Hanya forum yang menjadi bagiannya | Hanya forum yang menjadi bagiannya | ✅              |
 | Dashboard ringkasan                                | ✅                                 | ✅                                 | ✅              |
 | CRUD Dokumen Header formulir                       | ❌                                 | ✅                                 | Read-only di UI |
@@ -38,11 +38,11 @@ Sistem memiliki 3 role global:
 
 ## Alur Akses yang Diimplementasikan
 
-1. **User non-member ruangan**
-   - Bisa melihat daftar seluruh ruangan (tanpa akses penuh ke rincian tertentu).
-   - Bisa bergabung ke ruangan menggunakan **join code** dari owner ruangan.
+1. **User non-member Periode**
+   - Bisa melihat daftar seluruh Periode (tanpa akses penuh ke rincian tertentu).
+   - Bisa bergabung ke Periode menggunakan **join code** dari owner Periode.
 
-2. **User member ruangan**
+2. **User member Periode**
    - Tidak otomatis bisa membaca semua forum.
    - Hanya bisa mengakses forum yang memang menjadi bagiannya.
 
@@ -51,15 +51,15 @@ Sistem memiliki 3 role global:
 
 4. **Dashboard lintas role**
    - Dapat diakses semua role (member/admin/product_owner).
-   - Menampilkan statistik agregat, termasuk total forum pada ruangan dan total formulir ketidaksesuaian pada forum.
+   - Menampilkan statistik agregat, termasuk total forum pada Periode dan total formulir ketidaksesuaian pada forum.
 
 ## Modul Utama Frontend
 
 - **Autentikasi**: login, refresh session, profile.
-- **Ruangan**: list, create, detail, update, join by code.
+- **Periode**: list, create, detail, update, join by code.
 - **Forum**: list forum yang relevan dengan user, detail forum, peserta forum.
 - **Formulir Ketidaksesuaian**: list, detail, pembuatan, assignment, attachment, workflow.
-- **Dashboard**: statistik pengguna, ruangan/forum, formulir.
+- **Dashboard**: statistik pengguna, Periode/forum, formulir.
 - **Administrasi**:
   - Klausul (`/admin/system/clauses`)
   - Dokumen Header (`/admin/topic-document-masters`)
@@ -68,7 +68,7 @@ Sistem memiliki 3 role global:
 ## Rute Halaman Utama
 
 - `/beranda` → Dashboard
-- `/ruangan` → Manajemen Ruangan
+- `/Period` → Manajemen Periode
 - `/forum` → Daftar Forum
 - `/forum/:id` → Detail Forum
 - `/formulir/:id` → Detail Formulir

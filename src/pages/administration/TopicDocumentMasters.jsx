@@ -33,13 +33,15 @@ function MastersList({ masters, onActivate, onEdit, onDelete, readOnly = false }
               <div className="text-xs text-muted-foreground mt-1">Tanggal terbit: {formatDate(m.published_at)} · Revisi: {m.revision_number || '—'}</div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => onActivate(m)} disabled={readOnly}>
-                {m.is_active ? 'Nonaktifkan' : 'Aktifkan'}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => onEdit(m)} disabled={readOnly}>Edit</Button>
-              <Button variant="destructive" size="sm" onClick={() => onDelete(m)} disabled={readOnly}>Hapus</Button>
-            </div>
+            {!readOnly && (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => onActivate(m)}>
+                  {m.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => onEdit(m)}>Edit</Button>
+                <Button variant="destructive" size="sm" onClick={() => onDelete(m)}>Hapus</Button>
+              </div>
+            )}
           </div>
         </div>
       ))}

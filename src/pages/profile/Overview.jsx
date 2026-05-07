@@ -53,7 +53,7 @@ const buildPayload = (values) => {
   return payload
 }
 
-export default function Overview({ profileData }) {
+export default function Overview({ profileData, onRefetch }) {
   const profile = profileData?.profile ?? {}
   const contact = profileData?.contact ?? {}
   const address = profileData?.address ?? {}
@@ -72,6 +72,7 @@ export default function Overview({ profileData }) {
     onSuccess: () => {
       setStatusMessage({ type: 'success', text: 'Data berhasil diperbarui' })
       setEditing(false)
+      if (onRefetch) onRefetch()
     },
     onError: (error) => {
       const message = error?.response?.data?.message || 'Gagal memperbarui data'
@@ -87,6 +88,7 @@ export default function Overview({ profileData }) {
       return
     }
     await updateProfile.mutateAsync(payload)
+    form.reset(toDefaultValues(profileData))
   }
 
   return (

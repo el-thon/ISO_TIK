@@ -69,9 +69,10 @@ const buildPayload = (values) => {
   return payload
 }
 
-export default function PersonalData({ profileData }) {
+export default function PersonalData({ profileData, onRefetch }) {
   const [editing, setEditing] = useState(false)
   const [statusMessage, setStatusMessage] = useState(null)
+  const formId = 'personal-data-form'
   const defaultValues = useMemo(() => toDefaultValues(profileData), [profileData])
   const form = useForm({
     defaultValues,
@@ -84,6 +85,7 @@ export default function PersonalData({ profileData }) {
   const updateProfile = useUpdateProfile({
     onSuccess: () => {
       setStatusMessage({ type: 'success', text: 'Data pribadi diperbarui' })
+      if (onRefetch) onRefetch()
     },
     onError: (error) => {
       const message = error?.response?.data?.message || 'Gagal memperbarui data'
@@ -100,6 +102,8 @@ export default function PersonalData({ profileData }) {
     }
     try {
       await updateProfile.mutateAsync(payload)
+      form.reset(toDefaultValues(profileData))
+      setEditing(false)
     } catch {
       // handled via onError callback
     }
@@ -223,7 +227,12 @@ export default function PersonalData({ profileData }) {
                 >
                   Batal
                 </Button>
-                <Button type="submit" size="sm" disabled={updateProfile.isPending || !form.formState.isDirty}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  form={formId}
+                  disabled={updateProfile.isPending || !form.formState.isDirty}
+                >
                   {updateProfile.isPending ? 'Menyimpan...' : 'Simpan Perubahan'}
                 </Button>
               </div>
@@ -233,7 +242,7 @@ export default function PersonalData({ profileData }) {
           {!editing && readView}
 
           {editing && (
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div>
               <h4 className="font-medium mb-2">Profil</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

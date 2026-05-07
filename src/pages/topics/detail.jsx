@@ -933,11 +933,6 @@ export default function TopicDetail() {
                       Deadline sudah lewat. Penambahan/perubahan temuan dinonaktifkan.
                     </p>
                   )}
-                  {isCurrentUserAuditee && !isFindingLockedByDeadline && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      Anda terdaftar sebagai auditee pada forum ini. Penambahan/perubahan temuan dinonaktifkan.
-                    </p>
-                  )}
                   {isClosed && (
                     <p className="text-xs text-muted-foreground">
                       Topik sudah ditutup. Edit temuan akan aktif kembali setelah topik dibuka.
