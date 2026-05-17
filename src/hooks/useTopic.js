@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getAccessToken } from './api'
-import * as topicService from './topicService'
+import { getAccessToken } from '@/services/api'
+import * as topicService from '@/services/topicService'
 
 const hasToken = () => Boolean(getAccessToken())
 const computeEnabled = (flag = true, guard = true) => Boolean((flag ?? true) && guard && hasToken())

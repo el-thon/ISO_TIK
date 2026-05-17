@@ -109,7 +109,7 @@ Buat file `.env` (opsional) dari `.env.example`.
 Contoh variabel:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000/api/v1
+VITE_API_BASE_URL=http://localhost:8080/api/v1
 VITE_FEATURE_RICH_TEXT=true
 ```
 
@@ -143,7 +143,7 @@ Catatan:
 
 - Port dev server: `http://localhost:5173`
 - Source code di-mount ke container (`.:/app`), jadi perubahan file langsung ter-refresh.
-- Jika Anda ingin akses API lokal, pastikan backend berjalan di `http://localhost:8000` atau ubah env di `docker-compose.dev.yml`.
+- Jika Anda ingin akses API lokal, pastikan backend berjalan di `http://localhost:8080` atau ubah env di `docker-compose.dev.yml`.
 
 ```bash
 docker-compose up --build -d

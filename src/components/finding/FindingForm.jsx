@@ -19,8 +19,8 @@ import {
   DialogOverlay,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { useAdminClauses } from '@/services/adminClauseHooks'
-import { useRoomParticipants } from '@/services/roomHooks'
+import { useAdminClauses } from '@/hooks/useAdminClause'
+import { useRoomParticipants } from '@/hooks/useRoom'
 import { cn } from '@/lib/utils'
 import * as documentService from '@/services/documentService'
 import * as forumAttachmentService from '@/services/forumAttachmentService'

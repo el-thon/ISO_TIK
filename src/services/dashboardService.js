@@ -25,7 +25,7 @@ import {
   X
 } from 'lucide-react'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
-import { useDashboardData } from '@/services/dashboardHooks'
+import { useDashboardData } from '@/hooks/useDashboard'
 
 // Helper function to ensure array
 const ensureArray = (data) => {

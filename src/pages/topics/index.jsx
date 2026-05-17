@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useTopics } from '@/services/topicHooks'
+import { useTopics } from '@/hooks/useTopic'
 
 // Constants
 const STATUS_OPTIONS = [

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { Loader2, Trash2, Edit2, KeyRound, UserPlus, ShieldCheck, Users, RefreshCcw } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMe } from '@/services/authHooks'
+import { useMe } from '@/hooks/useAuth'
 import {
   useAdminUsersList,
   useAdminUserStatistics,
@@ -23,7 +23,7 @@ import {
   useDeactivateAdminUser,
   useResetUserPassword,
   useAdminUser,
-} from '@/services/adminUsersHooks'
+} from '@/hooks/useAdminUsers'
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 const DEFAULT_CREATE = { username: '', email: '', password: '', status: 'active', full_name: '' }

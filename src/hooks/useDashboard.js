@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import api from './api'
-import { listForumPeriods, listForumPeriodForums } from './forumPeriodService'
-import { listTopics } from './topicService'
+import api from '@/services/api'
+import { listForumPeriods, listForumPeriodForums } from '@/services/forumPeriodService'
+import { listTopics } from '@/services/topicService'
 
 const ensureArray = (data) => {
   if (!data) return []
@@ -27,7 +27,7 @@ export const useForumPeriods = () => {
   return useQuery({
     queryKey: ['period'],
     queryFn: async () => {
-      const response = await listForumPeriods({ per_page: 1000 })
+      const response = await listForumPeriods({ per_page: 100 })
       return response?.periods || []
     },
     staleTime: 5 * 60 * 1000,
@@ -51,7 +51,7 @@ export const useDashboardData = ({ findingType } = {}) => {
   const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['users', 'list', 'dashboard'],
     queryFn: async () => {
-      const res = await api.get('/users', { params: { per_page: 1000 } })
+      const res = await api.get('/users', { params: { per_page: 100 } })
       return res.data?.data || res.data || {}
     },
     staleTime: 5 * 60 * 1000,
@@ -73,13 +73,13 @@ export const useDashboardData = ({ findingType } = {}) => {
   const { data: periodsResp, isLoading: periodsLoading, error: periodsError } = useQuery({
     queryKey: ['forumPeriods', 'list', 'dashboard'],
     queryFn: async () => {
-      const periodsResult = await listForumPeriods({ per_page: 1000 })
+      const periodsResult = await listForumPeriods({ per_page: 100 })
       const rawPeriods = ensureArray(periodsResult?.periods)
 
       const periodsWithForums = await Promise.all(
         rawPeriods.map(async (period) => {
           try {
-            const forumResp = await listForumPeriodForums(period.id, { per_page: 1000 })
+            const forumResp = await listForumPeriodForums(period.id, { per_page: 100 })
 
             const forums = ensureArray(forumResp?.forums).map((forum) => ({
               ...forum,
@@ -119,7 +119,7 @@ export const useDashboardData = ({ findingType } = {}) => {
     queryKey: ['topics', 'list', 'dashboard'],
     queryFn: async () => {
       try {
-        return await listTopics({ per_page: 1000 })
+        return await listTopics({ per_page: 100 })
       } catch (error) {
         const status = error?.response?.status
         if (status === 401 || status === 403) {

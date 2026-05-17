@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAdminClauses, useCreateClause, useDeleteClause } from '@/services/adminClauseHooks'
+import { useAdminClauses, useCreateClause, useDeleteClause } from '@/hooks/useAdminClause'
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 export default function Clauses() {

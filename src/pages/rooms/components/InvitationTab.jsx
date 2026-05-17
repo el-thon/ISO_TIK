@@ -9,7 +9,7 @@ import {
   useForumPeriod, 
   usePeriodJoinRequests,
   useApprovePeriodJoinRequest, 
-} from '@/services/forumPeriodHooks'
+} from '@/hooks/useForumPeriod'
 import { toast } from '@/components/ui/use-toast'
 
 // Komponen MemberManagementDialog - Dialog lengkap untuk manage member & requests

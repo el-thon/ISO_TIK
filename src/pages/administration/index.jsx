@@ -5,7 +5,7 @@ import Clauses from './Clauses'
 import TopicDocumentMasters from './TopicDocumentMasters'
 import UsersManagementTab from './UsersManagementTab'
 import OtpLoginSettings from './OtpLoginSettings'
-import { useMe } from '@/services/authHooks'
+import { useMe } from '@/hooks/useAuth'
 import { getUserData, getUserRoles } from '@/utils/auth'
 
 export default function AdministrationPage() {

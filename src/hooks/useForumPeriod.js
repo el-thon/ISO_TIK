@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getAccessToken } from './api'
-import * as forumPeriodService from './forumPeriodService'
+import { getAccessToken } from '@/services/api'
+import * as forumPeriodService from '@/services/forumPeriodService'
 
 const hasToken = () => Boolean(getAccessToken())
 const PERIOD_KEY = 'period'

@@ -10,7 +10,7 @@ import { Paperclip, Download, Search, UploadCloud, RefreshCw, X, FileText, Image
 import * as forumAttachmentService from '@/services/forumAttachmentService';
 import * as topicService from '@/services/topicService';
 import { getAccessToken } from '@/services/api';
-import { useBootstrapSession } from '@/services/authHooks';
+import { useBootstrapSession } from '@/hooks/useAuth';
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 const ITEMS_PER_PAGE = 20;

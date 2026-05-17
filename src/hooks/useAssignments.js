@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getAccessToken } from './api'
-import * as assignmentsService from './assignmentsService'
+import { getAccessToken } from '@/services/api'
+import * as assignmentsService from '@/services/assignmentsService'
 
 const hasToken = () => Boolean(getAccessToken())
 const withEnabled = (options = {}, guard = true) => Boolean((options.enabled ?? true) && guard && hasToken())

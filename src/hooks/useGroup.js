@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getAccessToken } from './api'
-import * as groupService from './groupService'
+import { getAccessToken } from '@/services/api'
+import * as groupService from '@/services/groupService'
 
 const hasToken = () => Boolean(getAccessToken())
 

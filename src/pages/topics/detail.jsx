@@ -18,10 +18,10 @@ import {
   useTopicVersions,
   useRevertTopicVersion,
   useTopicInputItems,
-} from '@/services/topicHooks'
-import { useMe } from '@/services/authHooks'
-import { useAdminClauses } from '@/services/adminClauseHooks'
-import { useRoomParticipants } from '@/services/roomHooks'
+} from '@/hooks/useTopic'
+import { useMe } from '@/hooks/useAuth'
+import { useAdminClauses } from '@/hooks/useAdminClause'
+import { useRoomParticipants } from '@/hooks/useRoom'
 import { ACTION_METADATA, isLikelyTopicId, buildErrorMessage } from './detail/utils'
 import { toast } from '@/components/ui/use-toast'
 import api from '@/services/api'

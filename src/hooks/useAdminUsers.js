@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getAccessToken } from './api'
-import * as adminUsersService from './adminUsersService'
+import { getAccessToken } from '@/services/api'
+import * as adminUsersService from '@/services/adminUsersService'
 
 const hasToken = () => !!getAccessToken()
 

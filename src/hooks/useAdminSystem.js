@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getAccessToken } from './api'
-import * as adminSystemService from './adminSystemService'
+import { getAccessToken } from '@/services/api'
+import * as adminSystemService from '@/services/adminSystemService'
 
 const hasToken = () => Boolean(getAccessToken())
 

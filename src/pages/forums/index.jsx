@@ -20,7 +20,7 @@ export default function ForumsPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['forums', 'list', 'ui'],
     queryFn: async () => {
-      const response = await api.get('/forums', { params: { per_page: 1000 } })
+      const response = await api.get('/forums', { params: { per_page: 100 } })
       const payload = response?.data?.data ?? response?.data ?? {}
       const rawForums = normalizeArray(
         payload?.forums ?? payload?.items ?? payload?.data ?? payload?.results ?? payload?.list ?? []

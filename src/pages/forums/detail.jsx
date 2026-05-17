@@ -18,8 +18,8 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useRoom, useRoomParticipants } from '@/services/roomHooks'
-import { useMe } from '@/services/authHooks'
+import { useRoom, useRoomParticipants } from '@/hooks/useRoom'
+import { useMe } from '@/hooks/useAuth'
 import { getAccessToken, getCurrentUserId, getUserData } from '@/utils/auth'
 import { toast } from '@/components/ui/use-toast'
 

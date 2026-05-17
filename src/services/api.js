@@ -1,9 +1,9 @@
 import axios from 'axios'
 import { toast } from '@/components/ui/use-toast'
+import { API_BASE_URL } from '@/config/api'
 
 // In development we prefer a relative API path so Vite can proxy /api to the backend
-const apiBaseEnv = (import.meta.env.VITE_API_BASE_URL || '').trim()
-const API_BASE = apiBaseEnv || '/api/v1'
+const API_BASE = API_BASE_URL
 
 // Token storage helpers (configurable via env)
 const ACCESS_KEY = (import.meta.env.VITE_ACCESS_TOKEN_KEY || 'iso_tik_access_token').trim()

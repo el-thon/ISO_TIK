@@ -157,7 +157,7 @@ export async function listForumPeriodForums(periodId, params = {}) {
     const shouldReconcileWithGlobal = resolvedForums.length <= 1
     if (shouldReconcileWithGlobal) {
       try {
-        const globalRes = await api.get('/forums', { params: { per_page: 1000, forum_period_id: periodId } })
+        const globalRes = await api.get('/forums', { params: { per_page: 100, forum_period_id: periodId } })
         const globalPayload = unwrap(globalRes) ?? {}
         const globalForums = ensureArray(
           pickArrayData(
@@ -206,7 +206,7 @@ export async function listForumPeriodForums(periodId, params = {}) {
     }
 
     // Fallback for product_owner: fetch from global /forums and scope by period when possible.
-    const globalRes = await api.get('/forums', { params: { per_page: 1000, forum_period_id: periodId } })
+    const globalRes = await api.get('/forums', { params: { per_page: 100, forum_period_id: periodId } })
     const globalPayload = unwrap(globalRes) ?? {}
 
     const allForums = ensureArray(

@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { useUpdateProfile } from '@/services/profileHooks'
+import { useUpdateProfile } from '@/hooks/useProfile'
 import { Field } from './components/common/Field'
 import { StatusMessage } from './components/common/StatusMessage'
 

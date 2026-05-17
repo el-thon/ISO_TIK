@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
-import { useCreateForumPeriodForum } from '@/services/forumPeriodHooks'
+import { useCreateForumPeriodForum } from '@/hooks/useForumPeriod'
 import { createRoomSchema } from '../constants'
 
 export default function CreateRoomForm({ onSuccess, selectedPeriodId }) {

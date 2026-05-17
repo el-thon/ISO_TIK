@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { getAccessToken } from './api'
-import * as auditLogsService from './auditLogsService'
+import { getAccessToken } from '@/services/api'
+import * as auditLogsService from '@/services/auditLogsService'
 
 const hasToken = () => Boolean(getAccessToken())
 

@@ -9,8 +9,8 @@ import { toast } from '@/components/ui/use-toast'
 import { getUserData, getUserRoles, isProductOwnerUser } from '@/utils/auth'
 
 // Hooks
-import { useForumPeriods, useForumPeriod, useForumPeriodForums, useJoinForumPeriod } from '@/services/forumPeriodHooks'
-import { usePeriodJoinRequests } from '@/services/forumPeriodHooks'
+import { useForumPeriods, useForumPeriod, useForumPeriodForums, useJoinForumPeriod } from '@/hooks/useForumPeriod'
+import { usePeriodJoinRequests } from '@/hooks/useForumPeriod'
 
 // Constants & Helpers
 import { isDeadlinePassedErrorMessage, isForumRelated, formatDate } from './constants'

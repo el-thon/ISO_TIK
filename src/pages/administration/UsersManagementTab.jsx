@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Loader2, Trash2, Edit2, KeyRound, UserPlus, ShieldCheck, Users, RefreshCcw } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useMe } from '@/services/authHooks'
+import { useMe } from '@/hooks/useAuth'
 import {
   useActivateAdminUser,
   useAdminRoles,
@@ -21,7 +21,7 @@ import {
   useDeleteAdminUser,
   useResetUserPassword,
   useUpdateAdminUser,
-} from '@/services/adminUsersHooks'
+} from '@/hooks/useAdminUsers'
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 const DEFAULT_CREATE = { username: '', email: '', password: '', status: 'active', full_name: '' }

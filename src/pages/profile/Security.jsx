@@ -15,7 +15,7 @@ import {
   useDownloadSignature,
   getSignatureUrl,
   hasSignature,
-} from '@/services/profileHooks'
+} from '@/hooks/useProfile'
 import { Loader2, ImageIcon, Download, Trash2, Upload } from 'lucide-react'
 
 const formatDate = (value) => {
@@ -209,7 +209,7 @@ export default function Security() {
   const [passwordStatus, setPasswordStatus] = useState(null)
   const [revokeStatus, setRevokeStatus] = useState(null)
 
-  // ========== SIGNATURE HANDLING (Menggunakan utilities dari profileHooks) ==========
+  // ========== SIGNATURE HANDLING (Menggunakan utilities dari useProfile) ==========
   const signatureData = signatureQuery.data || {}
 
   // Derive signature URL and presence from backend data. We also mirror the

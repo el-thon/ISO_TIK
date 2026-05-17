@@ -15,7 +15,7 @@ import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/use-toast'
 import AuthLayout from './AuthLayout'
-import { useLogin, useResendLoginOtp } from '@/services/authHooks'
+import { useLogin, useResendLoginOtp } from '@/hooks/useAuth'
 
 function Login() {
   const REMEMBER_KEY = import.meta.env.VITE_REMEMBER_KEY || 'iso_tik_remember_me'

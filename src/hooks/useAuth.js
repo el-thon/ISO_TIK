@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import * as authService from './authService'
-import { clearTokens, setTokens, getAccessToken, getRefreshToken } from './api'
+import * as authService from '@/services/authService'
+import { clearTokens, setTokens, getAccessToken, getRefreshToken } from '@/services/api'
 
 /**
  * useLogin - Hook untuk login

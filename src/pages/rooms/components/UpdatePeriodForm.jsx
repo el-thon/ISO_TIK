@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
-import { useUpdateForumPeriod } from '@/services/forumPeriodHooks'
+import { useUpdateForumPeriod } from '@/hooks/useForumPeriod'
 import { updatePeriodSchema } from '../constants'
 
 export default function UpdatePeriodForm({ period, onSuccess }) {

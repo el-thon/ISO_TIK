@@ -22,15 +22,15 @@ import {
   DialogPortal,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useRooms, useRoomParticipants } from '@/services/roomHooks'
-import { useCreateTopic, useCreateInputItem } from '@/services/topicHooks'
-import { useActiveDocumentMaster } from '@/services/activeMasterHooks'
+import { useRooms, useRoomParticipants } from '@/hooks/useRoom'
+import { useCreateTopic, useCreateInputItem } from '@/hooks/useTopic'
+import { useActiveDocumentMaster } from '@/hooks/useActiveMaster'
 import * as forumAttachmentService from '@/services/forumAttachmentService'
 import * as topicService from '@/services/topicService'
 import { cn } from '@/lib/utils'
 import { isPeriodDeadlinePassed } from '@/utils/periodDeadline'
-import { useAdminClauses } from '@/services/adminClauseHooks'
-import { useMe } from '@/services/authHooks'
+import { useAdminClauses } from '@/hooks/useAdminClause'
+import { useMe } from '@/hooks/useAuth'
 
 const FINDING_TYPES = [
   { value: 'minor', label: 'Minor', color: 'bg-yellow-100 text-yellow-800', description: 'Ketidaksesuaian ringan' },

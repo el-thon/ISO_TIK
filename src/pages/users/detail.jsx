@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Loader2 } from 'lucide-react'
-import { useAdminUser, useDeleteAdminUser, useUpdateAdminUser } from '@/services/adminUsersHooks'
-import { useAuditLogs } from '@/services/auditLogsHooks'
+import { useAdminUser, useDeleteAdminUser, useUpdateAdminUser } from '@/hooks/useAdminUsers'
+import { useAuditLogs } from '@/hooks/useAuditLogs'
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
 export default function UserDetail() {

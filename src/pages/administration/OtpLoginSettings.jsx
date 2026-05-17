@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/use-toast'
-import { useAdminSystemSettings, useUpdateAdminSystemSettings } from '@/services/adminSystemHooks'
+import { useAdminSystemSettings, useUpdateAdminSystemSettings } from '@/hooks/useAdminSystem'
 
 const OTP_SETTING_KEY = 'security.login_otp.enabled'
 

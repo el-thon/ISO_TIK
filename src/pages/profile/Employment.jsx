@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Info } from 'lucide-react'
-import { useUpdateEmployment } from '@/services/profileHooks'
+import { useUpdateEmployment } from '@/hooks/useProfile'
 import { Field } from './components/common/Field'
 
 const toDefaultValues = (employment) => {

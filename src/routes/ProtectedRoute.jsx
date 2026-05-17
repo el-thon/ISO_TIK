@@ -1,7 +1,7 @@
 // routes/ProtectedRoute.jsx
 import React, { useEffect, useMemo, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { useMe } from '@/services/authHooks'
+import { useMe } from '@/hooks/useAuth'
 import { getAccessToken } from '@/services/api'
 import { getUserData } from '@/utils/auth'
 import { toast } from '@/components/ui/use-toast'

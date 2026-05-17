@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import * as documentService from '@/services/documentService'
-import { useAdminClauses } from '@/services/adminClauseHooks'
+import { useAdminClauses } from '@/hooks/useAdminClause'
 
 const FindingTable = ({ findings, auditInfo }) => {
   const [documentNames, setDocumentNames] = useState({})

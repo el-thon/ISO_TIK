@@ -22,7 +22,7 @@ import {
   Bar,
   LabelList,
 } from 'recharts'
-import { useDashboardData } from '@/services/dashboardHooks'
+import { useDashboardData } from '@/hooks/useDashboard'
 import { toast } from '@/components/ui/use-toast'
 
 const ChildFormulirTooltip = ({ active, payload }) => {
