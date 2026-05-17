@@ -134,17 +134,8 @@ export const useDashboardData = ({ findingType } = {}) => {
   const { data: adminMasters, isLoading: adminMastersLoading, error: adminMastersError } = useQuery({
     queryKey: ['adminTopicDocumentMasters', 'dashboard'],
     queryFn: async () => {
-      try {
-        const res = await api.get('/admin/topic-document-masters')
-        return res.data?.data || res.data || []
-      } catch (error) {
-        // Endpoint ini memang khusus admin/product_owner; untuk member dashboard tetap harus bisa tampil.
-        const status = error?.response?.status
-        if (status === 401 || status === 403) {
-          return []
-        }
-        throw error
-      }
+      const res = await api.get('/admin/topic-document-masters')
+      return res.data?.data || res.data || []
     },
     staleTime: 5 * 60 * 1000,
   })
