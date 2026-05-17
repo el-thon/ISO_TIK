@@ -7,6 +7,8 @@ import { STORAGE_BASE_URL } from '@/config/api'
 // ============ UTILITY FUNCTIONS UNTUK PHOTO ============
 const PHOTO_OVERRIDE_KEY = 'iso_tik_profile_photo_override'
 const PHOTO_VERSION_KEY = 'iso_tik_photo_version'
+const MAX_PROFILE_PHOTO_SIZE = 2 * 1024 * 1024
+const ALLOWED_PROFILE_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 const STORAGE_BASE = STORAGE_BASE_URL
 
@@ -341,6 +343,18 @@ export function useProfilePhoto(profileData, refetch) {
     if (!file) return
     
     setPhotoMessage(null)
+
+    if (file.size > MAX_PROFILE_PHOTO_SIZE) {
+      setPhotoMessage('Ukuran foto maksimal 2MB')
+      setTimeout(() => setPhotoMessage(null), 3000)
+      return
+    }
+
+    if (!ALLOWED_PROFILE_PHOTO_TYPES.includes(file.type)) {
+      setPhotoMessage('Hanya file JPG, PNG, atau WEBP yang diperbolehkan')
+      setTimeout(() => setPhotoMessage(null), 3000)
+      return
+    }
     
     const objectUrl = URL.createObjectURL(file)
     if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
@@ -360,7 +374,8 @@ export function useProfilePhoto(profileData, refetch) {
       setTimeout(() => setPhotoMessage(null), 3000)
       setTimeout(() => refetch(), 1000)
     } catch (error) {
-      const message = error?.response?.data?.message || 'Gagal mengunggah foto'
+      const errors = error?.response?.data?.errors
+      const message = errors?.photo?.[0] || errors?.image?.[0] || errors?.file?.[0] || error?.response?.data?.message || 'Gagal mengunggah foto'
       setPhotoMessage(message)
       resetPreview()
       setTimeout(() => setPhotoMessage(null), 3000)
