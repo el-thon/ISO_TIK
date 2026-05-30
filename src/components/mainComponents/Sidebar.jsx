@@ -327,12 +327,12 @@ function SidebarInner() {
 export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
   return (
     <>
-      <aside className="hidden md:block md:w-60 lg:w-64 h-screen bg-white border-r border-slate-100 px-3 lg:px-4 py-5 lg:py-6 sticky top-0 overflow-y-auto shrink-0">
+      <aside className="hidden md:block md:w-60 lg:w-64 h-dvh min-h-dvh bg-white border-r border-slate-100 px-3 lg:px-4 py-5 lg:py-6 sticky top-0 overflow-y-auto shrink-0">
         <SidebarInner />
       </aside>
 
       <div 
-        className={`fixed inset-0 z-40 md:hidden ${mobileOpen ? '' : 'pointer-events-none'}`} 
+        className={`fixed inset-0 z-40 h-dvh md:hidden ${mobileOpen ? '' : 'pointer-events-none'}`} 
         aria-hidden={!mobileOpen}
       >
         <div
@@ -344,7 +344,7 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
         
         {/* Sidebar Mobile */}
         <div 
-          className={`absolute inset-y-0 left-0 z-50 w-[85vw] max-w-76 h-screen bg-white border-r border-slate-100 px-3 py-5 transform transition-transform duration-200 overflow-y-auto ${
+          className={`absolute inset-y-0 left-0 z-50 flex h-dvh min-h-dvh w-[85vw] max-w-76 bg-white border-r border-slate-100 px-3 py-5 transform transition-transform duration-200 overflow-y-auto overscroll-contain ${
             mobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >

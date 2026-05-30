@@ -10,7 +10,7 @@ import { useAdminSystemSettings, useUpdateAdminSystemSettings } from '@/hooks/us
 
 const OTP_SETTING_KEY = 'security.login_otp.enabled'
 
-function normalizeBoolean(value, fallback = true) {
+function normalizeBoolean(value, fallback = false) {
   if (typeof value === 'boolean') return value
   if (typeof value === 'number') return value === 1
   if (typeof value === 'string') {
@@ -30,7 +30,7 @@ export default function OtpLoginSettings() {
     [settings]
   )
 
-  const remoteEnabled = normalizeBoolean(otpSetting?.value, true)
+  const remoteEnabled = normalizeBoolean(otpSetting?.value, false)
 
   const [enabled, setEnabled] = useState(remoteEnabled)
 

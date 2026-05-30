@@ -5,7 +5,7 @@ import { User, Briefcase, Shield, FileText } from 'lucide-react'
 import { ProfileAvatar } from './ProfileAvatar'
 
 const navItemClass = (currentTab, tabName) =>
-  `flex items-center gap-3 px-3 py-2 rounded-md ${
+  `flex min-w-0 items-center gap-3 rounded-md px-3 py-2 ${
     currentTab === tabName ? 'bg-blue-50 text-blue-700' : 'text-foreground hover:bg-slate-50'
   }`
 
@@ -19,8 +19,8 @@ export const ProfileSidebar = ({
   onFileChange,
 }) => {
   return (
-    <Card>
-      <CardContent>
+    <Card className="w-full">
+      <CardContent className="p-4 sm:p-6">
         <input
           ref={fileInputRef}
           type="file"

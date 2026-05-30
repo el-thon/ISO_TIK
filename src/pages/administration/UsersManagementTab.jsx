@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Loader2, Trash2, Edit2, KeyRound, UserPlus, ShieldCheck, Users, RefreshCcw } from 'lucide-react'
+import { Loader2, Trash2, Edit2, KeyRound, UserPlus, ShieldCheck, Users, RefreshCcw, Search, Mail, UserRound } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMe } from '@/hooks/useAuth'
 import {
@@ -24,7 +26,7 @@ import {
 } from '@/hooks/useAdminUsers'
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
 
-const DEFAULT_CREATE = { username: '', email: '', password: '', status: 'active', full_name: '' }
+const DEFAULT_CREATE = { username: '', email: '', password: '', status: 'active', full_name: '', roleId: '' }
 const DEFAULT_EDIT = { username: '', email: '', status: 'active', full_name: '' }
 const DEFAULT_PASSWORD = { new_password: '', confirm_password: '', reason: '' }
 const DEFAULT_ROLE = { roleId: '', reason: '' }
@@ -42,6 +44,8 @@ export default function UsersManagementTab() {
 
   const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -58,7 +62,12 @@ export default function UsersManagementTab() {
   const [selectedIds, setSelectedIds] = useState(new Set())
 
   const perPage = 10
-  const listParams = useMemo(() => ({ page, per_page: perPage }), [page])
+  const listParams = useMemo(() => {
+    const params = { page, per_page: perPage }
+    if (debouncedQuery.trim()) params.search = debouncedQuery.trim()
+    if (statusFilter !== 'all') params.status = statusFilter
+    return params
+  }, [page, debouncedQuery, statusFilter])
   const { data: listData, isLoading, isFetching, error } = useAdminUsersList(listParams)
   const { data: stats } = useAdminUserStatistics()
   const {
@@ -67,12 +76,22 @@ export default function UsersManagementTab() {
     isError: isRolesError,
     error: rolesError,
     refetch: refetchRoles,
-  } = useAdminRoles({ enabled: roleOpen })
+  } = useAdminRoles({ enabled: roleOpen || createOpen })
   const roleOptions = roles ?? []
 
   useEffect(() => {
-    if (roleOpen) refetchRoles()
-  }, [roleOpen, refetchRoles])
+    if (roleOpen || createOpen) refetchRoles()
+  }, [roleOpen, createOpen, refetchRoles])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedQuery(query.trim())
+      setPage(1)
+      setSelectedIds(new Set())
+    }, 5000)
+
+    return () => window.clearTimeout(timeout)
+  }, [query])
 
   const { data: editingUserData } = useAdminUser(editingId, { enabled: !!editingId && editOpen })
 
@@ -134,14 +153,17 @@ export default function UsersManagementTab() {
     }
   }, [editingUserData])
 
+  useEffect(() => {
+    if (editingUserData && editOpen) {
+      setEditForm(derivedEditForm)
+    }
+  }, [editingUserData, derivedEditForm, editOpen])
+
   const users = listData?.users ?? []
   const pagination = listData?.pagination ?? { currentPage: page, lastPage: page, total: users.length }
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return users
-    const value = query.toLowerCase()
-    return users.filter((u) => u.username?.toLowerCase().includes(value) || u.status?.toLowerCase().includes(value))
-  }, [users, query])
+  const filtered = users
+  const isSearchPending = query.trim() !== debouncedQuery.trim()
 
   const selectedIdsForPage = useMemo(() => {
     return selectedIds
@@ -178,6 +200,7 @@ export default function UsersManagementTab() {
       password: createForm.password,
       email: createForm.email || undefined,
       status: createForm.status,
+      role_id: createForm.roleId || undefined,
       profile: { full_name: createForm.full_name },
     })
   }
@@ -188,10 +211,10 @@ export default function UsersManagementTab() {
     updateMutation.mutate({
       userId: editingId,
       payload: {
-        username: derivedEditForm.username,
-        email: derivedEditForm.email,
-        status: derivedEditForm.status,
-        profile: { full_name: derivedEditForm.full_name },
+        username: editForm.username,
+        email: editForm.email,
+        status: editForm.status,
+        profile: { full_name: editForm.full_name },
       },
     })
   }
@@ -239,59 +262,134 @@ export default function UsersManagementTab() {
     activateMutation.mutate(user.id)
   }
 
+  const normalizedStats = stats?.statistics ?? stats ?? {}
   const statsCards = [
-    { label: 'Total Pengguna', value: stats?.total_users ?? 0, icon: Users, tone: 'bg-slate-50 text-slate-900' },
-    { label: 'Aktif', value: stats?.active_users ?? 0, icon: ShieldCheck, tone: 'bg-emerald-50 text-emerald-900' },
-    { label: 'Nonaktif', value: stats?.inactive_users ?? 0, icon: RefreshCcw, tone: 'bg-amber-50 text-amber-900' },
+    { label: 'Total Pengguna', value: normalizedStats.total ?? normalizedStats.total_users ?? 0, status: 'all', icon: Users, tone: 'border-slate-200 bg-slate-50 text-slate-900' },
+    { label: 'Pengguna Aktif', value: normalizedStats.active ?? normalizedStats.active_users ?? 0, status: 'active', icon: ShieldCheck, tone: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
+    { label: 'Pengguna Nonaktif', value: normalizedStats.inactive ?? normalizedStats.inactive_users ?? 0, status: 'inactive', icon: RefreshCcw, tone: 'border-amber-200 bg-amber-50 text-amber-900' },
   ]
 
   return (
     <div className="w-full">
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
-          <div>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div className="min-w-0">
             <h2 className="text-heading-3 sm:text-heading-2 font-semibold">Manajemen Pengguna</h2>
             <p className="text-body-sm sm:text-body-md text-muted-foreground">Kelola akun pengguna dari panel administrasi.</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari username / status" className="w-full sm:w-64" />
-            {!isProductOwner && (
-              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                <DialogTrigger asChild>
-                  <Button className="bg-blue-600 text-white w-full sm:w-auto"><UserPlus className="w-4 h-4 mr-2" />Tambah Pengguna</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Pengguna Baru</DialogTitle>
-                    <DialogDescription>Lengkapi data minimum sesuai API.</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleCreateSubmit} className="grid gap-3">
-                    <Input required placeholder="Username" value={createForm.username} onChange={(e) => setCreateForm((prev) => ({ ...prev, username: e.target.value }))} />
-                    <Input type="email" placeholder="Email" value={createForm.email} onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))} />
-                    <Input required type="password" placeholder="Password" value={createForm.password} onChange={(e) => setCreateForm((prev) => ({ ...prev, password: e.target.value }))} />
-                    <Input required placeholder="Nama Lengkap" value={createForm.full_name} onChange={(e) => setCreateForm((prev) => ({ ...prev, full_name: e.target.value }))} />
-                    <Select value={createForm.status} onValueChange={(status) => setCreateForm((prev) => ({ ...prev, status }))}>
-                      <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <DialogFooter>
-                      <Button type="submit" disabled={createMutation.isLoading}>{createMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}</Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            )}
+          {!isProductOwner && (
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-blue-600 text-white w-full sm:w-auto"><UserPlus className="w-4 h-4 mr-2" />Tambah Pengguna</Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Pengguna Baru</DialogTitle>
+                  <DialogDescription>Lengkapi identitas akun dan pilih role awal pengguna.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateSubmit} className="grid gap-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-2">
+                      <Label htmlFor="create-full-name">Nama lengkap</Label>
+                      <div className="relative">
+                        <UserRound className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input id="create-full-name" required placeholder="Nama pengguna" className="pl-9" value={createForm.full_name} onChange={(e) => setCreateForm((prev) => ({ ...prev, full_name: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="create-username">Username</Label>
+                      <Input id="create-username" required placeholder="username" value={createForm.username} onChange={(e) => setCreateForm((prev) => ({ ...prev, username: e.target.value }))} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="create-email">Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input id="create-email" required type="email" placeholder="nama@kampus.ac.id" className="pl-9" value={createForm.email} onChange={(e) => setCreateForm((prev) => ({ ...prev, email: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="create-password">Password</Label>
+                      <Input id="create-password" required type="password" placeholder="Minimal 8 karakter" value={createForm.password} onChange={(e) => setCreateForm((prev) => ({ ...prev, password: e.target.value }))} />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Status</Label>
+                      <Select value={createForm.status} onValueChange={(status) => setCreateForm((prev) => ({ ...prev, status }))}>
+                        <SelectTrigger className="w-full"><SelectValue placeholder="Pilih status" /></SelectTrigger>
+                        <SelectContent position="popper" className="w-[var(--radix-select-trigger-width)]">
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Role</Label>
+                      <Select value={createForm.roleId} onValueChange={(roleId) => setCreateForm((prev) => ({ ...prev, roleId }))} disabled={isRolesLoading || isRolesError || !roleOptions.length}>
+                        <SelectTrigger className="w-full"><SelectValue placeholder={isRolesLoading ? 'Memuat role...' : 'Pilih role'} /></SelectTrigger>
+                        <SelectContent position="popper" className="w-[var(--radix-select-trigger-width)]">
+                          {isRolesLoading && <SelectItem disabled value="__loading">Memuat daftar role...</SelectItem>}
+                          {!isRolesLoading && roleOptions.map((role) => {
+                            const value = String(role.id ?? role.name)
+                            return <SelectItem key={value} value={value}>{role.display_name || role.name || value}</SelectItem>
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {isRolesError && (
+                    <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                      {rolesError?.response?.data?.message || 'Gagal memuat daftar role.'}
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Batal</Button>
+                    <Button type="submit" disabled={createMutation.isLoading}>{createMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}</Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+          </div>
+          <div className="w-full">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cari nama, username, email, NIP, departemen, atau unit"
+                className="w-full pl-9 pr-28"
+              />
+              <Badge variant="outline" className="absolute right-2 top-1/2 -translate-y-1/2 bg-background">
+                {isSearchPending ? 'Menunggu 5 detik' : 'Siap'}
+              </Badge>
+            </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {statsCards.map(({ label, value, tone }) => (
-            <Card key={label} className={tone}>
+          {statsCards.map(({ label, value, tone, status, icon: Icon }) => (
+            <Card
+              key={label}
+              role="button"
+              tabIndex={0}
+              className={`${tone} cursor-pointer transition hover:shadow-sm ${statusFilter === status ? 'ring-2 ring-ring ring-offset-2' : ''}`}
+              onClick={() => {
+                setStatusFilter(status)
+                setPage(1)
+                setSelectedIds(new Set())
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setStatusFilter(status)
+                  setPage(1)
+                  setSelectedIds(new Set())
+                }
+              }}
+            >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">{label}</CardTitle>
+                <Icon className="size-4 opacity-70" />
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-semibold">{value}</div>
@@ -310,7 +408,7 @@ export default function UsersManagementTab() {
       <Card>
         <CardContent className="p-0 sm:p-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-0 py-4 text-sm text-muted-foreground">
-            <div>{isFetching ? 'Memuat data...' : `${pagination.total ?? users.length} pengguna`} · {selectedIds.size} dipilih</div>
+            <div>{isFetching ? 'Memuat data...' : `${pagination.total ?? users.length} pengguna`} · {statusFilter === 'all' ? 'semua status' : statusFilter} · {selectedIds.size} dipilih</div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => handlePageChange(Math.max(1, page - 1))}>Sebelumnya</Button>
               <div>Halaman {pagination.currentPage} / {pagination.lastPage}</div>
@@ -461,19 +559,25 @@ export default function UsersManagementTab() {
       </Dialog>
 
       <Dialog open={!isProductOwner && roleOpen} onOpenChange={(open) => { setRoleOpen(open); if (!open) { setRoleForm(DEFAULT_ROLE); setRoleUserId(null) } }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Atur Role</DialogTitle></DialogHeader>
-          <form onSubmit={handleAssignRole} className="grid gap-3">
-            <Select value={roleForm.roleId} onValueChange={(roleId) => setRoleForm((prev) => ({ ...prev, roleId }))} disabled={isRolesLoading || isRolesError || !roleOptions.length}>
-              <SelectTrigger><SelectValue placeholder={isRolesLoading ? 'Memuat role...' : 'Pilih Role'} /></SelectTrigger>
-              <SelectContent>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Atur Role</DialogTitle>
+            <DialogDescription>Pilih role baru untuk pengguna yang dipilih.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAssignRole} className="grid gap-4">
+            <div className="grid gap-2">
+              <Label>Role pengguna</Label>
+              <Select value={roleForm.roleId} onValueChange={(roleId) => setRoleForm((prev) => ({ ...prev, roleId }))} disabled={isRolesLoading || isRolesError || !roleOptions.length}>
+                <SelectTrigger className="w-full"><SelectValue placeholder={isRolesLoading ? 'Memuat role...' : 'Pilih role'} /></SelectTrigger>
+                <SelectContent position="popper" className="w-[var(--radix-select-trigger-width)]">
                 {isRolesLoading && <SelectItem disabled value="__loading">Memuat daftar role...</SelectItem>}
                 {!isRolesLoading && roleOptions.map((role) => {
                   const value = String(role.id ?? role.name)
                   return <SelectItem key={value} value={value}>{role.display_name || role.name || value}</SelectItem>
                 })}
-              </SelectContent>
-            </Select>
+                </SelectContent>
+              </Select>
+            </div>
             {isRolesError && (
               <div className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-3 py-2 flex items-center justify-between gap-2">
                 <span>{rolesError?.response?.data?.message || 'Gagal memuat role.'}</span>
@@ -483,8 +587,14 @@ export default function UsersManagementTab() {
             {!isRolesLoading && !isRolesError && !roleOptions.length && (
               <div className="text-xs text-muted-foreground border border-dashed rounded-md px-3 py-2">Belum ada role yang tersedia.</div>
             )}
-            <textarea className="border rounded-md p-2 text-sm" rows={3} placeholder="Catatan (opsional)" value={roleForm.reason} onChange={(e) => setRoleForm((prev) => ({ ...prev, reason: e.target.value }))} />
-            <DialogFooter><Button type="submit" disabled={assignRoleMutation.isLoading}>{assignRoleMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}</Button></DialogFooter>
+            <div className="grid gap-2">
+              <Label htmlFor="role-reason">Catatan</Label>
+              <textarea id="role-reason" className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" rows={3} placeholder="Catatan opsional" value={roleForm.reason} onChange={(e) => setRoleForm((prev) => ({ ...prev, reason: e.target.value }))} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRoleOpen(false)}>Batal</Button>
+              <Button type="submit" disabled={assignRoleMutation.isLoading || !roleForm.roleId}>{assignRoleMutation.isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Simpan'}</Button>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

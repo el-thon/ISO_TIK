@@ -6,10 +6,10 @@ export default function MainLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen flex bg-slate-50">
+    <div className="min-h-dvh flex bg-slate-50">
       <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col">
+      <div className="min-w-0 flex-1 flex flex-col">
         {/* Mobile header with hamburger */}
         <header className="md:hidden bg-white border-b border-slate-100 p-3 flex items-center justify-between">
           <button
@@ -23,7 +23,7 @@ export default function MainLayout({ children }) {
           <div />
         </header>
 
-        <main className="flex-1 p-4 md:p-8">
+        <main className="min-w-0 flex-1 p-4 md:p-8">
           {children}
         </main>
       </div>

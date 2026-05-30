@@ -446,6 +446,7 @@ export default function Security() {
               <Button 
                 type="submit" 
                 disabled={changePassword.isPending}
+                className="w-full sm:w-auto"
               >
                 {changePassword.isPending ? 'Menyimpan...' : 'Simpan Password'}
               </Button>
@@ -470,8 +471,8 @@ export default function Security() {
       {/* Active Sessions */}
       <Card>
         <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h4 className="font-medium">Sesi Aktif</h4>
               <p className="text-xs text-muted-foreground">
                 Kelola perangkat yang sedang login
@@ -481,7 +482,7 @@ export default function Security() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="min-w-[680px] w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="py-2">Device</th>
@@ -537,7 +538,7 @@ export default function Security() {
 
           {/* Session Pagination */}
           {sessionPagination && sessionPagination.lastPage > 1 && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>
                 Halaman {sessionPagination.currentPage} / {sessionPagination.lastPage}
               </span>
@@ -565,17 +566,18 @@ export default function Security() {
           )}
 
           {/* Revoke All Form */}
-          <form onSubmit={handleRevokeAll} className="flex flex-col gap-3 md:flex-row md:items-center border rounded-lg p-3">
+          <form onSubmit={handleRevokeAll} className="flex flex-col gap-3 lg:flex-row lg:items-center border rounded-lg p-3">
             <Input 
               type="password" 
               name="revoke_password" 
               placeholder="Masukkan password untuk mencabut semua sesi" 
-              className="flex-1" 
+              className="min-w-0 flex-1" 
             />
             <Button 
               type="submit" 
               variant="destructive" 
               disabled={revokeAllSessions.isPending}
+              className="w-full lg:w-auto"
             >
               {revokeAllSessions.isPending ? 'Memproses...' : 'Cabut semua sesi lain'}
             </Button>
@@ -592,8 +594,8 @@ export default function Security() {
       {/* Login History */}
       <Card>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h4 className="font-medium">Riwayat Login</h4>
               <p className="text-xs text-muted-foreground">
                 Jejak login 30 hari terakhir
@@ -603,7 +605,7 @@ export default function Security() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="min-w-[620px] w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground">
                 <tr>
                   <th className="py-2">Login</th>
@@ -644,7 +646,7 @@ export default function Security() {
 
           {/* History Pagination */}
           {historyPagination && historyPagination.lastPage > 1 && (
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>
                 Halaman {historyPagination.currentPage} / {historyPagination.lastPage}
               </span>

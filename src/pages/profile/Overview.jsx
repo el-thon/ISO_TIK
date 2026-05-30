@@ -94,8 +94,8 @@ export default function Overview({ profileData, onRefetch }) {
   return (
     <Card>
       <CardContent>
-        <div className="flex items-center justify-between mb-4">
-          <div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-lg font-medium">Overview</h3>
             <p className="text-xs text-muted-foreground">Ringkasan data profil kamu</p>
           </div>
@@ -104,7 +104,7 @@ export default function Overview({ profileData, onRefetch }) {
               Edit
             </Button>
           ) : (
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Button
                 variant="outline"
                 size="sm"
@@ -130,7 +130,7 @@ export default function Overview({ profileData, onRefetch }) {
         </div>
 
         {!editing && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
               <InfoPair label="Nama Lengkap" value={profile.full_name || profileData?.username} />
               <InfoPair label="Email Institusi" value={profileData?.email} />
@@ -149,7 +149,7 @@ export default function Overview({ profileData, onRefetch }) {
         )}
 
         {editing && (
-          <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div className="space-y-4">
               <div>
                 <div className="text-xs text-muted-foreground">Nama Lengkap</div>
@@ -182,7 +182,7 @@ export default function Overview({ profileData, onRefetch }) {
                 <div className="text-xs text-muted-foreground">Email Pribadi</div>
                 <Input className="mt-1" {...form.register('email_personal')} placeholder="nama@gmail.com" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div>
                   <div className="text-xs text-muted-foreground">Kota</div>
                   <Input className="mt-1" {...form.register('city')} />
@@ -200,7 +200,7 @@ export default function Overview({ profileData, onRefetch }) {
                 <div className="text-xs text-muted-foreground">Alamat Baris 2</div>
                 <Input className="mt-1" {...form.register('address_line2')} placeholder="RT / RW / Unit" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div>
                   <div className="text-xs text-muted-foreground">Kode Pos</div>
                   <Input className="mt-1" {...form.register('postal_code')} />

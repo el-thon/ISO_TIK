@@ -105,8 +105,8 @@ export default function Employment({ employment, onRefetch }) {
     <div>
       <Card>
         <CardContent>
-          <div className="flex items-start justify-between mb-4">
-            <div>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
               <h3 className="text-lg font-medium">Informasi Kepegawaian</h3>
               <p className="text-xs text-muted-foreground">Perbarui data kepegawaian kamu</p>
             </div>
@@ -122,7 +122,7 @@ export default function Employment({ employment, onRefetch }) {
                 Edit
               </Button>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   variant="outline"
                   size="sm"
@@ -157,7 +157,7 @@ export default function Employment({ employment, onRefetch }) {
           )}
 
           {!editing && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               {fields.map((field) => (
                 <Field key={field.label} label={field.label}>
                   {renderReadValue(field.value)}
@@ -167,7 +167,7 @@ export default function Employment({ employment, onRefetch }) {
           )}
 
           {editing && (
-            <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               {fields.map((field) => (
                 <Field key={field.label} label={field.label}>
                   <Input className="mt-1" {...form.register(field.name)} />

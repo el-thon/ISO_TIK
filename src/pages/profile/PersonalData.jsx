@@ -119,7 +119,7 @@ export default function PersonalData({ profileData, onRefetch }) {
     <div className="space-y-6">
       <div>
         <h4 className="font-medium mb-2">Profil</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <div className="text-xs text-muted-foreground">Nama Lengkap</div>
             {renderValue(defaultValues.full_name)}
@@ -129,7 +129,7 @@ export default function PersonalData({ profileData, onRefetch }) {
 
       <div>
         <h4 className="font-medium mb-2">Kontak</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <div className="text-xs text-muted-foreground">Nomor Telepon</div>
             {renderValue(defaultValues.phone_number)}
@@ -143,7 +143,7 @@ export default function PersonalData({ profileData, onRefetch }) {
 
       <div>
         <h4 className="font-medium mb-2">Alamat</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div>
             <div className="text-xs text-muted-foreground">Alamat Baris 1</div>
             {renderValue(defaultValues.address_line1)}
@@ -173,7 +173,7 @@ export default function PersonalData({ profileData, onRefetch }) {
 
       <div>
         <h4 className="font-medium mb-2">Kontak Darurat</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div>
             <div className="text-xs text-muted-foreground">Nama</div>
             {renderValue(defaultValues.emergency_name)}
@@ -195,8 +195,8 @@ export default function PersonalData({ profileData, onRefetch }) {
     <div>
       <Card>
         <CardContent>
-          <div className="flex items-center justify-between mb-4">
-            <div>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <h3 className="text-lg font-medium">Data Pribadi</h3>
               <p className="text-xs text-muted-foreground">Perbarui identitas, kontak, dan alamat kamu</p>
             </div>
@@ -213,7 +213,7 @@ export default function PersonalData({ profileData, onRefetch }) {
                 Edit
               </Button>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
                   variant="outline"
@@ -245,7 +245,7 @@ export default function PersonalData({ profileData, onRefetch }) {
             <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div>
               <h4 className="font-medium mb-2">Profil</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div>
                   <div className="text-xs text-muted-foreground">Nama Lengkap</div>
                   <Input className="mt-1" {...form.register('full_name')} placeholder="Nama lengkap" />
@@ -255,7 +255,7 @@ export default function PersonalData({ profileData, onRefetch }) {
 
             <div>
               <h4 className="font-medium mb-2">Kontak</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div>
                   <div className="text-xs text-muted-foreground">Nomor Telepon</div>
                   <Input className="mt-1" {...form.register('phone_number')} placeholder="Contoh: +6281xxxx" />
@@ -269,7 +269,7 @@ export default function PersonalData({ profileData, onRefetch }) {
 
             <div>
               <h4 className="font-medium mb-2">Alamat</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 <div>
                   <div className="text-xs text-muted-foreground">Alamat Baris 1</div>
                   <Input className="mt-1" {...form.register('address_line1')} placeholder="Nama jalan" />
@@ -299,7 +299,7 @@ export default function PersonalData({ profileData, onRefetch }) {
 
             <div>
               <h4 className="font-medium mb-2">Kontak Darurat</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <div>
                   <div className="text-xs text-muted-foreground">Nama</div>
                   <Input className="mt-1" {...form.register('emergency_name')} />

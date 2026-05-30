@@ -29,21 +29,21 @@ export default function AdministrationPage() {
 
   return (
     <MainLayout>
-      <div className="max-w-full mx-auto px-6 py-6">
+      <div className="w-full max-w-full mx-auto px-0 py-4 sm:px-4 sm:py-6 lg:px-6">
         <div className="mb-6">
           <h1 className="text-heading-2 font-semibold">Administrasi</h1>
           <p className="text-body-md text-muted-foreground">Kelola pengaturan sistem dan peran organisasi</p>
         </div>
 
-        <div className="border-b border-slate-100 mb-4 overflow-x-auto">
-          <ul className="flex gap-6 min-w-max">
+        <div className="mb-4 overflow-x-auto border-b border-slate-100">
+          <ul className="flex min-w-max gap-3 sm:gap-6">
             {tabs.map((t) => {
               const Icon = t.Icon
               return (
                 <li key={t.key}>
                   <button
                     onClick={() => setTab(t.key)}
-                    className={`flex items-center gap-2 pb-3 ${
+                    className={`flex items-center gap-2 whitespace-nowrap px-1 pb-3 text-sm sm:text-base ${
                       safeTab === t.key ? 'text-blue-600 border-b-2 border-blue-600' : 'text-foreground'
                     }`}
                   >
@@ -56,7 +56,7 @@ export default function AdministrationPage() {
           </ul>
         </div>
 
-        <div>
+        <div className="min-w-0">
           {safeTab === 'clauses' && <Clauses />}
           {safeTab === 'masters' && <TopicDocumentMasters />}
           {safeTab === 'users' && <UsersManagementTab />}

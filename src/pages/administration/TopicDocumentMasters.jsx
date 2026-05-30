@@ -24,9 +24,9 @@ function MastersList({ masters, onActivate, onEdit, onDelete, readOnly = false }
           className={`p-4 rounded-lg border bg-background shadow-sm animate-in fade-in-0 slide-in-from-bottom-2`}
           style={{ animationDelay: `${idx * 40}ms` }}
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <div className="text-sm font-semibold truncate">{m.document_number || '—'}</div>
                 {m.is_active && <div className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Aktif</div>}
               </div>
@@ -34,7 +34,7 @@ function MastersList({ masters, onActivate, onEdit, onDelete, readOnly = false }
             </div>
 
             {!readOnly && (
-              <div className="flex items-center gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
                 <Button variant="outline" size="sm" onClick={() => onActivate(m)}>
                   {m.is_active ? 'Nonaktifkan' : 'Aktifkan'}
                 </Button>
@@ -132,11 +132,11 @@ export default function TopicDocumentMasters() {
 
   return (
     <Card>
-      <CardHeader className="flex items-center justify-between">
+      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <CardTitle>Dokumen Header</CardTitle>
         {!isProductOwner && (
-          <div>
-            <Button onClick={openCreate}>Buat Master Baru</Button>
+          <div className="w-full sm:w-auto">
+            <Button onClick={openCreate} className="w-full sm:w-auto">Buat Master Baru</Button>
           </div>
         )}
       </CardHeader>
@@ -151,7 +151,7 @@ export default function TopicDocumentMasters() {
         )}
 
         <Dialog open={!isProductOwner && showCreate} onOpenChange={setShowCreate}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>{form.id ? 'Edit Master' : 'Buat Master Dokumen'}</DialogTitle>
               <DialogDescription>Isi informasi header dokumen yang akan digunakan saat membuat formulir.</DialogDescription>
@@ -174,8 +174,8 @@ export default function TopicDocumentMasters() {
                 <label htmlFor="is_active" className="text-sm">Set aktif (hanya satu boleh aktif)</label>
               </div>
               <DialogFooter>
-                <div className="flex items-center gap-3 justify-end w-full">
-                  <Button variant="outline" onClick={()=>setShowCreate(false)}>Batal</Button>
+                <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+                  <Button variant="outline" type="button" onClick={()=>setShowCreate(false)}>Batal</Button>
                   <Button type="submit" disabled={isProductOwner}>Simpan</Button>
                 </div>
               </DialogFooter>

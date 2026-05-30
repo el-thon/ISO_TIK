@@ -74,10 +74,10 @@ export default function ProfilePage() {
 
   return (
     <MainLayout>
-      <div className="max-w-full mx-auto px-6 py-6">
-        <div className="flex items-start gap-6">
+      <div className="w-full max-w-full mx-auto px-0 py-4 sm:px-4 sm:py-6 lg:px-6">
+        <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:items-start">
           {/* Left Column - Sidebar */}
-          <div className="w-72">
+          <div className="w-full lg:w-72 lg:shrink-0">
             <ProfileSidebar
               currentTab={safeTab}
               displayName={displayName}
@@ -90,9 +90,9 @@ export default function ProfilePage() {
           </div>
 
           {/* Right Column - Content */}
-          <div className="flex-1">
-            <div className="flex items-center justify-between mb-4">
-              <div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <h2 className="text-heading-2 font-semibold">Profile</h2>
                 <p className="text-body-md text-muted-foreground">
                   Kelola informasi pribadi dan preferensi akun

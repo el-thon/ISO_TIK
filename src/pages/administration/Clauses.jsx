@@ -52,7 +52,7 @@ export default function Clauses() {
   const createError = createMutation.error?.response?.data?.message || createMutation.error?.message
 
   return (
-    <div className={`grid gap-6 ${isProductOwner ? 'grid-cols-1' : 'lg:grid-cols-[360px_1fr]'}`}>
+    <div className={`grid min-w-0 gap-6 ${isProductOwner ? 'grid-cols-1' : 'grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)]'}`}>
       {!isProductOwner && (
         <Card>
           <CardContent className="pt-6">
@@ -90,19 +90,19 @@ export default function Clauses() {
 
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-sm font-semibold">Daftar Klausul</h3>
               <p className="text-xs text-muted-foreground">Hanya admin yang bisa mengelola klausul.</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Input
                 placeholder="Cari klausul..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="md:w-64"
+                className="w-full sm:w-64"
               />
-              <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
                 Refresh
               </Button>
             </div>
@@ -129,8 +129,8 @@ export default function Clauses() {
           {!isLoading && !isError && clauses.length > 0 && (
             <div className="space-y-3">
               {clauses.map((clause) => (
-                <div key={clause.id} className="border rounded-md p-3 flex items-start justify-between gap-3">
-                  <div>
+                <div key={clause.id} className="border rounded-md p-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
                     <div className="text-sm font-medium">{clause.code} - {clause.name}</div>
                     {clause.description && (
                       <div className="text-xs text-muted-foreground mt-1">{clause.description}</div>
@@ -142,9 +142,9 @@ export default function Clauses() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-rose-600"
                     disabled={isProductOwner || deleteMutation.isPending}
                     onClick={() => deleteMutation.mutate(clause.id)}
+                    className="self-end text-rose-600 sm:self-auto"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
