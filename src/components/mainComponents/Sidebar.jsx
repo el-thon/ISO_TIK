@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Home, Columns, DoorOpen, Settings, LogOut } from 'lucide-react'
 
 const PHOTO_VERSION_KEY = 'iso_tik_photo_version'
+const BRAND_LOGO_URL = 'https://yt3.googleusercontent.com/ytc/AIdro_m3JgMEr2nlwzyUooDY093Dyipw7f2akj_lldmL2_SYbQ=s900-c-k-c0x00ffffff-no-rj'
 
 const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
 const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?$/, '') : ''
@@ -65,6 +66,14 @@ const getUserInitials = (name) => {
 const truncateEmail = (email) => {
   if (!email) return ''
   return email.length > 24 ? `${email.slice(0, 24)}...` : email
+}
+
+const firstFilled = (...values) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+
+  return ''
 }
 
 // Fungsi untuk mengecek apakah user adalah admin
@@ -213,8 +222,15 @@ const UserProfile = ({ name, email, photoUrl, signatureStatus, signatureTone, on
 function SidebarInner() {
   const navigate = useNavigate()
   const { data: profileData } = useProfile()
+  const { data: meData } = useMe({
+    staleTime: 60_000,
+    retry: 1,
+  })
   const signatureQuery = useSignature()
   const { canManageUsers, isProductOwner } = useUserPermissions()
+  const localUser = getUserData()
+  const profileUser = profileData?.user || profileData?.data?.user || {}
+  const profileContact = profileData?.contact || profileData?.data?.contact || profileUser?.contact || {}
 
   // Filter nav items berdasarkan permissions
   const filteredNavItems = useMemo(() => {
@@ -241,18 +257,35 @@ function SidebarInner() {
   // Ekstrak data profile dengan berbagai format
   const displayName = 
     profileData?.profile?.full_name || 
+    profileData?.data?.profile?.full_name ||
+    profileUser?.profile?.full_name ||
+    meData?.profile?.full_name ||
+    meData?.data?.profile?.full_name ||
+    meData?.data?.user?.profile?.full_name ||
     profileData?.full_name ||
     profileData?.name || 
+    profileUser?.name ||
+    meData?.name ||
+    meData?.data?.user?.name ||
     profileData?.username || 
-    getUserData()?.name ||
-    getUserData()?.username ||
+    profileUser?.username ||
+    meData?.username ||
+    meData?.data?.user?.username ||
+    localUser?.name ||
+    localUser?.username ||
     'Pengguna'
   
-  const displayEmail = 
-    profileData?.email || 
-    profileData?.profile?.email || 
-    getUserData()?.email ||
-    ''
+  const displayEmail = firstFilled(
+    profileContact.email_personal,
+    profileContact.email_institutional,
+    profileData?.email,
+    profileUser?.email,
+    meData?.email,
+    meData?.data?.user?.email,
+    localUser?.contact?.email_personal,
+    localUser?.contact?.email_institutional,
+    localUser?.email,
+  )
 
   const rawPhotoPath =
     profileData?.photo_url ||
@@ -292,6 +325,11 @@ function SidebarInner() {
     <div className="flex h-full min-h-0 flex-col justify-between gap-4">
       <div>
         <div className="mb-6 flex items-center gap-3 px-1">
+          <img
+            src={BRAND_LOGO_URL}
+            alt="Audit Internal UPA TIK"
+            className="h-10 w-10 shrink-0 rounded-md object-cover"
+          />
           <div>
             <div className="text-heading-3 font-semibold leading-tight">Sistem TIK</div>
             <div className="text-xs text-muted-foreground">Audit Internal</div>
