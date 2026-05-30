@@ -1,0 +1,64 @@
+services:
+  frontend:
+    build:
+      context: ./ISO-TIK-FE-v2
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api/v1}
+        VITE_STORAGE_BASE_URL: ${VITE_STORAGE_BASE_URL:-http://localhost:8080}
+    image: iso-tik-fe:latest
+    container_name: iso-tik-fe-prod
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      - app
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ./iso-tik-be
+      dockerfile: Containerfile
+    image: localhost/iso-tik-be-app:local
+    container_name: iso-tik-be-app
+    working_dir: /var/www/html
+    env_file:
+      - ./iso-tik-be/.env
+    environment:
+      COMPOSER_CACHE_DIR: /tmp/cache
+      DB_HOST: postgres
+      DB_PORT: 5432
+      APP_URL: ${BACKEND_APP_URL:-http://localhost:8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    volumes:
+      - ./iso-tik-be:/var/www/html:Z
+      - iso-tik-be-composer-cache:/tmp/cache:Z
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -lc "composer install && php artisan migrate --seed --force && php artisan serve --host=0.0.0.0 --port=8080"
+    restart: unless-stopped
+
+  postgres:
+    image: docker.io/library/postgres:15-alpine
+    container_name: iso-tik-be-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-iso_tik_be_db}
+      POSTGRES_USER: ${POSTGRES_USER:-iso_tik_be_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iso_tik_be_password}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - iso-tik-be-postgres-data:/var/lib/postgresql/data:Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  iso-tik-be-postgres-data:
+  iso-tik-be-composer-cache:
