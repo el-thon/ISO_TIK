@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Home, Columns, DoorOpen, Settings, LogOut } from 'lucide-react'
 
 const PHOTO_VERSION_KEY = 'iso_tik_photo_version'
-const BRAND_LOGO_URL = 'https://yt3.googleusercontent.com/ytc/AIdro_m3JgMEr2nlwzyUooDY093Dyipw7f2akj_lldmL2_SYbQ=s900-c-k-c0x00ffffff-no-rj'
+const BRAND_LOGO_URL = '/logo-upa-tik-unila.png'
 
 const rawApiBase = (import.meta.env.VITE_API_BASE_URL || '').trim()
 const apiOrigin = rawApiBase ? rawApiBase.replace(/\/api\/?$/, '') : ''
@@ -327,10 +327,10 @@ function SidebarInner() {
         <div className="mb-6 flex items-center gap-3 px-1">
           <img
             src={BRAND_LOGO_URL}
-            alt="Audit Internal UPA TIK"
-            className="h-10 w-10 shrink-0 rounded-md object-cover"
+            alt="UPA TIK UNILA"
+            className="h-12 w-40 shrink-0 object-contain"
           />
-          <div>
+          <div className="sr-only">
             <div className="text-heading-3 font-semibold leading-tight">Sistem TIK</div>
             <div className="text-xs text-muted-foreground">Audit Internal</div>
           </div>
