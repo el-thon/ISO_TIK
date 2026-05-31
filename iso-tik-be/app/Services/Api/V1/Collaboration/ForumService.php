@@ -75,12 +75,21 @@ class ForumService
 
     public function show(string $roomId, Request $request): JsonResponse
     {
-        return $this->forumResponse(Forum::withTrashed()->findOrFail($roomId), 'Forum retrieved successfully', $request);
+        $forum = Forum::withTrashed()->findOrFail($roomId);
+        if (! $this->canAccessForum($forum, $request)) {
+            return ApiResponse::forbidden('You are not a participant of this forum');
+        }
+
+        return $this->forumResponse($forum, 'Forum retrieved successfully', $request);
     }
 
     public function update(string $roomId, array $payload, Request $request): JsonResponse
     {
         $forum = Forum::withTrashed()->findOrFail($roomId);
+        if (! $this->canManageForum($forum, $request)) {
+            return ApiResponse::forbidden('You are not allowed to manage this forum');
+        }
+
         $forum->fill(Arr::only($payload, ['name', 'description', 'visibility', 'responsible_user_id', 'join_code', 'is_join_code_active', 'is_locked', 'is_archived']))->save();
         if ($forum->responsible_user_id && $responsible = User::find($forum->responsible_user_id)) $this->ensureParticipant($forum, $responsible, 'auditor', $request->user(), true);
         $this->audit->record($request->user(), 'forum', $forum->id, 'update_forum', [], $request);
@@ -91,6 +100,10 @@ class ForumService
     public function destroy(string $roomId, Request $request): JsonResponse
     {
         $forum = Forum::findOrFail($roomId);
+        if (! $this->canManageForum($forum, $request)) {
+            return ApiResponse::forbidden('You are not allowed to manage this forum');
+        }
+
         $forum->forceFill(['deleted_by' => $request->user()?->id])->save();
         $forum->delete();
         $this->audit->record($request->user(), 'forum', $forum->id, 'delete_forum', ['reason' => $request->input('reason')], $request);
@@ -112,6 +125,10 @@ class ForumService
     public function setState(string $roomId, string $state, Request $request): JsonResponse
     {
         $forum = Forum::withTrashed()->findOrFail($roomId);
+        if (! $this->canManageForum($forum, $request)) {
+            return ApiResponse::forbidden('You are not allowed to manage this forum');
+        }
+
         if ($state === 'lock') $forum->is_locked = true;
         if ($state === 'unlock') $forum->is_locked = false;
         if ($state === 'archive') $forum->is_archived = true;
@@ -152,6 +169,23 @@ class ForumService
     private function role(string $role): string
     {
         return in_array($role, ['auditor', 'auditee'], true) ? $role : 'auditee';
+    }
+
+    private function canAccessForum(Forum $forum, Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) return false;
+        if ($user->hasAnyRole(['admin', 'product_owner'])) return true;
+
+        return $forum->participants()
+            ->where('user_id', $user->id)
+            ->whereNull('removed_at')
+            ->exists();
+    }
+
+    private function canManageForum(Forum $forum, Request $request): bool
+    {
+        return (bool) $request->user()?->hasRole('admin');
     }
 
     private function code(): string

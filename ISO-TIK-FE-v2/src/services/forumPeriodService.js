@@ -103,7 +103,7 @@ const normalizeForumRelation = (forum = {}) => {
     created_by: forum?.created_by ?? createdByUser?.name ?? createdByUser?.username ?? null,
     current_user_role: currentUserRole,
     user_role: forum?.user_role ?? currentUserRole,
-    is_related: explicitRelated ?? (currentUserRole ? String(currentUserRole).toLowerCase() !== 'outsider' : true),
+    is_related: explicitRelated ?? (currentUserRole ? String(currentUserRole).toLowerCase() !== 'outsider' : false),
   }
 }
 

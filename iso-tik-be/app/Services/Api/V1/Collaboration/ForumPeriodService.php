@@ -23,7 +23,7 @@ class ForumPeriodService
     {
         $search = $request->input('search') ?: $request->input('q') ?: $request->input('keyword');
         $query = ForumPeriod::query()
-            ->with('creator')
+            ->with(['creator', 'members', 'joinRequests'])
             ->withCount(['members', 'forums', 'joinRequests'])
             ->when($request->boolean('include_archived'), fn ($q) => $q->withTrashed())
             ->when($request->input('period_type'), fn ($q, $v) => $q->where('period_type', $v))
@@ -69,7 +69,12 @@ class ForumPeriodService
 
     public function show(string $periodId, Request $request): JsonResponse
     {
-        return $this->periodResponse(ForumPeriod::withTrashed()->findOrFail($periodId), 'Period retrieved successfully', $request);
+        $period = ForumPeriod::withTrashed()->findOrFail($periodId);
+        if (! $this->canAccessPeriod($period, $request)) {
+            return ApiResponse::forbidden('You are not a member of this period');
+        }
+
+        return $this->periodResponse($period, 'Period retrieved successfully', $request);
     }
 
     public function update(string $periodId, array $payload, Request $request): JsonResponse
@@ -130,6 +135,18 @@ class ForumPeriodService
             ['forum_period_id' => $period->id, 'user_id' => $user->id],
             ['role' => $role, 'added_by' => $actor?->id, 'added_at' => now(), 'deleted_at' => null]
         );
+    }
+
+    private function canAccessPeriod(ForumPeriod $period, Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) return false;
+        if ($user->hasAnyRole(['admin', 'product_owner'])) return true;
+
+        return $period->members()
+            ->where('user_id', $user->id)
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
     private function periodResponse(ForumPeriod $period, string $message, Request $request): JsonResponse
