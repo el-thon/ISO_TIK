@@ -17,7 +17,11 @@ class ForumPeriodJoinRequestService
 
     public function index(string $periodId, Request $request): JsonResponse
     {
-        ForumPeriod::findOrFail($periodId);
+        $period = ForumPeriod::with('members')->findOrFail($periodId);
+        if (! $this->canViewRequests($period, $request)) {
+            return ApiResponse::forbidden('You are not allowed to view join requests for this period');
+        }
+
         $search = $request->input('search');
         $status = $request->input('status');
         $query = ForumPeriodJoinRequest::forPeriod($periodId)
@@ -34,6 +38,11 @@ class ForumPeriodJoinRequestService
 
     public function approve(string $periodId, string $joinRequestId, Request $request): JsonResponse
     {
+        $period = ForumPeriod::with('members')->findOrFail($periodId);
+        if (! $this->canApproveRequests($period, $request)) {
+            return ApiResponse::forbidden('Only period owner can approve join requests');
+        }
+
         $joinRequest = ForumPeriodJoinRequest::forPeriod($periodId)->with('requester')->findOrFail($joinRequestId);
         $joinRequest->forceFill(['status' => 'approved', 'reviewed_by_user_id' => $request->user()?->id, 'reviewed_at' => now()])->save();
         $member = ForumPeriodMember::updateOrCreate(
@@ -44,6 +53,29 @@ class ForumPeriodJoinRequestService
         $payload = (new ForumPeriodJoinRequestResource($joinRequest->fresh(['requester', 'reviewer'])))->resolve();
 
         return ApiResponse::success(['join_request' => $payload, 'member' => $member], 'Join request approved successfully', 200, ['join_request' => $payload, 'member' => $member]);
+    }
+
+    private function canViewRequests(ForumPeriod $period, Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) return false;
+        if ($user->hasRole('product_owner')) return true;
+
+        return $this->isOwner($period, $user->id);
+    }
+
+    private function canApproveRequests(ForumPeriod $period, Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) return false;
+
+        return $this->isOwner($period, $user->id);
+    }
+
+    private function isOwner(ForumPeriod $period, string $userId): bool
+    {
+        return $period->members
+            ->contains(fn ($member) => $member->user_id === $userId && $member->role === 'owner' && $member->deleted_at === null);
     }
 
     private function pagination($paginator): array
