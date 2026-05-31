@@ -1,6 +1,8 @@
 import api from './api'
 import { ensureArray, mergePagination, unwrapApiPayload } from './serviceUtils'
 
+const unwrapRoomPayload = (payload = {}) => payload.forum ?? payload.room ?? payload
+
 export async function listRooms(params = {}) {
 	const res = await api.get('/forums', { params })
 	const payload = unwrapApiPayload(res) ?? {}
@@ -14,13 +16,13 @@ export async function listRooms(params = {}) {
 export async function getRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.get(`/forums/${roomId}`)
-	return unwrapApiPayload(res) ?? {}
+	return unwrapRoomPayload(unwrapApiPayload(res) ?? {})
 }
 
 export async function updateRoom(roomId, payload) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.put(`/forums/${roomId}`, payload)
-	return unwrapApiPayload(res) ?? {}
+	return unwrapRoomPayload(unwrapApiPayload(res) ?? {})
 }
 
 export async function deleteRoom(roomId) {
@@ -37,25 +39,25 @@ export async function createRoom(payload) {
 export async function lockRoom(roomId, payload = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/lock`, payload)
-	return unwrapApiPayload(res) ?? {}
+	return unwrapRoomPayload(unwrapApiPayload(res) ?? {})
 }
 
 export async function unlockRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/unlock`)
-	return unwrapApiPayload(res) ?? {}
+	return unwrapRoomPayload(unwrapApiPayload(res) ?? {})
 }
 
 export async function archiveRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/archive`)
-	return unwrapApiPayload(res) ?? {}
+	return unwrapRoomPayload(unwrapApiPayload(res) ?? {})
 }
 
 export async function restoreRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/restore`)
-	return unwrapApiPayload(res) ?? {}
+	return unwrapRoomPayload(unwrapApiPayload(res) ?? {})
 }
 
 export async function listParticipants(roomId, params = {}) {
