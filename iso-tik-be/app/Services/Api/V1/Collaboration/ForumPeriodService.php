@@ -159,7 +159,7 @@ class ForumPeriodService
 
     private function periodResponse(ForumPeriod $period, string $message, Request $request): JsonResponse
     {
-        $period->load(['creator', 'members', 'joinRequests'])->loadCount(['members', 'forums', 'joinRequests']);
+        $period->load(['creator', 'members.user', 'joinRequests'])->loadCount(['members', 'forums', 'joinRequests']);
         $payload = (new ForumPeriodDetailResource($period))->resolve($request);
 
         return ApiResponse::success(['period' => $payload], $message, 200, ['period' => $payload]);

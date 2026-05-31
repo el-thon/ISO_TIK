@@ -107,6 +107,22 @@ const normalizeForumRelation = (forum = {}) => {
   }
 }
 
+const normalizePeriodDetail = (payload = {}) => {
+  const period = payload?.period ?? payload?.forum_period ?? payload?.forumPeriod ?? payload
+  return {
+    ...payload,
+    ...(period || {}),
+    period,
+    members: payload?.members ?? period?.members ?? [],
+    current_user_role: payload?.current_user_role ?? period?.current_user_role ?? null,
+    user_role: payload?.user_role ?? period?.user_role ?? null,
+    is_related: payload?.is_related ?? period?.is_related ?? false,
+    user_membership: payload?.user_membership ?? period?.user_membership ?? null,
+    user_join_request: payload?.user_join_request ?? period?.user_join_request ?? null,
+    my_join_request: payload?.my_join_request ?? period?.my_join_request ?? null,
+  }
+}
+
 export async function listForumPeriods(params = {}) {
   const res = await requestPeriod('get', PERIOD_ROUTE, { params })
   const payload = unwrap(res) ?? {}
@@ -128,7 +144,7 @@ export async function listForumPeriods(params = {}) {
 export async function getForumPeriod(periodId) {
   if (!periodId) throw new Error('periodId is required')
   const res = await requestPeriod('get', `${PERIOD_ROUTE}/${periodId}`)
-  return unwrap(res) ?? {}
+  return normalizePeriodDetail(unwrap(res) ?? {})
 }
 
 export async function createForumPeriod(payload) {
