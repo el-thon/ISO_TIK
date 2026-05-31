@@ -88,9 +88,19 @@ const sliceByParams = (items = [], params = {}) => {
 const normalizeForumRelation = (forum = {}) => {
   const currentUserRole = forum?.current_user_role ?? forum?.user_role ?? null
   const explicitRelated = typeof forum?.is_related === 'boolean' ? forum.is_related : null
+  const participantCount = forum?.participant_count ?? forum?.participants_count ?? 0
+  const topicCount = forum?.topic_count ?? forum?.topics_count ?? forum?.formulir_count ?? 0
+  const createdByUser = forum?.created_by_user ?? forum?.owner ?? forum?.responsible_user ?? null
 
   return {
     ...forum,
+    participant_count: participantCount,
+    participants_count: forum?.participants_count ?? participantCount,
+    topic_count: topicCount,
+    topics_count: forum?.topics_count ?? topicCount,
+    created_by_user: createdByUser,
+    owner: forum?.owner ?? createdByUser,
+    created_by: forum?.created_by ?? createdByUser?.name ?? createdByUser?.username ?? null,
     current_user_role: currentUserRole,
     user_role: forum?.user_role ?? currentUserRole,
     is_related: explicitRelated ?? (currentUserRole ? String(currentUserRole).toLowerCase() !== 'outsider' : true),

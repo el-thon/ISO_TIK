@@ -13,6 +13,22 @@ class ForumResource extends JsonResource
         $participant = $request->user() && $this->relationLoaded('participants')
             ? $this->participants->first(fn ($item) => $item->user_id === $request->user()->id && $item->removed_at === null)
             : null;
+        $creatorParticipant = $this->relationLoaded('participants')
+            ? $this->participants
+                ->filter(fn ($item) => $item->removed_at === null)
+                ->sortBy('added_at')
+                ->first(fn ($item) => $item->added_by && $item->added_by === $item->user_id)
+            : null;
+        $creatorParticipant ??= $this->relationLoaded('participants')
+            ? $this->participants
+                ->filter(fn ($item) => $item->removed_at === null)
+                ->sortBy('added_at')
+                ->first()
+            : null;
+        $creatorUser = $creatorParticipant?->relationLoaded('addedBy') && $creatorParticipant->addedBy
+            ? $creatorParticipant->addedBy
+            : (($creatorParticipant?->relationLoaded('user') && $creatorParticipant->user) ? $creatorParticipant->user : null);
+        $creatorUser ??= $this->relationLoaded('responsibleUser') ? $this->responsibleUser : null;
 
         return [
             'id' => $this->id,
@@ -25,6 +41,11 @@ class ForumResource extends JsonResource
             'visibility' => $this->visibility,
             'responsible_user_id' => $this->responsible_user_id,
             'responsible_user' => $this->whenLoaded('responsibleUser', fn () => new UserResource($this->responsibleUser)),
+            'created_by_user_id' => $creatorUser?->id,
+            'created_by' => $creatorUser?->name ?? $creatorUser?->username,
+            'created_by_username' => $creatorUser?->username,
+            'created_by_user' => $creatorUser ? (new UserResource($creatorUser))->resolve($request) : null,
+            'owner' => $creatorUser ? (new UserResource($creatorUser))->resolve($request) : null,
             'join_code' => $this->join_code,
             'is_join_code_active' => (bool) $this->is_join_code_active,
             'period' => $this->whenLoaded('period', fn () => new ForumPeriodResource($this->period)),

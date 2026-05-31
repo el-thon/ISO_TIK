@@ -2,7 +2,17 @@ import { Link } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 
 export default function ChildForumCard({ room }) {
-  const createdBy = room?.owner?.name || room?.created_by || room?.created_by_username || room?.responsible_user_id || '-'
+  const createdBy =
+    room?.created_by_user?.name ||
+    room?.created_by_user?.username ||
+    room?.owner?.name ||
+    room?.owner?.username ||
+    room?.created_by ||
+    room?.created_by_username ||
+    room?.responsible_user?.name ||
+    room?.responsible_user?.username ||
+    '-'
+  const participantCount = room?.participant_count ?? room?.participants_count ?? 0
 
   return (
     <Card className={`transition-shadow hover:shadow-md ${room.is_archived ? 'opacity-80' : ''}`}>
@@ -26,7 +36,7 @@ export default function ChildForumCard({ room }) {
                 <div className="flex items-center justify-between gap-2 mt-4 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700">
-                      {room.participant_count ?? 0} peserta
+                      {participantCount} peserta
                     </span>
                     <span className="text-xs text-muted-foreground">Dibuat oleh: {createdBy}</span>
                   </div>

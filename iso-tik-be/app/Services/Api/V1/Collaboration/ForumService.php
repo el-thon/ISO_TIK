@@ -24,7 +24,7 @@ class ForumService
         $search = $request->input('search') ?: $request->input('q') ?: $request->input('keyword');
         $effectivePeriodId = $periodId ?: ($request->input('forum_period_id') ?: $request->input('period_id'));
         $query = Forum::query()
-            ->with(['period', 'responsibleUser', 'participants'])
+            ->with(['period', 'responsibleUser', 'participants.user', 'participants.addedBy'])
             ->withCount(['participants', 'topics', 'attachments'])
             ->when($effectivePeriodId, fn ($q) => $q->where('forum_period_id', $effectivePeriodId))
             ->when($request->input('visibility'), fn ($q, $v) => $q->where('visibility', $v))
@@ -145,7 +145,7 @@ class ForumService
 
     private function forumPayload(Forum $forum, Request $request): array
     {
-        $forum->load(['period', 'responsibleUser', 'participants.user'])->loadCount(['participants', 'topics', 'attachments']);
+        $forum->load(['period', 'responsibleUser', 'participants.user', 'participants.addedBy'])->loadCount(['participants', 'topics', 'attachments']);
         return (new ForumDetailResource($forum))->resolve($request);
     }
 

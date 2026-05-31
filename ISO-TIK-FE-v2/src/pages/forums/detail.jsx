@@ -38,7 +38,8 @@ const formatDateTime = (value) => {
 
 export default function RoomDetail() {
   const { id: roomId } = useParams()
-  const { data: room, isLoading, isError, error, refetch } = useRoom(roomId)
+  const { data: roomResponse, isLoading, isError, error, refetch } = useRoom(roomId)
+  const room = useMemo(() => roomResponse?.forum ?? roomResponse?.room ?? roomResponse, [roomResponse])
   const cachedUser = getUserData()
   const shouldFetchMe = !cachedUser?.id && !cachedUser?.user_id && Boolean(getAccessToken())
   const { data: meData } = useMe({ 
@@ -75,7 +76,10 @@ export default function RoomDetail() {
     return participants.find((participant) => String(participant.user_id) === normalizedCurrentUserId) || null
   }, [normalizedCurrentUserId, participantsData])
 
-  const stats = room?.stats ?? { participant_count: 0, topic_count: 0 }
+  const stats = {
+    participant_count: room?.stats?.participant_count ?? room?.participant_count ?? room?.participants_count ?? 0,
+    topic_count: room?.stats?.topic_count ?? room?.topic_count ?? room?.topics_count ?? 0,
+  }
   const canCreateTopic = Boolean(currentParticipant && (currentParticipant.role === 'auditor' || String(currentParticipant.role).toLowerCase() === 'auditor'))
   const defaultTab = 'topics' // Default to topics tab
   const isPeriodClosed = Boolean(
