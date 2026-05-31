@@ -32,6 +32,12 @@ const DEFAULT_PASSWORD = { new_password: '', confirm_password: '', reason: '' }
 const DEFAULT_ROLE = { roleId: '', reason: '' }
 const DEFAULT_DELETE = { userId: null, reason: '' }
 const DEFAULT_BULK = { status: 'inactive', reason: '' }
+const roleLabel = (role, fallback) => {
+  const name = role?.name || fallback
+  const display = role?.display_name
+  if (!display || display === name) return name || fallback
+  return `${display} (${name})`
+}
 
 export default function UsersManagementTab() {
   const queryClient = useQueryClient()
@@ -330,7 +336,7 @@ export default function UsersManagementTab() {
                           {isRolesLoading && <SelectItem disabled value="__loading">Memuat daftar role...</SelectItem>}
                           {!isRolesLoading && roleOptions.map((role) => {
                             const value = String(role.id ?? role.name)
-                            return <SelectItem key={value} value={value}>{role.display_name || role.name || value}</SelectItem>
+                            return <SelectItem key={value} value={value}>{roleLabel(role, value)}</SelectItem>
                           })}
                         </SelectContent>
                       </Select>
@@ -573,7 +579,7 @@ export default function UsersManagementTab() {
                 {isRolesLoading && <SelectItem disabled value="__loading">Memuat daftar role...</SelectItem>}
                 {!isRolesLoading && roleOptions.map((role) => {
                   const value = String(role.id ?? role.name)
-                  return <SelectItem key={value} value={value}>{role.display_name || role.name || value}</SelectItem>
+                  return <SelectItem key={value} value={value}>{roleLabel(role, value)}</SelectItem>
                 })}
                 </SelectContent>
               </Select>
