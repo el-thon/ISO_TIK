@@ -2,7 +2,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { LogIn } from 'lucide-react'
 import { formatDate } from '../constants'
-import EditPeriodDialog from './EditPeriodDialog'
 
 export default function PeriodCard({
   period,
@@ -74,12 +73,6 @@ export default function PeriodCard({
             )
           )}
         </div>
-        
-        {period?.current_user_role === 'owner' && (
-          <div className="absolute top-3 right-3">
-            <EditPeriodDialog period={period} />
-          </div>
-        )}
       </CardContent>
     </Card>
   )

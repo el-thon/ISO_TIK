@@ -23,13 +23,20 @@ class ForumService
     {
         $search = $request->input('search') ?: $request->input('q') ?: $request->input('keyword');
         $effectivePeriodId = $periodId ?: ($request->input('forum_period_id') ?: $request->input('period_id'));
+        $user = $request->user();
+        $mustScopeToParticipant = ! $user?->hasAnyRole(['admin', 'product_owner']);
         $query = Forum::query()
             ->with(['period', 'responsibleUser', 'participants.user', 'participants.addedBy'])
             ->withCount(['participants', 'topics', 'attachments'])
             ->when($effectivePeriodId, fn ($q) => $q->where('forum_period_id', $effectivePeriodId))
             ->when($request->input('visibility'), fn ($q, $v) => $q->where('visibility', $v))
             ->when($request->has('is_archived'), fn ($q) => $q->where('is_archived', $request->boolean('is_archived')))
-            ->when($request->boolean('mine'), fn ($q) => $q->whereHas('participants', fn ($p) => $p->where('user_id', $request->user()->id)->whereNull('removed_at')))
+            ->when($mustScopeToParticipant, fn ($q) => $user
+                ? $q->whereHas('participants', fn ($p) => $p->where('user_id', $user->id)->whereNull('removed_at'))
+                : $q->whereRaw('1 = 0'))
+            ->when($request->boolean('mine'), fn ($q) => $user
+                ? $q->whereHas('participants', fn ($p) => $p->where('user_id', $user->id)->whereNull('removed_at'))
+                : $q->whereRaw('1 = 0'))
             ->when($search, fn ($q) => $q->where(fn ($i) => $i->where('name', 'ilike', "%{$search}%")->orWhere('description', 'ilike', "%{$search}%")));
 
         $paginator = $query->latest()->paginate((int) $request->integer('per_page', 10));

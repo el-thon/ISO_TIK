@@ -103,27 +103,35 @@ class ForumPeriodService
             ->where('is_join_code_active', true)
             ->firstOrFail();
 
-        $member = ForumPeriodMember::withTrashed()->where('forum_period_id', $period->id)->where('user_id', $request->user()->id)->first();
+        $member = ForumPeriodMember::where('forum_period_id', $period->id)
+            ->where('user_id', $request->user()->id)
+            ->whereNull('deleted_at')
+            ->first();
+
         if ($member) {
-            $member->restore();
-            $member->forceFill(['role' => $member->role ?: 'member', 'added_at' => $member->added_at ?: now()])->save();
-        } else {
-            $member = $this->ensureMember($period, $request->user(), 'member', $request->user());
+            $periodPayload = (new ForumPeriodResource($period->fresh(['creator', 'members', 'joinRequests'])->loadCount(['members', 'forums', 'joinRequests'])))->resolve($request);
+
+            return ApiResponse::success(
+                ['period' => $periodPayload, 'join_request' => null, 'member' => $member, 'is_member' => true],
+                'You are already a member of this period',
+                200,
+                ['period' => $periodPayload, 'join_request' => null, 'member' => $member, 'is_member' => true]
+            );
         }
 
         $joinRequest = ForumPeriodJoinRequest::updateOrCreate(
             ['forum_period_id' => $period->id, 'requester_user_id' => $request->user()->id],
-            ['status' => 'approved', 'reviewed_by_user_id' => $request->user()->id, 'reviewed_at' => now()]
+            ['status' => 'pending', 'reviewed_by_user_id' => null, 'reviewed_at' => null, 'rejection_reason' => null]
         );
-        $this->audit->record($request->user(), 'forum_period', $period->id, 'join_period', [], $request);
+        $this->audit->record($request->user(), 'forum_period', $period->id, 'request_join_period', [], $request);
 
-        $periodPayload = (new ForumPeriodResource($period->fresh(['creator'])->loadCount(['members', 'forums', 'joinRequests'])))->resolve();
+        $periodPayload = (new ForumPeriodResource($period->fresh(['creator', 'members', 'joinRequests'])->loadCount(['members', 'forums', 'joinRequests'])))->resolve($request);
 
         return ApiResponse::success(
-            ['period' => $periodPayload, 'join_request' => $joinRequest, 'member' => $member],
+            ['period' => $periodPayload, 'join_request' => $joinRequest, 'member' => null, 'is_member' => false],
             'Join request submitted successfully',
             200,
-            ['period' => $periodPayload, 'join_request' => $joinRequest, 'member' => $member]
+            ['period' => $periodPayload, 'join_request' => $joinRequest, 'member' => null, 'is_member' => false]
         );
     }
 

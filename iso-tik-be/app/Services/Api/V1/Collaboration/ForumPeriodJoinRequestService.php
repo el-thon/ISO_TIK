@@ -19,9 +19,10 @@ class ForumPeriodJoinRequestService
     {
         ForumPeriod::findOrFail($periodId);
         $search = $request->input('search');
+        $status = $request->input('status');
         $query = ForumPeriodJoinRequest::forPeriod($periodId)
             ->with('requester', 'reviewer')
-            ->when($request->input('status'), fn ($q, $status) => $q->where('status', $status))
+            ->when($status && $status !== 'all', fn ($q) => $q->where('status', $status))
             ->when($search, fn ($q) => $q->whereHas('requester', fn ($u) => $u->where('name', 'ilike', "%{$search}%")->orWhere('email', 'ilike', "%{$search}%")));
 
         $paginator = $query->latest()->paginate((int) $request->integer('per_page', 10));
