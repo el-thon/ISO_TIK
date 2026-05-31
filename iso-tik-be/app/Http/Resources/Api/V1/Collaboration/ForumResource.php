@@ -55,7 +55,7 @@ class ForumResource extends JsonResource
             'current_user_participant' => $participant ? (new ForumParticipantResource($participant))->resolve() : null,
             'current_user_role' => $participant?->role,
             'user_role' => $participant?->role,
-            'is_related' => $participant !== null || (bool) $request->user()?->hasAnyRole(['admin', 'product_owner']),
+            'is_related' => $participant !== null || (bool) $request->user()?->hasRole('product_owner'),
             'can_manage' => (bool) $request->user()?->isAdmin(),
             'can_edit' => (bool) $request->user()?->isAdmin(),
             'created_at' => optional($this->created_at)->toISOString(),

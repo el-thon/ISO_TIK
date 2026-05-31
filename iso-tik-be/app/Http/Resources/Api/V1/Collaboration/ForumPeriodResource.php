@@ -21,7 +21,7 @@ class ForumPeriodResource extends JsonResource
                 ->first()
             : null;
         $currentUserRole = $membership?->role;
-        $canReadAll = (bool) $user?->hasAnyRole(['admin', 'product_owner']);
+        $canReadAll = (bool) $user?->hasRole('product_owner');
         $isRelated = $canReadAll || $membership !== null;
 
         return [

@@ -24,7 +24,7 @@ class ForumService
         $search = $request->input('search') ?: $request->input('q') ?: $request->input('keyword');
         $effectivePeriodId = $periodId ?: ($request->input('forum_period_id') ?: $request->input('period_id'));
         $user = $request->user();
-        $mustScopeToParticipant = ! $user?->hasAnyRole(['admin', 'product_owner']);
+        $mustScopeToParticipant = ! $user?->hasRole('product_owner');
         $query = Forum::query()
             ->with(['period', 'responsibleUser', 'participants.user', 'participants.addedBy'])
             ->withCount(['participants', 'topics', 'attachments'])
@@ -182,7 +182,7 @@ class ForumService
     {
         $user = $request->user();
         if (! $user) return false;
-        if ($user->hasAnyRole(['admin', 'product_owner'])) return true;
+        if ($user->hasRole('product_owner')) return true;
 
         return $forum->participants()
             ->where('user_id', $user->id)

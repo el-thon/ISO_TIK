@@ -149,7 +149,7 @@ class ForumPeriodService
     {
         $user = $request->user();
         if (! $user) return false;
-        if ($user->hasAnyRole(['admin', 'product_owner'])) return true;
+        if ($user->hasRole('product_owner')) return true;
 
         return $period->members()
             ->where('user_id', $user->id)
