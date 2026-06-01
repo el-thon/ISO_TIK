@@ -1099,7 +1099,7 @@ export default function CreateTopic() {
             
       // STEP 2: Create input item untuk topic yang baru dibuat
       const inputItemPayload = {
-        type: "form_data",
+        type: "finding",
         label: "Form Daftar Temuan Ketidaksesuaian",
         value: "",
         order_index: 1,

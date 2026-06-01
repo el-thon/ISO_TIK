@@ -6,7 +6,7 @@
 export const convertFormToInputItem = (formData) => {
   return {
     label: "Form Daftar Temuan Ketidaksesuaian",
-    type: "form_data",
+    type: "finding",
     order_index: 9999,
     visibility: "visible",
     value: "",
@@ -34,7 +34,7 @@ export const convertFormToInputItem = (formData) => {
  * Ekstrak data finding dari input item
  */
 export const extractFindingFromInputItem = (inputItem) => {
-  if (!inputItem || inputItem?.type !== 'form_data') return null
+  if (!inputItem || !['form_data', 'finding'].includes(inputItem?.type)) return null
 
   let parsedValue = null
   if (typeof inputItem?.value === 'string' && inputItem.value.trim()) {

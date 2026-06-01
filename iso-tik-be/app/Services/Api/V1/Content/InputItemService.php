@@ -64,8 +64,14 @@ class InputItemService
         foreach (['description', 'clause_id', 'clause_code', 'clause_name', 'recommendation', 'status'] as $key) {
             if (array_key_exists($key, $payload)) $metadata[$key] = $payload[$key];
         }
+        $type = $payload['type'] ?? 'finding';
+        if ($type === 'form_data') $type = 'finding';
+        if (! in_array($type, ['text', 'textarea', 'select', 'date', 'number', 'file', 'finding', 'evidence'], true)) {
+            $type = 'finding';
+        }
+
         return [
-            'type' => $payload['type'] ?? 'finding',
+            'type' => $type,
             'label' => $payload['label'] ?? $payload['clause_name'] ?? $payload['clause_code'] ?? 'Item',
             'value' => is_array($payload['value'] ?? null) ? json_encode($payload['value']) : ($payload['value'] ?? $payload['content'] ?? $payload['description'] ?? ''),
             'metadata' => $metadata,
