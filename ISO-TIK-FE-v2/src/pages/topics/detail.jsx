@@ -761,12 +761,19 @@ export default function TopicDetail() {
   const normalizeParticipantRole = (role) => String(role || '').trim().toLowerCase()
 
   const currentUserForumRole = useMemo(() => {
+    const embeddedRole =
+      topic?.current_user_role ??
+      topic?.user_role ??
+      topic?.current_user_participant?.role
+    if (embeddedRole) return normalizeParticipantRole(embeddedRole)
+
     const currentUserId = currentUser?.id
     if (!currentUserId) return ''
     const normalizedId = String(currentUserId)
-    const match = forumParticipants.find((p) => String(p?.user_id ?? p?.user?.id ?? '') === normalizedId)
+    const participants = forumParticipants.length ? forumParticipants : (topic?.participants ?? [])
+    const match = participants.find((p) => String(p?.user_id ?? p?.user?.id ?? '') === normalizedId)
     return normalizeParticipantRole(match?.role)
-  }, [currentUser?.id, forumParticipants])
+  }, [currentUser?.id, forumParticipants, topic])
 
   const isCurrentUserAuditor = currentUserForumRole === 'auditor'
   const isFindingLockedByDeadline = isTopicDeadlinePassed || isPeriodDeadlinePassed

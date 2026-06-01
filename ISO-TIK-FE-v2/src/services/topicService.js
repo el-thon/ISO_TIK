@@ -25,7 +25,17 @@ export async function listTopics(params = {}) {
 export async function getTopic(topicId) {
   if (!topicId) throw new Error('topicId is required')
   const res = await api.get(`/topics/${topicId}`)
-  return unwrapApiPayload(res) ?? {}
+  const payload = unwrapApiPayload(res) ?? {}
+  const topic = payload.topic ?? payload
+
+  return {
+    ...topic,
+    input_items: payload.input_items ?? topic.input_items ?? [],
+    items: payload.items ?? topic.items ?? payload.input_items ?? topic.input_items ?? [],
+    workflow: payload.workflow ?? topic.workflow ?? null,
+    participants: payload.participants ?? topic.participants ?? [],
+    versions: payload.versions ?? topic.versions ?? [],
+  }
 }
 
 export async function getTopicInputItems(topicId, params = {}) {
