@@ -49,6 +49,11 @@ const buildObjectiveEvidence = (docId, note) => {
   return `${docId}${OBJECTIVE_EVIDENCE_SEPARATOR}${note}`
 }
 
+const splitObjectiveEvidenceId = (value) => {
+  if (!value) return ''
+  return String(value).split(OBJECTIVE_EVIDENCE_SEPARATOR)[0]?.trim() || ''
+}
+
 const normalizeClauseReferences = (refs) => {
   if (!Array.isArray(refs)) return []
   return refs
@@ -577,6 +582,56 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
       isMounted = false
     }
   }, [forumId])
+
+  useEffect(() => {
+    const usedEvidenceIds = Array.from(new Set(
+      formData.findings
+        .map((finding) => splitObjectiveEvidenceId(finding.objective_evidence))
+        .filter(Boolean)
+    ))
+    const missingIds = usedEvidenceIds.filter((docId) => !documents.some((doc) => String(doc.id) === String(docId)))
+    if (!missingIds.length) return
+
+    let isMounted = true
+    Promise.all(
+      missingIds.map((docId) =>
+        documentService.getDocumentDownloadInfo(docId, { suppressNotFound: true })
+          .then((info) => {
+            const source = info?.attachment || info?.document || null
+            const resolvedName =
+              source?.original_filename ||
+              source?.filename ||
+              source?.file_name ||
+              info?.filename ||
+              `Dokumen-${docId.substring(0, 8)}`
+            return {
+              ...(source || {}),
+              id: docId,
+              original_filename: resolvedName,
+              display_name: resolvedName,
+              filename: resolvedName,
+            }
+          })
+          .catch(() => ({
+            id: docId,
+            original_filename: `Dokumen-${docId.substring(0, 8)}`,
+            display_name: `Dokumen-${docId.substring(0, 8)}`,
+            filename: `Dokumen-${docId.substring(0, 8)}`,
+          }))
+      )
+    ).then((resolvedDocs) => {
+      if (!isMounted) return
+      setDocuments((current) => {
+        const existing = new Set(current.map((doc) => String(doc.id)))
+        const additions = resolvedDocs.filter((doc) => doc?.id && !existing.has(String(doc.id)))
+        return additions.length ? [...current, ...additions] : current
+      })
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [formData.findings, documents])
 
   const clauseOptions = useMemo(() => {
     const clauses = clauseData?.clauses ?? clauseData?.items ?? clauseData?.data ?? []
