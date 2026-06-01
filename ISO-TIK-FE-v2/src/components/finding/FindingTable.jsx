@@ -105,10 +105,6 @@ const FindingTable = ({ findings, auditInfo, forumId }) => {
     const missing = objectiveEvidenceIds.filter((docId) => !documentNames[docId])
     if (missing.length === 0) return
     let isMounted = true
-    setLoadingNames((prev) => ({
-      ...prev,
-      ...missing.reduce((acc, docId) => ({ ...acc, [docId]: true }), {}),
-    }))
     Promise.all(
       missing.map((docId) =>
         documentService.getDocumentDownloadInfo(docId, { suppressNotFound: true })

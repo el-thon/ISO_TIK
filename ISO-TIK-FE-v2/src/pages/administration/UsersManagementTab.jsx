@@ -161,7 +161,8 @@ export default function UsersManagementTab() {
 
   useEffect(() => {
     if (editingUserData && editOpen) {
-      setEditForm(derivedEditForm)
+      const timeout = window.setTimeout(() => setEditForm(derivedEditForm), 0)
+      return () => window.clearTimeout(timeout)
     }
   }, [editingUserData, derivedEditForm, editOpen])
 
@@ -373,32 +374,32 @@ export default function UsersManagementTab() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {statsCards.map(({ label, value, tone, status, icon: Icon }) => (
+          {statsCards.map((card) => (
             <Card
-              key={label}
+              key={card.label}
               role="button"
               tabIndex={0}
-              className={`${tone} cursor-pointer transition hover:shadow-sm ${statusFilter === status ? 'ring-2 ring-ring ring-offset-2' : ''}`}
+              className={`${card.tone} cursor-pointer transition hover:shadow-sm ${statusFilter === card.status ? 'ring-2 ring-ring ring-offset-2' : ''}`}
               onClick={() => {
-                setStatusFilter(status)
+                setStatusFilter(card.status)
                 setPage(1)
                 setSelectedIds(new Set())
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
-                  setStatusFilter(status)
+                  setStatusFilter(card.status)
                   setPage(1)
                   setSelectedIds(new Set())
                 }
               }}
             >
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">{label}</CardTitle>
-                <Icon className="size-4 opacity-70" />
+                <CardTitle className="text-sm font-medium">{card.label}</CardTitle>
+                {React.createElement(card.icon, { className: 'size-4 opacity-70' })}
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-semibold">{value}</div>
+                <div className="text-3xl font-semibold">{card.value}</div>
               </CardContent>
             </Card>
           ))}

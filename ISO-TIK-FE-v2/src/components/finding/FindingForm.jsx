@@ -686,20 +686,6 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
     })
   }
 
-  const updateAuditor = (field, value) => {
-    setFormData({
-      ...formData,
-      auditor: { ...formData.auditor, [field]: value }
-    })
-  }
-
-  const updateAuditee = (field, value) => {
-    setFormData({
-      ...formData,
-      auditee: { ...formData.auditee, [field]: value }
-    })
-  }
-
   const updateAuditorFromParticipant = (userId) => {
     setSelectedAuditorId(String(userId || ''))
     const match = participants.find((p) => String(p?.user_id ?? p?.user?.id) === String(userId))
