@@ -251,7 +251,7 @@ export default function TopicDetail() {
 
   const forumId = topic?.forum?.id || topic?.room?.id || topic?.forum_id || topic?.room_id
 
-  // Load participants to determine if current user is auditee (auditee can't add/edit findings)
+  // Load participants to determine whether current user can add/edit findings.
   const participantsParams = useMemo(() => ({ per_page: 200 }), [])
   const { data: participantsData } = useRoomParticipants(forumId, participantsParams, {
     enabled: Boolean(forumId),
@@ -760,17 +760,17 @@ export default function TopicDetail() {
 
   const normalizeParticipantRole = (role) => String(role || '').trim().toLowerCase()
 
-  const isCurrentUserAuditee = useMemo(() => {
+  const currentUserForumRole = useMemo(() => {
     const currentUserId = currentUser?.id
-    if (!currentUserId) return false
+    if (!currentUserId) return ''
     const normalizedId = String(currentUserId)
     const match = forumParticipants.find((p) => String(p?.user_id ?? p?.user?.id ?? '') === normalizedId)
-    if (!match) return false
-    return normalizeParticipantRole(match?.role) === 'auditee'
+    return normalizeParticipantRole(match?.role)
   }, [currentUser?.id, forumParticipants])
 
+  const isCurrentUserAuditor = currentUserForumRole === 'auditor'
   const isFindingLockedByDeadline = isTopicDeadlinePassed || isPeriodDeadlinePassed
-  const isFindingReadOnly = isFindingLockedByDeadline || isCurrentUserAuditee
+  const isFindingReadOnly = isFindingLockedByDeadline || !isCurrentUserAuditor
 
   useEffect(() => {
     if (isClosed) {
@@ -906,7 +906,7 @@ export default function TopicDetail() {
                           'Export PDF'
                         )}
                       </Button>
-                      {!isFindingLockedByDeadline && !isCurrentUserAuditee && (
+                      {!isFindingLockedByDeadline && isCurrentUserAuditor && (
                         <Button 
                           variant="outline" 
                           size="sm"

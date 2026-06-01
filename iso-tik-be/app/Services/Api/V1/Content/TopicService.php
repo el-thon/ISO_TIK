@@ -5,6 +5,7 @@ namespace App\Services\Api\V1\Content;
 use App\Http\Resources\Api\V1\Content\TopicDetailResource;
 use App\Http\Resources\Api\V1\Content\TopicResource;
 use App\Models\Collaboration\Forum;
+use App\Models\Collaboration\ForumParticipant;
 use App\Models\Content\Topic;
 use App\Models\Content\TopicDocumentMaster;
 use App\Services\Api\V1\Security\AuditLogService;
@@ -38,6 +39,10 @@ class TopicService
     public function store(string $forumId, array $payload, Request $request): JsonResponse
     {
         Forum::findOrFail($forumId);
+        if (! $this->canCreateTopic($forumId, $request)) {
+            return ApiResponse::forbidden('Only forum auditor can create forms');
+        }
+
         $masterId = $payload['topic_document_master_id'] ?? $payload['document_master_id'] ?? TopicDocumentMaster::active()->latest()->first()?->id;
         $topic = Topic::create([
             'forum_id' => $forumId,
@@ -96,6 +101,19 @@ class TopicService
     private function itemsFromTopicPayload(array $payload): array
     {
         return $payload['input_items'] ?? $payload['items'] ?? $payload['findings'] ?? [];
+    }
+
+    private function canCreateTopic(string $forumId, Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user) return false;
+
+        return ForumParticipant::query()
+            ->where('forum_id', $forumId)
+            ->where('user_id', $user->id)
+            ->where('role', 'auditor')
+            ->whereNull('removed_at')
+            ->exists();
     }
 
     private function pagination($paginator): array

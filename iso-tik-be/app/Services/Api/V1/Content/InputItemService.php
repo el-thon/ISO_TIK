@@ -3,6 +3,7 @@
 namespace App\Services\Api\V1\Content;
 
 use App\Http\Resources\Api\V1\Content\InputItemResource;
+use App\Models\Collaboration\ForumParticipant;
 use App\Models\Content\InputItem;
 use App\Models\Content\Topic;
 use App\Services\Api\V1\Security\AuditLogService;
@@ -30,6 +31,10 @@ class InputItemService
     public function store(string $topicId, array $payload, Request $request): JsonResponse
     {
         $topic = Topic::findOrFail($topicId);
+        if (! $this->canMutateTopicItems($topic, $request)) {
+            return ApiResponse::forbidden('Only forum auditor can edit finding details');
+        }
+
         $created = $this->createMany($topic, $payload['items'] ?? [$payload], $request);
         $this->versions->snapshot($topic->fresh(), 'Input item created', 'input_item_create', $request->user()?->id);
         $items = collect($created)->map(fn ($item) => (new InputItemResource($item->load('creator', 'attachments')))->resolve())->values()->all();
@@ -41,6 +46,10 @@ class InputItemService
     public function update(string $inputItemId, array $payload, Request $request): JsonResponse
     {
         $item = InputItem::with('topic')->findOrFail($inputItemId);
+        if (! $this->canMutateTopicItems($item->topic, $request)) {
+            return ApiResponse::forbidden('Only forum auditor can edit finding details');
+        }
+
         $item->fill($this->normalize($payload, $item->topic, $item->order_index))->save();
         $this->versions->snapshot($item->topic->fresh(), 'Input item updated', 'input_item_update', $request->user()?->id);
         $this->audit->record($request->user(), 'input_item', $item->id, 'update_input_item', [], $request);
@@ -78,6 +87,19 @@ class InputItemService
             'order_index' => $order,
             'visibility' => $payload['visibility'] ?? 'visible',
         ];
+    }
+
+    private function canMutateTopicItems(Topic $topic, Request $request): bool
+    {
+        $user = $request->user();
+        if (! $user || ! $topic->forum_id) return false;
+
+        return ForumParticipant::query()
+            ->where('forum_id', $topic->forum_id)
+            ->where('user_id', $user->id)
+            ->where('role', 'auditor')
+            ->whereNull('removed_at')
+            ->exists();
     }
 
     private function pagination($paginator): array

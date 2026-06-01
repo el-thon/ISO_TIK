@@ -387,13 +387,23 @@ const getParticipantIdentity = (participant) => {
   if (!participant) return { name: '', nip: '' }
   const user = participant?.user ?? {}
   const profile = user?.profile ?? {}
+  const employment = user?.employment ?? {}
   const name =
     profile?.full_name ||
     user?.name ||
     participant?.name ||
     user?.username ||
     ''
-  const nip = participant?.nip ?? user?.nip ?? ''
+  const nip =
+    participant?.nip ??
+    participant?.employee_id ??
+    user?.nip ??
+    user?.employee_id ??
+    profile?.nip ??
+    profile?.employee_id ??
+    employment?.nip ??
+    employment?.employee_id ??
+    ''
   return { name: String(name || ''), nip: String(nip || '') }
 }
 
@@ -401,10 +411,20 @@ const getParticipantLabel = (participant) => {
   if (!participant) return ''
   const user = participant?.user ?? {}
   const profile = user?.profile ?? {}
+  const employment = user?.employment ?? {}
   const fullName = profile?.full_name
   const username = user?.username
   const name = fullName || user?.name || participant?.name || username || ''
-  const nip = participant?.nip ?? user?.nip ?? ''
+  const nip =
+    participant?.nip ??
+    participant?.employee_id ??
+    user?.nip ??
+    user?.employee_id ??
+    profile?.nip ??
+    profile?.employee_id ??
+    employment?.nip ??
+    employment?.employee_id ??
+    ''
   const withUsername = name && username && name !== username ? `${name} (${username})` : name
   return `${withUsername}${nip ? ` - ${nip}` : ''}`.trim()
 }
@@ -473,8 +493,19 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
 
       const match = participants.find((p) => {
         const user = p?.user ?? {}
-        const nip = normalizeText(p?.nip ?? user?.nip)
-        const name = normalizeText(p?.name ?? user?.name)
+        const profile = user?.profile ?? {}
+        const employment = user?.employment ?? {}
+        const nip = normalizeText(
+          p?.nip ??
+          p?.employee_id ??
+          user?.nip ??
+          user?.employee_id ??
+          profile?.nip ??
+          profile?.employee_id ??
+          employment?.nip ??
+          employment?.employee_id
+        )
+        const name = normalizeText(profile?.full_name ?? p?.name ?? user?.name ?? user?.username)
         if (targetNip && nip && targetNip === nip) return true
         if (targetName && name && targetName === name) return true
         return false
@@ -695,43 +726,33 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Nama Auditor</Label>
-                {participants.length > 0 ? (
-                  <Select
-                    value={selectedAuditorId}
-                    onValueChange={updateAuditorFromParticipant}
-                    disabled={participantsLoading || readOnly}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditor'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {auditorCandidates.map((p) => {
-                        const userId = p?.user_id ?? p?.user?.id
-                        if (!userId) return null
-                        const label = getParticipantLabel(p) || getIdentityText({
-                          name: p?.name ?? p?.user?.name,
-                          nip: p?.nip ?? p?.user?.nip,
-                        })
-                        return (
-                          <SelectItem key={String(userId)} value={String(userId)}>
-                            {label || String(userId)}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input 
-                    value={formData.auditor.name}
-                    onChange={(e) => updateAuditor('name', e.target.value)}
-                    placeholder="Nama Auditor"
-                    required
-                    disabled={readOnly}
-                  />
-                )}
+                <Select
+                  value={selectedAuditorId}
+                  onValueChange={updateAuditorFromParticipant}
+                  disabled={participantsLoading || readOnly || auditorCandidates.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditor'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {auditorCandidates.map((p) => {
+                      const userId = p?.user_id ?? p?.user?.id
+                      if (!userId) return null
+                      const label = getParticipantLabel(p) || getIdentityText({
+                        name: p?.name ?? p?.user?.name,
+                        nip: p?.nip ?? p?.user?.nip,
+                      })
+                      return (
+                        <SelectItem key={String(userId)} value={String(userId)}>
+                          {label || String(userId)}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
                 {participantsError && (
                   <p className="text-xs text-amber-600 mt-1">
-                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum. Anda bisa ketik manual.'}
+                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum.'}
                   </p>
                 )}
               </div>
@@ -739,10 +760,9 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                 <Label>NIP Auditor</Label>
                 <Input 
                   value={formData.auditor.nip}
-                  onChange={(e) => updateAuditor('nip', e.target.value)}
                   placeholder="NIP Auditor"
                   required
-                  disabled={readOnly || Boolean(participants.length > 0)}
+                  disabled
                 />
               </div>
             </div>
@@ -754,43 +774,33 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Nama Auditee</Label>
-                {participants.length > 0 ? (
-                  <Select
-                    value={selectedAuditeeId}
-                    onValueChange={updateAuditeeFromParticipant}
-                    disabled={participantsLoading || readOnly}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditee'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {auditeeCandidates.map((p) => {
-                        const userId = p?.user_id ?? p?.user?.id
-                        if (!userId) return null
-                        const label = getParticipantLabel(p) || getIdentityText({
-                          name: p?.name ?? p?.user?.name,
-                          nip: p?.nip ?? p?.user?.nip,
-                        })
-                        return (
-                          <SelectItem key={String(userId)} value={String(userId)}>
-                            {label || String(userId)}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input 
-                    value={formData.auditee.name}
-                    onChange={(e) => updateAuditee('name', e.target.value)}
-                    placeholder="Nama Auditee"
-                    required
-                    disabled={readOnly}
-                  />
-                )}
+                <Select
+                  value={selectedAuditeeId}
+                  onValueChange={updateAuditeeFromParticipant}
+                  disabled={participantsLoading || readOnly || auditeeCandidates.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditee'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {auditeeCandidates.map((p) => {
+                      const userId = p?.user_id ?? p?.user?.id
+                      if (!userId) return null
+                      const label = getParticipantLabel(p) || getIdentityText({
+                        name: p?.name ?? p?.user?.name,
+                        nip: p?.nip ?? p?.user?.nip,
+                      })
+                      return (
+                        <SelectItem key={String(userId)} value={String(userId)}>
+                          {label || String(userId)}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
                 {participantsError && (
                   <p className="text-xs text-amber-600 mt-1">
-                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum. Anda bisa ketik manual.'}
+                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum.'}
                   </p>
                 )}
               </div>
@@ -798,10 +808,9 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                 <Label>NIP Auditee</Label>
                 <Input 
                   value={formData.auditee.nip}
-                  onChange={(e) => updateAuditee('nip', e.target.value)}
                   placeholder="NIP Auditee"
                   required
-                  disabled={readOnly || Boolean(participants.length > 0)}
+                  disabled
                 />
               </div>
             </div>
@@ -883,7 +892,7 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                         <DocumentSelect
                           value={docId}
                           onChange={(value) => updateFinding(index, 'objective_evidence', buildObjectiveEvidence(value, note))}
-                          disabled={documentsLoading}
+                          disabled={documentsLoading || readOnly}
                           documents={documents}
                           loading={documentsLoading}
                         />
