@@ -20,6 +20,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useAdminClauses } from '@/hooks/useAdminClause'
+import { useActiveDocumentMaster } from '@/hooks/useActiveMaster'
 import { useRoomParticipants } from '@/hooks/useRoom'
 import { cn } from '@/lib/utils'
 import * as documentService from '@/services/documentService'
@@ -410,9 +411,11 @@ const getParticipantLabel = (participant) => {
 
 const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
   const { data: clauseData, isLoading: clausesLoading } = useAdminClauses({ per_page: 100, is_active: true })
+  const { data: activeMaster, isLoading: activeMasterLoading } = useActiveDocumentMaster({ enabled: !readOnly })
   const [documents, setDocuments] = useState([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [documentsError, setDocumentsError] = useState(null)
+  const [headerError, setHeaderError] = useState('')
 
   const participantsParams = useMemo(() => ({ per_page: 100 }), [])
   const {
@@ -427,8 +430,8 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
   const participants = participantsData?.participants ?? []
   const [formData, setFormData] = useState({
     document_number: initialData?.document_number || '',
-    issued_date: initialData?.issued_date || new Date().toISOString().split('T')[0],
-    revision_number: initialData?.revision_number || '0',
+    issued_date: initialData?.issued_date || '',
+    revision_number: initialData?.revision_number || '',
     audit_code: initialData?.audit_code || '',
     audited_unit: initialData?.audited_unit || '',
     audit_date: initialData?.audit_date || new Date().toISOString().split('T')[0],
@@ -439,6 +442,16 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
 
   const [selectedAuditorId, setSelectedAuditorId] = useState('')
   const [selectedAuditeeId, setSelectedAuditeeId] = useState('')
+
+  useEffect(() => {
+    if (readOnly || initialData || activeMasterLoading) return
+    setFormData((current) => ({
+      ...current,
+      document_number: activeMaster?.document_number || '',
+      issued_date: activeMaster?.published_at ? activeMaster.published_at.slice(0, 10) : '',
+      revision_number: activeMaster?.revision_number || '',
+    }))
+  }, [activeMaster, activeMasterLoading, initialData, readOnly])
 
   const auditorCandidates = useMemo(() => {
     const filtered = participants.filter((p) => normalizeRole(p?.role) === 'auditor')
@@ -600,6 +613,19 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    const missingHeader =
+      !initialData &&
+      (!activeMaster ||
+        !formData.document_number?.trim() ||
+        !formData.issued_date?.trim() ||
+        !formData.revision_number?.trim())
+
+    if (missingHeader) {
+      setHeaderError('Simpan diblokir: siapkan master dokumen aktif di Administrasi yang memiliki nomor dokumen, tanggal terbit, dan nomor revisi.')
+      return
+    }
+
+    setHeaderError('')
     onSubmit(formData)
   }
 
@@ -640,8 +666,8 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
               <Label>No. Dokumen</Label>
               <Input
                 value={formData.document_number}
-                onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
-                placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
+                placeholder={activeMasterLoading ? 'Memuat master dokumen...' : 'Belum ada master dokumen aktif'}
+                disabled
               />
             </div>
             <div>
@@ -649,18 +675,19 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
               <Input
                 type="date"
                 value={formData.issued_date}
-                onChange={(e) => setFormData({ ...formData, issued_date: e.target.value })}
+                disabled
               />
             </div>
             <div>
               <Label>No. Revisi</Label>
               <Input
                 value={formData.revision_number}
-                onChange={(e) => setFormData({ ...formData, revision_number: e.target.value })}
-                placeholder="Contoh: 0"
+                placeholder={activeMasterLoading ? 'Memuat master dokumen...' : 'Belum ada master dokumen aktif'}
+                disabled
               />
             </div>
           </div>
+          {headerError && <p className="text-sm text-destructive">{headerError}</p>}
 
           {/* Auditor Info */}
           <div className="border rounded-md p-4">
