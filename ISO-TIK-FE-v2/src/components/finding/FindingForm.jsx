@@ -236,14 +236,40 @@ function DocumentSelect({ value, onChange, disabled, documents, loading }) {
     if (documentNames[doc.id]) return documentNames[doc.id]
     if (doc.display_name) return doc.display_name
     if (doc.original_filename) return doc.original_filename
+    if (doc.original_name) return doc.original_name
     if (doc.filename) return doc.filename
+    if (doc.file_name) return doc.file_name
     if (doc.name) return doc.name
     return `Dokumen-${doc.id.substring(0, 8)}`
   }
 
+  useEffect(() => {
+    if (!value || documents.some((doc) => String(doc.id) === String(value)) || documentNames[value]) return
+    let isMounted = true
+    setLoadingNames((prev) => ({ ...prev, [value]: true }))
+    documentService.getDocumentDownloadInfo(value, { suppressNotFound: true })
+      .then((info) => {
+        const resolvedName =
+          info?.attachment?.filename ||
+          info?.attachment?.original_filename ||
+          info?.document?.original_filename ||
+          info?.document?.filename ||
+          info?.filename
+        if (isMounted && resolvedName) {
+          setDocumentNames((prev) => ({ ...prev, [value]: resolvedName }))
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoadingNames((prev) => ({ ...prev, [value]: false }))
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [value, documents, documentNames])
+
   const selectedDocument = useMemo(() => {
     if (!value) return null
-    return documents.find((doc) => String(doc.id) === String(value)) ?? null
+    return documents.find((doc) => String(doc.id) === String(value)) ?? { id: value }
   }, [documents, value])
 
   const filteredDocuments = useMemo(() => {
@@ -530,14 +556,13 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
       setDocumentsError(null)
       try {
         let docs = []
-        if (forumId) {
-          // Load attachments that belong to the forum where the topic/form was created
-          const res = await forumAttachmentService.listForumAttachments(forumId, { per_page: 200 })
-          docs = res?.attachments ?? []
-        } else {
-          const res = await documentService.listDocuments({ per_page: 200 })
-          docs = res?.documents ?? []
-        }
+        const [forumRes, documentRes] = await Promise.all([
+          forumId
+            ? forumAttachmentService.listForumAttachments(forumId, { per_page: 200 }).catch(() => ({ attachments: [] }))
+            : Promise.resolve({ attachments: [] }),
+          documentService.listDocuments({ per_page: 200 }).catch(() => ({ documents: [] })),
+        ])
+        docs = [...(forumRes?.attachments ?? []), ...(documentRes?.documents ?? [])]
 
         if (isMounted) setDocuments(docs)
       } catch (error) {
@@ -723,15 +748,15 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
           {/* Auditor Info */}
           <div className="border rounded-md p-4">
             <h4 className="font-medium mb-3">Informasi Auditor</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="min-w-0">
                 <Label>Nama Auditor</Label>
                 <Select
                   value={selectedAuditorId}
                   onValueChange={updateAuditorFromParticipant}
                   disabled={participantsLoading || readOnly || auditorCandidates.length === 0}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditor'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -756,7 +781,7 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                   </p>
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label>NIP Auditor</Label>
                 <Input 
                   value={formData.auditor.nip}
@@ -771,15 +796,15 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
           {/* Auditee Info */}
           <div className="border rounded-md p-4">
             <h4 className="font-medium mb-3">Informasi Auditee</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="min-w-0">
                 <Label>Nama Auditee</Label>
                 <Select
                   value={selectedAuditeeId}
                   onValueChange={updateAuditeeFromParticipant}
                   disabled={participantsLoading || readOnly || auditeeCandidates.length === 0}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditee'} />
                   </SelectTrigger>
                   <SelectContent>
@@ -804,7 +829,7 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                   </p>
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label>NIP Auditee</Label>
                 <Input 
                   value={formData.auditee.nip}

@@ -104,13 +104,41 @@ const FindingTable = ({ findings, auditInfo, forumId }) => {
     if (objectiveEvidenceIds.length === 0) return
     const missing = objectiveEvidenceIds.filter((docId) => !documentNames[docId])
     if (missing.length === 0) return
+    let isMounted = true
     setLoadingNames((prev) => ({
       ...prev,
-      ...missing.reduce((acc, docId) => {
-        acc[docId] = false
-        return acc
-      }, {}),
+      ...missing.reduce((acc, docId) => ({ ...acc, [docId]: true }), {}),
     }))
+    Promise.all(
+      missing.map((docId) =>
+        documentService.getDocumentDownloadInfo(docId, { suppressNotFound: true })
+          .then((info) => {
+            const resolvedName =
+              info?.attachment?.filename ||
+              info?.attachment?.original_filename ||
+              info?.document?.original_filename ||
+              info?.document?.filename ||
+              info?.filename
+            return resolvedName ? [docId, resolvedName] : null
+          })
+          .catch(() => null)
+      )
+    ).then((entries) => {
+      if (!isMounted) return
+      const names = entries.filter(Boolean).reduce((acc, [docId, name]) => ({ ...acc, [docId]: name }), {})
+      if (Object.keys(names).length > 0) {
+        setDocumentNames((prev) => ({ ...prev, ...names }))
+      }
+    }).finally(() => {
+      if (!isMounted) return
+      setLoadingNames((prev) => ({
+        ...prev,
+        ...missing.reduce((acc, docId) => ({ ...acc, [docId]: false }), {}),
+      }))
+    })
+    return () => {
+      isMounted = false
+    }
   }, [objectiveEvidenceIds, documentNames])
 
   const getObjectiveEvidenceLabel = (value) => {

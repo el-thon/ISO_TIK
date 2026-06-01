@@ -404,6 +404,43 @@ export default function TopicDetail() {
     }
   }, [findingData, forumId])
 
+  useEffect(() => {
+    const objectiveEvidenceIds = findingData?.findings
+      ?.map((finding) => finding?.objective_evidence)
+      .filter(Boolean)
+      .map((value) => String(value).split('||')[0]?.trim())
+      .filter(Boolean)
+    const missing = (objectiveEvidenceIds || []).filter((docId) => !documentNameMap[docId])
+    if (missing.length === 0) return
+
+    let isMounted = true
+    Promise.all(
+      missing.map((docId) =>
+        documentService.getDocumentDownloadInfo(docId, { suppressNotFound: true })
+          .then((info) => {
+            const resolvedName =
+              info?.attachment?.filename ||
+              info?.attachment?.original_filename ||
+              info?.document?.original_filename ||
+              info?.document?.filename ||
+              info?.filename
+            return resolvedName ? [docId, resolvedName] : null
+          })
+          .catch(() => null)
+      )
+    ).then((entries) => {
+      if (!isMounted) return
+      const mapped = entries.filter(Boolean).reduce((acc, [docId, name]) => ({ ...acc, [docId]: name }), {})
+      if (Object.keys(mapped).length > 0) {
+        setDocumentNameMap((prev) => ({ ...prev, ...mapped }))
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [findingData, documentNameMap])
+
   const getObjectiveEvidenceLabel = useCallback(
     (value) => {
       if (!value) return '-'
