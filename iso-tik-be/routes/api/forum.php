@@ -18,8 +18,8 @@ Route::middleware('api.token')->group(function (): void {
     Route::post('/forums/{roomId}/restore', [ForumController::class, 'restore'])->middleware('role:admin');
 
     Route::get('/forums/{roomId}/participants', [ForumParticipantController::class, 'index']);
-    Route::post('/forums/{roomId}/participants', [ForumParticipantController::class, 'store'])->middleware('role:admin');
-    Route::put('/forums/{roomId}/participants/{participantId}', [ForumParticipantController::class, 'update'])->middleware('role:admin');
-    Route::delete('/forums/{roomId}/participants/{participantId}', [ForumParticipantController::class, 'destroy'])->middleware('role:admin');
+    Route::post('/forums/{roomId}/participants', [ForumParticipantController::class, 'store']);
+    Route::put('/forums/{roomId}/participants/{participantId}', [ForumParticipantController::class, 'update']);
+    Route::delete('/forums/{roomId}/participants/{participantId}', [ForumParticipantController::class, 'destroy']);
     Route::post('/forums/{roomId}/leave', [ForumParticipantController::class, 'leave']);
 });

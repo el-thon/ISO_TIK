@@ -59,6 +59,11 @@ export default function RoomDetail() {
   // Ensure we have string for comparison
   const normalizedCurrentUserId = currentUserId ? String(currentUserId) : null
   const normalizedResponsibleUserId = room?.responsible_user_id ? String(room.responsible_user_id) : null
+  const normalizedOwnerUserId =
+    room?.created_by_user_id ? String(room.created_by_user_id)
+      : room?.created_by_user?.id ? String(room.created_by_user.id)
+        : room?.owner?.id ? String(room.owner.id)
+          : null
 
   const {
     data: participantsData,
@@ -88,9 +93,11 @@ export default function RoomDetail() {
   
   // Check if current user is the responsible user (owner) of this room
   const isRoomOwner = Boolean(
-    normalizedCurrentUserId && 
-    normalizedResponsibleUserId && 
-    normalizedCurrentUserId === normalizedResponsibleUserId
+    normalizedCurrentUserId && (
+      (normalizedResponsibleUserId && normalizedCurrentUserId === normalizedResponsibleUserId) ||
+      (normalizedOwnerUserId && normalizedCurrentUserId === normalizedOwnerUserId) ||
+      room?.current_user_participant?.is_responsible_user === true
+    )
   )
   const deadlineToastShownRef = React.useRef(false)
 
@@ -231,7 +238,7 @@ export default function RoomDetail() {
                     items={[
                       { label: 'Formulir', value: 'topics', count: stats.topic_count ?? 0, icon: <FileText className="w-4 h-4" /> },
                       { label: 'Lampiran', value: 'attachments', icon: <Paperclip className="w-4 h-4" /> },
-                      { label: 'Peserta', value: 'participants', count: stats.participant_count ?? 0, icon: <Users className="w-4 h-4" /> },
+                      { label: isRoomOwner ? 'Invitation' : 'Peserta', value: 'participants', count: stats.participant_count ?? 0, icon: <Users className="w-4 h-4" /> },
                       ...(isRoomOwner ? [{ label: 'Pengaturan', value: 'settings', icon: <Settings className="w-4 h-4" /> }] : []),
                     ]}
                   />

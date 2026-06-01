@@ -6,6 +6,7 @@ use App\Http\Resources\Api\V1\Collaboration\ForumDetailResource;
 use App\Http\Resources\Api\V1\Collaboration\ForumResource;
 use App\Models\Collaboration\Forum;
 use App\Models\Collaboration\ForumPeriod;
+use App\Models\Collaboration\ForumPeriodMember;
 use App\Models\Collaboration\ForumParticipant;
 use App\Models\User;
 use App\Services\Api\V1\Security\AuditLogService;
@@ -58,17 +59,37 @@ class ForumService
     public function store(string $periodId, array $payload, Request $request): JsonResponse
     {
         ForumPeriod::findOrFail($periodId);
+        $responsibleUserId = $payload['responsible_user_id'] ?? $request->user()?->id;
+        $invitedUserIds = collect($payload['participant_ids'] ?? [])
+            ->merge($payload['auditor_ids'] ?? [])
+            ->merge($payload['auditee_ids'] ?? [])
+            ->merge(collect($payload['participants'] ?? [])->pluck('user_id'))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($responsibleUserId && ! $this->isPeriodMember($periodId, (string) $responsibleUserId)) {
+            return ApiResponse::error('Forum owner must be a member of the same period', 422);
+        }
+
+        foreach ($invitedUserIds as $userId) {
+            if (! $this->isPeriodMember($periodId, (string) $userId)) {
+                return ApiResponse::error('Participant must be a member of the same period', 422);
+            }
+        }
+
         $forum = Forum::create([
             ...Arr::only($payload, ['name', 'description', 'visibility', 'responsible_user_id']),
             'forum_period_id' => $periodId,
             'visibility' => $payload['visibility'] ?? 'private',
+            'responsible_user_id' => $responsibleUserId,
             'join_code' => $payload['join_code'] ?? $this->code(),
             'is_join_code_active' => $payload['is_join_code_active'] ?? true,
             'is_locked' => false,
             'is_archived' => false,
         ]);
 
-        if ($request->user()) $this->ensureParticipant($forum, $request->user(), 'auditor', $request->user(), false);
+        if ($request->user()) $this->ensureParticipant($forum, $request->user(), 'auditor', $request->user(), true);
         if ($forum->responsible_user_id && $responsible = User::find($forum->responsible_user_id)) $this->ensureParticipant($forum, $responsible, 'auditor', $request->user(), true);
         foreach ($payload['participant_ids'] ?? [] as $userId) if ($user = User::find($userId)) $this->ensureParticipant($forum, $user, 'auditee', $request->user(), false);
         foreach ($payload['auditor_ids'] ?? [] as $userId) if ($user = User::find($userId)) $this->ensureParticipant($forum, $user, 'auditor', $request->user(), false);
@@ -122,6 +143,10 @@ class ForumService
     {
         $code = $payload['join_code'] ?? $payload['code'] ?? null;
         $forum = Forum::where('join_code', $code)->where('is_join_code_active', true)->where('is_archived', false)->firstOrFail();
+        if (! $this->isPeriodMember($forum->forum_period_id, $request->user()->id)) {
+            return ApiResponse::forbidden('You must be a member of the same period before joining this forum');
+        }
+
         $participant = $this->ensureParticipant($forum, $request->user(), 'auditee', $request->user(), false);
         $this->audit->record($request->user(), 'forum', $forum->id, 'join_forum', [], $request);
         $forumPayload = $this->forumPayload($forum, $request);
@@ -193,6 +218,16 @@ class ForumService
     private function canManageForum(Forum $forum, Request $request): bool
     {
         return (bool) $request->user()?->hasRole('admin');
+    }
+
+    private function isPeriodMember(?string $periodId, string $userId): bool
+    {
+        if (! $periodId) return false;
+
+        return ForumPeriodMember::where('forum_period_id', $periodId)
+            ->where('user_id', $userId)
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
     private function code(): string

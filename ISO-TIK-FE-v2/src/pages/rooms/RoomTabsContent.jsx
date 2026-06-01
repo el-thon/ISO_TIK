@@ -50,11 +50,8 @@ export default function RoomTabsContent({ roomId, room, isRoomOwner, currentUser
   const { data: periodDetail } = useForumPeriod(periodId, { enabled: Boolean(periodId) })
 
   const canManageParticipants = useMemo(() => {
-    if (isRoomOwner) return true
-    if (!periodDetail || !periodDetail.members) return false
-    const me = periodDetail.members.find((m) => String(m.user_id) === String(currentUserId))
-    return me && me.role === 'admin'
-  }, [isRoomOwner, periodDetail, currentUserId])
+    return Boolean(isRoomOwner)
+  }, [isRoomOwner])
 
   const queryClient = useQueryClient()
   const updateParticipant = useMutation({
