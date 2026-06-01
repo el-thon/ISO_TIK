@@ -2,12 +2,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import * as documentService from '@/services/documentService'
+import * as forumAttachmentService from '@/services/forumAttachmentService'
 import { useAdminClauses } from '@/hooks/useAdminClause'
 
-const FindingTable = ({ findings, auditInfo }) => {
+const OBJECTIVE_EVIDENCE_SEPARATOR = '||'
+
+const splitObjectiveEvidence = (value) => {
+  if (!value) return { docId: '', note: '' }
+  const raw = String(value)
+  const [docId, ...noteParts] = raw.split(OBJECTIVE_EVIDENCE_SEPARATOR)
+  return { docId: docId.trim(), note: noteParts.join(OBJECTIVE_EVIDENCE_SEPARATOR).trim() }
+}
+
+const FindingTable = ({ findings, auditInfo, forumId }) => {
   const [documentNames, setDocumentNames] = useState({})
   const [loadingNames, setLoadingNames] = useState({})
-  const [documentsLoaded, setDocumentsLoaded] = useState(false)
   const knownDocumentIdsRef = useRef(new Set())
   const { data: clauseData } = useAdminClauses({ per_page: 100, is_active: true })
 
@@ -40,18 +49,26 @@ const FindingTable = ({ findings, auditInfo }) => {
     const ids = findings
       .map((finding) => finding?.objective_evidence)
       .filter(Boolean)
-      .map((id) => String(id))
+      .map((value) => splitObjectiveEvidence(value).docId)
+      .filter(Boolean)
     return Array.from(new Set(ids))
   }, [findings])
 
+  const objectiveEvidenceKey = useMemo(() => objectiveEvidenceIds.join('|'), [objectiveEvidenceIds])
+
   useEffect(() => {
-    if (objectiveEvidenceIds.length === 0 || documentsLoaded) return
+    if (objectiveEvidenceIds.length === 0) return
 
     let isMounted = true
     const fetchDocumentList = async () => {
       try {
-        const res = await documentService.listDocuments({ per_page: 200 })
-        const docs = res?.documents ?? []
+        const [forumRes, documentRes] = await Promise.all([
+          forumId
+            ? forumAttachmentService.listForumAttachments(forumId, { per_page: 200 }).catch(() => ({ attachments: [] }))
+            : Promise.resolve({ attachments: [] }),
+          documentService.listDocuments({ per_page: 200 }).catch(() => ({ documents: [] })),
+        ])
+        const docs = [...(forumRes?.attachments ?? []), ...(documentRes?.documents ?? [])]
         const names = docs.reduce((acc, doc) => {
           const docId = doc?.id ? String(doc.id) : null
           if (!docId) return acc
@@ -73,8 +90,6 @@ const FindingTable = ({ findings, auditInfo }) => {
         }
       } catch (error) {
         console.error('Failed to load documents list for evidence names:', error)
-      } finally {
-        if (isMounted) setDocumentsLoaded(true)
       }
     }
 
@@ -83,10 +98,10 @@ const FindingTable = ({ findings, auditInfo }) => {
     return () => {
       isMounted = false
     }
-  }, [objectiveEvidenceIds, documentsLoaded])
+  }, [objectiveEvidenceKey, forumId])
 
   useEffect(() => {
-    if (objectiveEvidenceIds.length === 0 || !documentsLoaded) return
+    if (objectiveEvidenceIds.length === 0) return
     const missing = objectiveEvidenceIds.filter((docId) => !documentNames[docId])
     if (missing.length === 0) return
     setLoadingNames((prev) => ({
@@ -96,14 +111,14 @@ const FindingTable = ({ findings, auditInfo }) => {
         return acc
       }, {}),
     }))
-  }, [objectiveEvidenceIds, documentNames, documentsLoaded])
+  }, [objectiveEvidenceIds, documentNames])
 
   const getObjectiveEvidenceLabel = (value) => {
     if (!value) return '-'
-    const docId = String(value)
-    if (documentNames[docId]) return documentNames[docId]
-    if (loadingNames[docId]) return 'Memuat nama dokumen...'
-    return `Dokumen-${docId.substring(0, 8)}`
+    const { docId, note } = splitObjectiveEvidence(value)
+    if (!docId) return note || '-'
+    const baseLabel = documentNames[docId] || (loadingNames[docId] ? 'Memuat nama dokumen...' : `Dokumen-${docId.substring(0, 8)}`)
+    return note ? `${baseLabel} - ${note}` : baseLabel
   }
 
   if (!findings || findings.length === 0) {
@@ -148,20 +163,20 @@ const FindingTable = ({ findings, auditInfo }) => {
       <CardContent className="pt-6">
         {/* Header informasi audit */}
         {auditInfo && (
-          <div className="mb-4 p-3 bg-slate-50 rounded-md text-sm">
-            <div className="grid grid-cols-2 gap-2">
-              <div><span className="font-medium">Kode Audit:</span> {auditInfo.audit_code}</div>
-              <div><span className="font-medium">Unit Diaudit:</span> {auditInfo.audited_unit}</div>
-              <div><span className="font-medium">Tanggal Audit:</span> {auditInfo.audit_date}</div>
-              <div><span className="font-medium">Auditor:</span> {auditInfo.auditor?.name} ({auditInfo.auditor?.nip})</div>
-              <div><span className="font-medium">Auditee:</span> {auditInfo.auditee?.name} ({auditInfo.auditee?.nip})</div>
+          <div className="mb-4 rounded-md bg-slate-50 p-3 text-sm">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <div className="break-words"><span className="font-medium">Kode Audit:</span> {auditInfo.audit_code || '-'}</div>
+              <div className="break-words"><span className="font-medium">Unit Diaudit:</span> {auditInfo.audited_unit || '-'}</div>
+              <div className="break-words"><span className="font-medium">Tanggal Audit:</span> {auditInfo.audit_date || '-'}</div>
+              <div className="break-words"><span className="font-medium">Auditor:</span> {auditInfo.auditor?.name || '-'}{auditInfo.auditor?.nip ? ` (${auditInfo.auditor.nip})` : ''}</div>
+              <div className="break-words"><span className="font-medium">Auditee:</span> {auditInfo.auditee?.name || '-'}{auditInfo.auditee?.nip ? ` (${auditInfo.auditee.nip})` : ''}</div>
             </div>
           </div>
         )}
 
-        <h3 className="text-lg font-semibold mb-4">DAFTAR TEMUAN KETIDAKSESUAIAN</h3>
+        <h3 className="mb-4 text-base font-semibold sm:text-lg">DAFTAR TEMUAN KETIDAKSESUAIAN</h3>
         
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full border-collapse">
             <thead>
               <tr className="bg-slate-100">
@@ -192,6 +207,35 @@ const FindingTable = ({ findings, auditInfo }) => {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="space-y-3 md:hidden">
+          {findings.map((finding) => (
+            <div key={finding.no} className="rounded-md border bg-white p-3 text-sm shadow-sm">
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div className="font-semibold">Temuan #{finding.no}</div>
+                <div className="shrink-0">{getFindingTypeBadge(finding.finding_type)}</div>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Uraian Temuan</div>
+                  <div className="mt-1 break-words">{finding.finding_description || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Klausul / Acuan</div>
+                  <div className="mt-1 space-y-1">
+                    {finding.clause_references?.length ? finding.clause_references.map((ref, idx) => (
+                      <div key={idx} className="break-words">• {resolveClauseRef(ref)}</div>
+                    )) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase text-muted-foreground">Bukti Objektif</div>
+                  <div className="mt-1 break-words">{getObjectiveEvidenceLabel(finding.objective_evidence)}</div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
