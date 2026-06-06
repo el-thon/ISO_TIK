@@ -3,7 +3,6 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import RootRedirect from './routes/RootRedirect'
 // Perbaikan: Import langsung dari file Login.jsx, bukan dari index.jsx
 import Login from './pages/auth/index'
-import ForgotPassword from './pages/auth/ForgotPassword'
 import Dashboard from './pages/dashboard'
 import CreateTopic from './pages/topics/CreateTopic'
 import TopicDetail from './pages/topics/detail'
@@ -31,7 +30,6 @@ export const router = createBrowserRouter(
     { path: '/formulir/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
     { path: '/formulir/buat', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },
     { path: '/profil', element: (<ProtectedRoute><Profile /></ProtectedRoute>) },
-    { path: '/auth/lupa-password', element: <ForgotPassword /> },
     { path: '*', element: <NotFound /> }, // Halaman tidak ditemukan
   ],
   {

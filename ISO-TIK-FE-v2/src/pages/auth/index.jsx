@@ -303,7 +303,7 @@ function Login() {
             )}
 
             {!otpStep && (
-              <div className="flex items-center justify-between">
+              <div className="flex items-center">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="remember"
@@ -314,9 +314,6 @@ function Login() {
                     Ingat Saya
                   </Label>
                 </div>
-                <Link to="/auth/lupa-password" className="text-sm text-primary hover:underline">
-                  Lupa kata sandi?
-                </Link>
               </div>
             )}
 
