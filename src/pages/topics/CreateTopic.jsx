@@ -793,11 +793,7 @@ export default function CreateTopic() {
   const [documentNumber, setDocumentNumber] = useState('')
   // Start empty to avoid UI flicker; we'll sync from activeMaster when available
   const [issuedDate, setIssuedDate] = useState('')
-  const [revisionNumber, setRevisionNumber] = useState('0')
-  // Track whether user manually edited fields; if user edited, don't overwrite from master
-  const [docTouched, setDocTouched] = useState(false)
-  const [issuedTouched, setIssuedTouched] = useState(false)
-  const [revTouched, setRevTouched] = useState(false)
+  const [revisionNumber, setRevisionNumber] = useState('')
   const [auditorName, setAuditorName] = useState('')
   const [auditorNip, setAuditorNip] = useState('')
   const [auditeeName, setAuditeeName] = useState('')
@@ -822,14 +818,19 @@ export default function CreateTopic() {
 
   useMe({ enabled: true })
 
-  // Sync active master into form fields when it becomes available, but don't overwrite user edits
+  // Header dokumen hanya boleh berasal dari master aktif di Administrasi.
   useEffect(() => {
-    if (!activeMasterLoading && activeMaster) {
-      if (!docTouched && activeMaster.document_number) setDocumentNumber(activeMaster.document_number)
-      if (!issuedTouched && activeMaster.published_at) setIssuedDate(activeMaster.published_at.slice(0,10))
-      if (!revTouched && activeMaster.revision_number) setRevisionNumber(activeMaster.revision_number)
+    if (activeMasterLoading) return
+    if (activeMaster) {
+      setDocumentNumber(activeMaster.document_number || '')
+      setIssuedDate(activeMaster.published_at ? activeMaster.published_at.slice(0, 10) : '')
+      setRevisionNumber(activeMaster.revision_number || '')
+    } else {
+      setDocumentNumber('')
+      setIssuedDate('')
+      setRevisionNumber('')
     }
-  }, [activeMaster, activeMasterLoading, docTouched, issuedTouched, revTouched])
+  }, [activeMaster, activeMasterLoading])
 
   const resolvedForumId = selectedForum || forumFromState || forumFromQuery
 
@@ -951,14 +952,6 @@ export default function CreateTopic() {
 
   // Load dokumen
   useEffect(() => {
-    // Fetch active TopicDocumentMaster for auto-fill
-    // Prefill only when active master exists and fields are still empty
-    if (activeMaster) {
-      if (!documentNumber && activeMaster.document_number) setDocumentNumber(activeMaster.document_number)
-      if ((!issuedDate || issuedDate === '') && activeMaster.published_at) setIssuedDate(activeMaster.published_at.slice(0,10))
-      if ((!revisionNumber || revisionNumber === '') && activeMaster.revision_number) setRevisionNumber(activeMaster.revision_number)
-    }
-
     const loadDocuments = async () => {
       const forumId = resolvedForumId || ''
       if (!forumId) {
@@ -1065,17 +1058,16 @@ export default function CreateTopic() {
       return
     }
     
-    // Validation: if there is no active master, ensure the 3 master fields are present
-    if (!activeMaster) {
-      const docEmpty = !documentNumber || !documentNumber.trim()
-      const issuedEmpty = !issuedDate || !issuedDate.trim()
-      const revEmpty = !revisionNumber || !revisionNumber.trim()
-      if (docEmpty && issuedEmpty && revEmpty) {
-        setMasterValidationError('Simpan diblokir: nomor dokumen, tanggal terbit, dan nomor revisi harus diisi atau siapkan master dokumen aktif di Administrasi.')
-        // Ensure user sees the audit-info tab
-        setActiveTab('audit-info')
-        return
-      }
+    const missingMasterHeader =
+      !activeMaster ||
+      !documentNumber.trim() ||
+      !issuedDate.trim() ||
+      !revisionNumber.trim()
+
+    if (missingMasterHeader) {
+      setMasterValidationError('Simpan diblokir: siapkan master dokumen aktif di Administrasi yang memiliki nomor dokumen, tanggal terbit, dan nomor revisi.')
+      setActiveTab('audit-info')
+      return
     }
 
     setSubmitting(true)
@@ -1107,7 +1099,7 @@ export default function CreateTopic() {
             
       // STEP 2: Create input item untuk topic yang baru dibuat
       const inputItemPayload = {
-        type: "form_data",
+        type: "finding",
         label: "Form Daftar Temuan Ketidaksesuaian",
         value: "",
         order_index: 1,
@@ -1284,9 +1276,8 @@ export default function CreateTopic() {
                     <div className="relative">
                       <Input
                         value={documentNumber}
-                        onChange={(e) => { setDocumentNumber(e.target.value); setDocTouched(true) }}
-                        placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
-                        disabled={!!activeMaster || activeMasterLoading}
+                        placeholder={activeMasterLoading ? 'Memuat master dokumen...' : 'Belum ada master dokumen aktif'}
+                        disabled
                       />
                       {activeMasterLoading && (
                         <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -1307,9 +1298,8 @@ export default function CreateTopic() {
                       <Input
                         type="date"
                         value={issuedDate}
-                        onChange={(e) => { setIssuedDate(e.target.value); setIssuedTouched(true) }}
                         className="pl-9"
-                        disabled={!!activeMaster || activeMasterLoading}
+                        disabled
                       />
                       {activeMasterLoading && (
                         <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -1326,9 +1316,8 @@ export default function CreateTopic() {
                     <div className="relative">
                       <Input
                         value={revisionNumber}
-                        onChange={(e) => { setRevisionNumber(e.target.value); setRevTouched(true) }}
-                        placeholder="Contoh: 0"
-                        disabled={!!activeMaster || activeMasterLoading}
+                        placeholder={activeMasterLoading ? 'Memuat master dokumen...' : 'Belum ada master dokumen aktif'}
+                        disabled
                       />
                       {activeMasterLoading && (
                         <div className="absolute right-2 top-1/2 -translate-y-1/2">

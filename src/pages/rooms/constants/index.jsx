@@ -11,7 +11,7 @@ export const isForumRelated = (forum) => {
   if (forum?.is_related === true) return true
   if (forum?.is_related === false) return false
   const role = String(forum?.current_user_role ?? forum?.user_role ?? '').toLowerCase().trim()
-  if (!role) return true
+  if (!role) return false
   if (['outsider', 'none', 'guest', 'unrelated'].includes(role)) return false
   return true
 }

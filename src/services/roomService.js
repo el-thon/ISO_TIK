@@ -1,6 +1,29 @@
 import api from './api'
 import { ensureArray, mergePagination, unwrapApiPayload } from './serviceUtils'
 
+const unwrapRoomPayload = (payload = {}) => payload.forum ?? payload.room ?? payload
+const normalizeRoom = (room = {}) => {
+	const participantCount = room?.participant_count ?? room?.participants_count ?? 0
+	const topicCount = room?.topic_count ?? room?.topics_count ?? room?.formulir_count ?? 0
+	const createdByUser = room?.created_by_user ?? room?.owner ?? room?.responsible_user ?? null
+
+	return {
+		...room,
+		participant_count: participantCount,
+		participants_count: room?.participants_count ?? participantCount,
+		topic_count: topicCount,
+		topics_count: room?.topics_count ?? topicCount,
+		stats: {
+			...(room?.stats ?? {}),
+			participant_count: room?.stats?.participant_count ?? participantCount,
+			topic_count: room?.stats?.topic_count ?? topicCount,
+		},
+		created_by_user: createdByUser,
+		owner: room?.owner ?? createdByUser,
+		created_by: room?.created_by ?? createdByUser?.name ?? createdByUser?.username ?? null,
+	}
+}
+
 export async function listRooms(params = {}) {
 	const res = await api.get('/forums', { params })
 	const payload = unwrapApiPayload(res) ?? {}
@@ -14,13 +37,13 @@ export async function listRooms(params = {}) {
 export async function getRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.get(`/forums/${roomId}`)
-	return unwrapApiPayload(res) ?? {}
+	return normalizeRoom(unwrapRoomPayload(unwrapApiPayload(res) ?? {}))
 }
 
 export async function updateRoom(roomId, payload) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.put(`/forums/${roomId}`, payload)
-	return unwrapApiPayload(res) ?? {}
+	return normalizeRoom(unwrapRoomPayload(unwrapApiPayload(res) ?? {}))
 }
 
 export async function deleteRoom(roomId) {
@@ -37,25 +60,25 @@ export async function createRoom(payload) {
 export async function lockRoom(roomId, payload = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/lock`, payload)
-	return unwrapApiPayload(res) ?? {}
+	return normalizeRoom(unwrapRoomPayload(unwrapApiPayload(res) ?? {}))
 }
 
 export async function unlockRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/unlock`)
-	return unwrapApiPayload(res) ?? {}
+	return normalizeRoom(unwrapRoomPayload(unwrapApiPayload(res) ?? {}))
 }
 
 export async function archiveRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/archive`)
-	return unwrapApiPayload(res) ?? {}
+	return normalizeRoom(unwrapRoomPayload(unwrapApiPayload(res) ?? {}))
 }
 
 export async function restoreRoom(roomId) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.post(`/forums/${roomId}/restore`)
-	return unwrapApiPayload(res) ?? {}
+	return normalizeRoom(unwrapRoomPayload(unwrapApiPayload(res) ?? {}))
 }
 
 export async function listParticipants(roomId, params = {}) {

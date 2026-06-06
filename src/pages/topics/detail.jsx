@@ -47,6 +47,7 @@ import FindingForm from '@/components/finding/FindingForm'
 import FindingTable from '@/components/finding/FindingTable'
 import { convertFormToInputItem, extractFindingFromInputItem } from '../../utils/findingHelper'
 import * as documentService from '@/services/documentService'
+import * as forumAttachmentService from '@/services/forumAttachmentService'
 import { isPeriodDeadlinePassed as isPeriodDeadlinePassedUtil } from '@/utils/periodDeadline'
 
 // Import PDF Generator
@@ -251,7 +252,7 @@ export default function TopicDetail() {
 
   const forumId = topic?.forum?.id || topic?.room?.id || topic?.forum_id || topic?.room_id
 
-  // Load participants to determine if current user is auditee (auditee can't add/edit findings)
+  // Load participants to determine whether current user can add/edit findings.
   const participantsParams = useMemo(() => ({ per_page: 200 }), [])
   const { data: participantsData } = useRoomParticipants(forumId, participantsParams, {
     enabled: Boolean(forumId),
@@ -361,14 +362,20 @@ export default function TopicDetail() {
     const objectiveEvidenceIds = findingData?.findings
       ?.map((finding) => finding?.objective_evidence)
       .filter(Boolean)
-      .map((id) => String(id))
+      .map((value) => String(value).split('||')[0]?.trim())
+      .filter(Boolean)
     if (!objectiveEvidenceIds || objectiveEvidenceIds.length === 0) return
 
     let isMounted = true
     const loadDocuments = async () => {
       try {
-        const res = await documentService.listDocuments({ per_page: 200 })
-        const docs = res?.documents ?? []
+        const [forumRes, documentRes] = await Promise.all([
+          forumId
+            ? forumAttachmentService.listForumAttachments(forumId, { per_page: 200 }).catch(() => ({ attachments: [] }))
+            : Promise.resolve({ attachments: [] }),
+          documentService.listDocuments({ per_page: 200 }).catch(() => ({ documents: [] })),
+        ])
+        const docs = [...(forumRes?.attachments ?? []), ...(documentRes?.documents ?? [])]
         const mapped = docs.reduce((acc, doc) => {
           const docId = doc?.id ? String(doc.id) : null
           if (!docId) return acc
@@ -395,7 +402,44 @@ export default function TopicDetail() {
     return () => {
       isMounted = false
     }
-  }, [findingData])
+  }, [findingData, forumId])
+
+  useEffect(() => {
+    const objectiveEvidenceIds = findingData?.findings
+      ?.map((finding) => finding?.objective_evidence)
+      .filter(Boolean)
+      .map((value) => String(value).split('||')[0]?.trim())
+      .filter(Boolean)
+    const missing = (objectiveEvidenceIds || []).filter((docId) => !documentNameMap[docId])
+    if (missing.length === 0) return
+
+    let isMounted = true
+    Promise.all(
+      missing.map((docId) =>
+        documentService.getDocumentDownloadInfo(docId, { suppressNotFound: true })
+          .then((info) => {
+            const resolvedName =
+              info?.attachment?.filename ||
+              info?.attachment?.original_filename ||
+              info?.document?.original_filename ||
+              info?.document?.filename ||
+              info?.filename
+            return resolvedName ? [docId, resolvedName] : null
+          })
+          .catch(() => null)
+      )
+    ).then((entries) => {
+      if (!isMounted) return
+      const mapped = entries.filter(Boolean).reduce((acc, [docId, name]) => ({ ...acc, [docId]: name }), {})
+      if (Object.keys(mapped).length > 0) {
+        setDocumentNameMap((prev) => ({ ...prev, ...mapped }))
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [findingData, documentNameMap])
 
   const getObjectiveEvidenceLabel = useCallback(
     (value) => {
@@ -403,7 +447,8 @@ export default function TopicDetail() {
       const rawValue = String(value)
       const [docId, ...noteParts] = rawValue.split('||')
       const note = noteParts.join('||').trim()
-      const baseLabel = documentNameMap[docId] || docId || rawValue
+      const normalizedDocId = docId.trim()
+      const baseLabel = documentNameMap[normalizedDocId] || (normalizedDocId ? `Dokumen-${normalizedDocId.substring(0, 8)}` : rawValue)
       return note ? `${baseLabel} - ${note}` : baseLabel
     },
     [documentNameMap]
@@ -760,17 +805,24 @@ export default function TopicDetail() {
 
   const normalizeParticipantRole = (role) => String(role || '').trim().toLowerCase()
 
-  const isCurrentUserAuditee = useMemo(() => {
-    const currentUserId = currentUser?.id
-    if (!currentUserId) return false
-    const normalizedId = String(currentUserId)
-    const match = forumParticipants.find((p) => String(p?.user_id ?? p?.user?.id ?? '') === normalizedId)
-    if (!match) return false
-    return normalizeParticipantRole(match?.role) === 'auditee'
-  }, [currentUser?.id, forumParticipants])
+  const currentUserForumRole = useMemo(() => {
+    const embeddedRole =
+      topic?.current_user_role ??
+      topic?.user_role ??
+      topic?.current_user_participant?.role
+    if (embeddedRole) return normalizeParticipantRole(embeddedRole)
 
+    const currentUserId = currentUser?.id
+    if (!currentUserId) return ''
+    const normalizedId = String(currentUserId)
+    const participants = forumParticipants.length ? forumParticipants : (topic?.participants ?? [])
+    const match = participants.find((p) => String(p?.user_id ?? p?.user?.id ?? '') === normalizedId)
+    return normalizeParticipantRole(match?.role)
+  }, [currentUser?.id, forumParticipants, topic])
+
+  const isCurrentUserAuditor = currentUserForumRole === 'auditor'
   const isFindingLockedByDeadline = isTopicDeadlinePassed || isPeriodDeadlinePassed
-  const isFindingReadOnly = isFindingLockedByDeadline || isCurrentUserAuditee
+  const isFindingReadOnly = isFindingLockedByDeadline || !isCurrentUserAuditor
 
   useEffect(() => {
     if (isClosed) {
@@ -844,7 +896,7 @@ export default function TopicDetail() {
 
   return (
     <MainLayout>
-      <div className="max-w-full mx-auto px-6 py-6">
+      <div className="mx-auto max-w-full px-3 py-4 sm:px-6 sm:py-6">
         <div className="mb-4">
           <TopicBreadcrumb title={topic?.title} />
         </div>
@@ -860,7 +912,7 @@ export default function TopicDetail() {
         )}
 
         {!isLoading && topic && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
             {/* Main Content */}
             <div className="lg:col-span-8 space-y-4">
               <TopicHeader 
@@ -872,15 +924,16 @@ export default function TopicDetail() {
 
               {/* Finding Section - Form Daftar Temuan */}
               <Card>
-                <CardContent className="pt-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold">Daftar Temuan Ketidaksesuaian</h3>
-                    <div className="flex items-center gap-2">
+                <CardContent className="pt-4 sm:pt-6">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <h3 className="text-base font-semibold sm:text-lg">Daftar Temuan Ketidaksesuaian</h3>
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={handlePreviewPdf}
                         disabled={isExporting || isPreviewing}
+                        className="w-full sm:w-auto"
                       >
                         {isPreviewing ? (
                           <span className="inline-flex items-center gap-2">
@@ -896,6 +949,7 @@ export default function TopicDetail() {
                         size="sm"
                         onClick={handleExportPdf}
                         disabled={isExporting || isPreviewing}
+                        className="w-full sm:w-auto"
                       >
                         {isExporting ? (
                           <span className="inline-flex items-center gap-2">
@@ -906,12 +960,13 @@ export default function TopicDetail() {
                           'Export PDF'
                         )}
                       </Button>
-                      {!isFindingLockedByDeadline && !isCurrentUserAuditee && (
+                      {!isFindingLockedByDeadline && isCurrentUserAuditor && (
                         <Button 
                           variant="outline" 
                           size="sm"
                           onClick={() => setShowFindingForm(!showFindingForm)}
                           disabled={createInputItemMutation.isLoading || isClosed}
+                          className="col-span-2 w-full sm:col-span-1 sm:w-auto"
                         >
                           {createInputItemMutation.isLoading ? (
                             <>Menyimpan...</>
@@ -956,6 +1011,7 @@ export default function TopicDetail() {
                         auditor: findingData.auditor,
                         auditee: findingData.auditee
                       }}
+                      forumId={forumId}
                     />
                   ) : (
                     <div className="text-sm text-muted-foreground border border-dashed rounded-md p-6 text-center">

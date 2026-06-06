@@ -40,11 +40,13 @@ export default function ForumsPage() {
           topics_count: toNumber(forum?.topics_count ?? forum?.formulir_count, 0),
         }))
         .filter((f) => {
-        if (!shouldFilterByRelation) return true
-        if (f?.is_related === false) return false
-  const relationRole = f?.current_user_role ?? f?.user_role
-  if (relationRole && String(relationRole).toLowerCase() === 'outsider') return false
-        return true
+          if (!shouldFilterByRelation) return true
+          if (f?.is_related === true) return true
+          if (f?.is_related === false) return false
+          const relationRole = String(f?.current_user_role ?? f?.user_role ?? '').toLowerCase().trim()
+          if (!relationRole) return false
+          if (['outsider', 'none', 'guest', 'unrelated'].includes(relationRole)) return false
+          return true
         })
 
       return { forums: visible }

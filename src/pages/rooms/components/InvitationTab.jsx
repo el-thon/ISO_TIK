@@ -259,18 +259,23 @@ function MemberManagementDialog({ isOpen, onClose, periodName, isOwner, members,
 }
 
 // Komponen InvitationTab utama
-export default function InvitationTab({ periodDetailId }) {
+export default function InvitationTab({
+  periodDetailId,
+  periodDetail: initialPeriodDetail = null,
+  periodJoinRequests: initialJoinRequests = [],
+}) {
   const [isManagementDialogOpen, setIsManagementDialogOpen] = useState(false)
   
   // Fetch period detail data
-  const { data: periodDetail, isLoading: periodDetailLoading, refetch: refetchPeriod } = useForumPeriod(
+  const { data: fetchedPeriodDetail, isLoading: periodDetailLoading, refetch: refetchPeriod } = useForumPeriod(
     periodDetailId,
     { enabled: Boolean(periodDetailId) }
   )
+  const periodDetail = fetchedPeriodDetail ?? initialPeriodDetail
   
   // Fetch join requests data (only enabled for owner)
-  const { 
-    data: periodJoinRequestsData, 
+  const {
+    data: fetchedPeriodJoinRequestsData,
     isLoading: periodJoinRequestsLoading, 
     refetch: refetchJoinRequests 
   } = usePeriodJoinRequests(
@@ -280,7 +285,7 @@ export default function InvitationTab({ periodDetailId }) {
   )
 
   const isOwner = periodDetail?.current_user_role === 'owner'
-  const periodJoinRequests = periodJoinRequestsData?.requests ?? []
+  const periodJoinRequests = fetchedPeriodJoinRequestsData?.requests ?? initialJoinRequests ?? []
   const pendingJoinRequests = periodJoinRequests.filter(
     (item) => String(item?.status || '').toLowerCase() === 'pending'
   )

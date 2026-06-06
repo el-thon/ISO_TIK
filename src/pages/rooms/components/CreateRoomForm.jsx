@@ -39,7 +39,7 @@ export default function CreateRoomForm({ onSuccess, selectedPeriodId }) {
   const onSubmit = (values) => {
     const payload = {
       name: values.name,
-      visibility: 'restricted',
+      visibility: 'private',
     }
     
     if (values.description?.trim()) {

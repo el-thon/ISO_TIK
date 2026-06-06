@@ -20,6 +20,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useAdminClauses } from '@/hooks/useAdminClause'
+import { useActiveDocumentMaster } from '@/hooks/useActiveMaster'
 import { useRoomParticipants } from '@/hooks/useRoom'
 import { cn } from '@/lib/utils'
 import * as documentService from '@/services/documentService'
@@ -46,6 +47,11 @@ const buildObjectiveEvidence = (docId, note) => {
   if (!docId) return note ? `${note}` : ''
   if (!note) return String(docId)
   return `${docId}${OBJECTIVE_EVIDENCE_SEPARATOR}${note}`
+}
+
+const splitObjectiveEvidenceId = (value) => {
+  if (!value) return ''
+  return String(value).split(OBJECTIVE_EVIDENCE_SEPARATOR)[0]?.trim() || ''
 }
 
 const normalizeClauseReferences = (refs) => {
@@ -235,14 +241,40 @@ function DocumentSelect({ value, onChange, disabled, documents, loading }) {
     if (documentNames[doc.id]) return documentNames[doc.id]
     if (doc.display_name) return doc.display_name
     if (doc.original_filename) return doc.original_filename
+    if (doc.original_name) return doc.original_name
     if (doc.filename) return doc.filename
+    if (doc.file_name) return doc.file_name
     if (doc.name) return doc.name
     return `Dokumen-${doc.id.substring(0, 8)}`
   }
 
+  useEffect(() => {
+    if (!value || documents.some((doc) => String(doc.id) === String(value)) || documentNames[value]) return
+    let isMounted = true
+    setLoadingNames((prev) => ({ ...prev, [value]: true }))
+    documentService.getDocumentDownloadInfo(value, { suppressNotFound: true })
+      .then((info) => {
+        const resolvedName =
+          info?.attachment?.filename ||
+          info?.attachment?.original_filename ||
+          info?.document?.original_filename ||
+          info?.document?.filename ||
+          info?.filename
+        if (isMounted && resolvedName) {
+          setDocumentNames((prev) => ({ ...prev, [value]: resolvedName }))
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoadingNames((prev) => ({ ...prev, [value]: false }))
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [value, documents, documentNames])
+
   const selectedDocument = useMemo(() => {
     if (!value) return null
-    return documents.find((doc) => String(doc.id) === String(value)) ?? null
+    return documents.find((doc) => String(doc.id) === String(value)) ?? { id: value }
   }, [documents, value])
 
   const filteredDocuments = useMemo(() => {
@@ -386,13 +418,23 @@ const getParticipantIdentity = (participant) => {
   if (!participant) return { name: '', nip: '' }
   const user = participant?.user ?? {}
   const profile = user?.profile ?? {}
+  const employment = user?.employment ?? {}
   const name =
     profile?.full_name ||
     user?.name ||
     participant?.name ||
     user?.username ||
     ''
-  const nip = participant?.nip ?? user?.nip ?? ''
+  const nip =
+    participant?.nip ??
+    participant?.employee_id ??
+    user?.nip ??
+    user?.employee_id ??
+    profile?.nip ??
+    profile?.employee_id ??
+    employment?.nip ??
+    employment?.employee_id ??
+    ''
   return { name: String(name || ''), nip: String(nip || '') }
 }
 
@@ -400,19 +442,31 @@ const getParticipantLabel = (participant) => {
   if (!participant) return ''
   const user = participant?.user ?? {}
   const profile = user?.profile ?? {}
+  const employment = user?.employment ?? {}
   const fullName = profile?.full_name
   const username = user?.username
   const name = fullName || user?.name || participant?.name || username || ''
-  const nip = participant?.nip ?? user?.nip ?? ''
+  const nip =
+    participant?.nip ??
+    participant?.employee_id ??
+    user?.nip ??
+    user?.employee_id ??
+    profile?.nip ??
+    profile?.employee_id ??
+    employment?.nip ??
+    employment?.employee_id ??
+    ''
   const withUsername = name && username && name !== username ? `${name} (${username})` : name
   return `${withUsername}${nip ? ` - ${nip}` : ''}`.trim()
 }
 
 const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
   const { data: clauseData, isLoading: clausesLoading } = useAdminClauses({ per_page: 100, is_active: true })
+  const { data: activeMaster, isLoading: activeMasterLoading } = useActiveDocumentMaster({ enabled: !readOnly })
   const [documents, setDocuments] = useState([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [documentsError, setDocumentsError] = useState(null)
+  const [headerError, setHeaderError] = useState('')
 
   const participantsParams = useMemo(() => ({ per_page: 100 }), [])
   const {
@@ -427,8 +481,8 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
   const participants = participantsData?.participants ?? []
   const [formData, setFormData] = useState({
     document_number: initialData?.document_number || '',
-    issued_date: initialData?.issued_date || new Date().toISOString().split('T')[0],
-    revision_number: initialData?.revision_number || '0',
+    issued_date: initialData?.issued_date || '',
+    revision_number: initialData?.revision_number || '',
     audit_code: initialData?.audit_code || '',
     audited_unit: initialData?.audited_unit || '',
     audit_date: initialData?.audit_date || new Date().toISOString().split('T')[0],
@@ -439,6 +493,16 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
 
   const [selectedAuditorId, setSelectedAuditorId] = useState('')
   const [selectedAuditeeId, setSelectedAuditeeId] = useState('')
+
+  useEffect(() => {
+    if (readOnly || initialData || activeMasterLoading) return
+    setFormData((current) => ({
+      ...current,
+      document_number: activeMaster?.document_number || '',
+      issued_date: activeMaster?.published_at ? activeMaster.published_at.slice(0, 10) : '',
+      revision_number: activeMaster?.revision_number || '',
+    }))
+  }, [activeMaster, activeMasterLoading, initialData, readOnly])
 
   const auditorCandidates = useMemo(() => {
     const filtered = participants.filter((p) => normalizeRole(p?.role) === 'auditor')
@@ -460,8 +524,19 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
 
       const match = participants.find((p) => {
         const user = p?.user ?? {}
-        const nip = normalizeText(p?.nip ?? user?.nip)
-        const name = normalizeText(p?.name ?? user?.name)
+        const profile = user?.profile ?? {}
+        const employment = user?.employment ?? {}
+        const nip = normalizeText(
+          p?.nip ??
+          p?.employee_id ??
+          user?.nip ??
+          user?.employee_id ??
+          profile?.nip ??
+          profile?.employee_id ??
+          employment?.nip ??
+          employment?.employee_id
+        )
+        const name = normalizeText(profile?.full_name ?? p?.name ?? user?.name ?? user?.username)
         if (targetNip && nip && targetNip === nip) return true
         if (targetName && name && targetName === name) return true
         return false
@@ -486,14 +561,13 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
       setDocumentsError(null)
       try {
         let docs = []
-        if (forumId) {
-          // Load attachments that belong to the forum where the topic/form was created
-          const res = await forumAttachmentService.listForumAttachments(forumId, { per_page: 200 })
-          docs = res?.attachments ?? []
-        } else {
-          const res = await documentService.listDocuments({ per_page: 200 })
-          docs = res?.documents ?? []
-        }
+        const [forumRes, documentRes] = await Promise.all([
+          forumId
+            ? forumAttachmentService.listForumAttachments(forumId, { per_page: 200 }).catch(() => ({ attachments: [] }))
+            : Promise.resolve({ attachments: [] }),
+          documentService.listDocuments({ per_page: 200 }).catch(() => ({ documents: [] })),
+        ])
+        docs = [...(forumRes?.attachments ?? []), ...(documentRes?.documents ?? [])]
 
         if (isMounted) setDocuments(docs)
       } catch (error) {
@@ -508,6 +582,56 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
       isMounted = false
     }
   }, [forumId])
+
+  useEffect(() => {
+    const usedEvidenceIds = Array.from(new Set(
+      formData.findings
+        .map((finding) => splitObjectiveEvidenceId(finding.objective_evidence))
+        .filter(Boolean)
+    ))
+    const missingIds = usedEvidenceIds.filter((docId) => !documents.some((doc) => String(doc.id) === String(docId)))
+    if (!missingIds.length) return
+
+    let isMounted = true
+    Promise.all(
+      missingIds.map((docId) =>
+        documentService.getDocumentDownloadInfo(docId, { suppressNotFound: true })
+          .then((info) => {
+            const source = info?.attachment || info?.document || null
+            const resolvedName =
+              source?.original_filename ||
+              source?.filename ||
+              source?.file_name ||
+              info?.filename ||
+              `Dokumen-${docId.substring(0, 8)}`
+            return {
+              ...(source || {}),
+              id: docId,
+              original_filename: resolvedName,
+              display_name: resolvedName,
+              filename: resolvedName,
+            }
+          })
+          .catch(() => ({
+            id: docId,
+            original_filename: `Dokumen-${docId.substring(0, 8)}`,
+            display_name: `Dokumen-${docId.substring(0, 8)}`,
+            filename: `Dokumen-${docId.substring(0, 8)}`,
+          }))
+      )
+    ).then((resolvedDocs) => {
+      if (!isMounted) return
+      setDocuments((current) => {
+        const existing = new Set(current.map((doc) => String(doc.id)))
+        const additions = resolvedDocs.filter((doc) => doc?.id && !existing.has(String(doc.id)))
+        return additions.length ? [...current, ...additions] : current
+      })
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [formData.findings, documents])
 
   const clauseOptions = useMemo(() => {
     const clauses = clauseData?.clauses ?? clauseData?.items ?? clauseData?.data ?? []
@@ -562,20 +686,6 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
     })
   }
 
-  const updateAuditor = (field, value) => {
-    setFormData({
-      ...formData,
-      auditor: { ...formData.auditor, [field]: value }
-    })
-  }
-
-  const updateAuditee = (field, value) => {
-    setFormData({
-      ...formData,
-      auditee: { ...formData.auditee, [field]: value }
-    })
-  }
-
   const updateAuditorFromParticipant = (userId) => {
     setSelectedAuditorId(String(userId || ''))
     const match = participants.find((p) => String(p?.user_id ?? p?.user?.id) === String(userId))
@@ -600,6 +710,19 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    const missingHeader =
+      !initialData &&
+      (!activeMaster ||
+        !formData.document_number?.trim() ||
+        !formData.issued_date?.trim() ||
+        !formData.revision_number?.trim())
+
+    if (missingHeader) {
+      setHeaderError('Simpan diblokir: siapkan master dokumen aktif di Administrasi yang memiliki nomor dokumen, tanggal terbit, dan nomor revisi.')
+      return
+    }
+
+    setHeaderError('')
     onSubmit(formData)
   }
 
@@ -640,8 +763,8 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
               <Label>No. Dokumen</Label>
               <Input
                 value={formData.document_number}
-                onChange={(e) => setFormData({ ...formData, document_number: e.target.value })}
-                placeholder="Contoh: FRM-POS-UPA TIK-SMKI-008-01"
+                placeholder={activeMasterLoading ? 'Memuat master dokumen...' : 'Belum ada master dokumen aktif'}
+                disabled
               />
             </div>
             <div>
@@ -649,73 +772,63 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
               <Input
                 type="date"
                 value={formData.issued_date}
-                onChange={(e) => setFormData({ ...formData, issued_date: e.target.value })}
+                disabled
               />
             </div>
             <div>
               <Label>No. Revisi</Label>
               <Input
                 value={formData.revision_number}
-                onChange={(e) => setFormData({ ...formData, revision_number: e.target.value })}
-                placeholder="Contoh: 0"
+                placeholder={activeMasterLoading ? 'Memuat master dokumen...' : 'Belum ada master dokumen aktif'}
+                disabled
               />
             </div>
           </div>
+          {headerError && <p className="text-sm text-destructive">{headerError}</p>}
 
           {/* Auditor Info */}
           <div className="border rounded-md p-4">
             <h4 className="font-medium mb-3">Informasi Auditor</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="min-w-0">
                 <Label>Nama Auditor</Label>
-                {participants.length > 0 ? (
-                  <Select
-                    value={selectedAuditorId}
-                    onValueChange={updateAuditorFromParticipant}
-                    disabled={participantsLoading || readOnly}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditor'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {auditorCandidates.map((p) => {
-                        const userId = p?.user_id ?? p?.user?.id
-                        if (!userId) return null
-                        const label = getParticipantLabel(p) || getIdentityText({
-                          name: p?.name ?? p?.user?.name,
-                          nip: p?.nip ?? p?.user?.nip,
-                        })
-                        return (
-                          <SelectItem key={String(userId)} value={String(userId)}>
-                            {label || String(userId)}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input 
-                    value={formData.auditor.name}
-                    onChange={(e) => updateAuditor('name', e.target.value)}
-                    placeholder="Nama Auditor"
-                    required
-                    disabled={readOnly}
-                  />
-                )}
+                <Select
+                  value={selectedAuditorId}
+                  onValueChange={updateAuditorFromParticipant}
+                  disabled={participantsLoading || readOnly || auditorCandidates.length === 0}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditor'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {auditorCandidates.map((p) => {
+                      const userId = p?.user_id ?? p?.user?.id
+                      if (!userId) return null
+                      const label = getParticipantLabel(p) || getIdentityText({
+                        name: p?.name ?? p?.user?.name,
+                        nip: p?.nip ?? p?.user?.nip,
+                      })
+                      return (
+                        <SelectItem key={String(userId)} value={String(userId)}>
+                          {label || String(userId)}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
                 {participantsError && (
                   <p className="text-xs text-amber-600 mt-1">
-                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum. Anda bisa ketik manual.'}
+                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum.'}
                   </p>
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label>NIP Auditor</Label>
                 <Input 
                   value={formData.auditor.nip}
-                  onChange={(e) => updateAuditor('nip', e.target.value)}
                   placeholder="NIP Auditor"
                   required
-                  disabled={readOnly || Boolean(participants.length > 0)}
+                  disabled
                 />
               </div>
             </div>
@@ -724,57 +837,46 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
           {/* Auditee Info */}
           <div className="border rounded-md p-4">
             <h4 className="font-medium mb-3">Informasi Auditee</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="min-w-0">
                 <Label>Nama Auditee</Label>
-                {participants.length > 0 ? (
-                  <Select
-                    value={selectedAuditeeId}
-                    onValueChange={updateAuditeeFromParticipant}
-                    disabled={participantsLoading || readOnly}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditee'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {auditeeCandidates.map((p) => {
-                        const userId = p?.user_id ?? p?.user?.id
-                        if (!userId) return null
-                        const label = getParticipantLabel(p) || getIdentityText({
-                          name: p?.name ?? p?.user?.name,
-                          nip: p?.nip ?? p?.user?.nip,
-                        })
-                        return (
-                          <SelectItem key={String(userId)} value={String(userId)}>
-                            {label || String(userId)}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input 
-                    value={formData.auditee.name}
-                    onChange={(e) => updateAuditee('name', e.target.value)}
-                    placeholder="Nama Auditee"
-                    required
-                    disabled={readOnly}
-                  />
-                )}
+                <Select
+                  value={selectedAuditeeId}
+                  onValueChange={updateAuditeeFromParticipant}
+                  disabled={participantsLoading || readOnly || auditeeCandidates.length === 0}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={participantsLoading ? 'Memuat...' : 'Pilih auditee'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {auditeeCandidates.map((p) => {
+                      const userId = p?.user_id ?? p?.user?.id
+                      if (!userId) return null
+                      const label = getParticipantLabel(p) || getIdentityText({
+                        name: p?.name ?? p?.user?.name,
+                        nip: p?.nip ?? p?.user?.nip,
+                      })
+                      return (
+                        <SelectItem key={String(userId)} value={String(userId)}>
+                          {label || String(userId)}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
                 {participantsError && (
                   <p className="text-xs text-amber-600 mt-1">
-                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum. Anda bisa ketik manual.'}
+                    {participantsErrorObj?.response?.data?.message || participantsErrorObj?.message || 'Gagal memuat peserta forum.'}
                   </p>
                 )}
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label>NIP Auditee</Label>
                 <Input 
                   value={formData.auditee.nip}
-                  onChange={(e) => updateAuditee('nip', e.target.value)}
                   placeholder="NIP Auditee"
                   required
-                  disabled={readOnly || Boolean(participants.length > 0)}
+                  disabled
                 />
               </div>
             </div>
@@ -856,7 +958,7 @@ const FindingForm = ({ onSubmit, initialData, forumId, readOnly = false }) => {
                         <DocumentSelect
                           value={docId}
                           onChange={(value) => updateFinding(index, 'objective_evidence', buildObjectiveEvidence(value, note))}
-                          disabled={documentsLoading}
+                          disabled={documentsLoading || readOnly}
                           documents={documents}
                           loading={documentsLoading}
                         />

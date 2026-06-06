@@ -88,12 +88,38 @@ const sliceByParams = (items = [], params = {}) => {
 const normalizeForumRelation = (forum = {}) => {
   const currentUserRole = forum?.current_user_role ?? forum?.user_role ?? null
   const explicitRelated = typeof forum?.is_related === 'boolean' ? forum.is_related : null
+  const participantCount = forum?.participant_count ?? forum?.participants_count ?? 0
+  const topicCount = forum?.topic_count ?? forum?.topics_count ?? forum?.formulir_count ?? 0
+  const createdByUser = forum?.created_by_user ?? forum?.owner ?? forum?.responsible_user ?? null
 
   return {
     ...forum,
+    participant_count: participantCount,
+    participants_count: forum?.participants_count ?? participantCount,
+    topic_count: topicCount,
+    topics_count: forum?.topics_count ?? topicCount,
+    created_by_user: createdByUser,
+    owner: forum?.owner ?? createdByUser,
+    created_by: forum?.created_by ?? createdByUser?.name ?? createdByUser?.username ?? null,
     current_user_role: currentUserRole,
     user_role: forum?.user_role ?? currentUserRole,
-    is_related: explicitRelated ?? (currentUserRole ? String(currentUserRole).toLowerCase() !== 'outsider' : true),
+    is_related: explicitRelated ?? (currentUserRole ? String(currentUserRole).toLowerCase() !== 'outsider' : false),
+  }
+}
+
+const normalizePeriodDetail = (payload = {}) => {
+  const period = payload?.period ?? payload?.forum_period ?? payload?.forumPeriod ?? payload
+  return {
+    ...payload,
+    ...(period || {}),
+    period,
+    members: payload?.members ?? period?.members ?? [],
+    current_user_role: payload?.current_user_role ?? period?.current_user_role ?? null,
+    user_role: payload?.user_role ?? period?.user_role ?? null,
+    is_related: payload?.is_related ?? period?.is_related ?? false,
+    user_membership: payload?.user_membership ?? period?.user_membership ?? null,
+    user_join_request: payload?.user_join_request ?? period?.user_join_request ?? null,
+    my_join_request: payload?.my_join_request ?? period?.my_join_request ?? null,
   }
 }
 
@@ -118,7 +144,7 @@ export async function listForumPeriods(params = {}) {
 export async function getForumPeriod(periodId) {
   if (!periodId) throw new Error('periodId is required')
   const res = await requestPeriod('get', `${PERIOD_ROUTE}/${periodId}`)
-  return unwrap(res) ?? {}
+  return normalizePeriodDetail(unwrap(res) ?? {})
 }
 
 export async function createForumPeriod(payload) {
