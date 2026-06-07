@@ -8,7 +8,7 @@ import { isPeriodDeadlinePassed } from '@/utils/periodDeadline'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import TabsBar from '@/components/mainComponents/tabsBar'
 import { Tabs } from '@/components/ui/tabs'
-import RoomTabsContent from '@/pages/rooms/RoomTabsContent'
+import RoomTabsContent from '@/pages/periode/RoomTabsContent'
 import {
   Breadcrumb,
   BreadcrumbList,

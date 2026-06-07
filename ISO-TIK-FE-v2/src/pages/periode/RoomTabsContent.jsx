@@ -7,14 +7,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useRoomParticipants, useRoomTopics, useAddRoomParticipant } from '@/hooks/useRoom'
-import InviteParticipantDialog from '@/pages/rooms/components/InviteParticipantDialog'
+import InviteParticipantDialog from '@/pages/periode/components/InviteParticipantDialog'
 import { toast } from '@/components/ui/use-toast'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import roomService from '@/services/roomService'
 import { useForumPeriod } from '@/hooks/useForumPeriod'
 import AttachmentsTab from './tabs/AttachmentsTab'
 import SettingsTab from './tabs/SettingsTab'
-import { formatDate } from '@/pages/rooms/constants'
+import { formatDate } from '@/pages/periode/constants'
 
 const getInitials = (name) => {
   if (!name) return '??'
