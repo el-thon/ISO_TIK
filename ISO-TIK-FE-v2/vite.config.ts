@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
+        '@/pages/rooms': path.resolve(__dirname, 'src/pages/periode'),
         '@': path.resolve(__dirname, 'src'),
       },
     },
