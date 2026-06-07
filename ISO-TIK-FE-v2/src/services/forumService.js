@@ -4,22 +4,24 @@ import { ensureArray, mergePagination, unwrapApiPayload } from './serviceUtils'
 const unwrapForumPayload = (payload = {}) => payload.forum ?? payload.room ?? payload
 const normalizeForum = (forum = {}) => {
   const participantCount = forum?.participant_count ?? forum?.participants_count ?? 0
-  const formCount = forum?.form_count ?? forum?.forms_count ?? forum?.topic_count ?? forum?.topics_count ?? forum?.formulir_count ?? 0
+  const formulirCount = forum?.formulir_count ?? forum?.form_count ?? forum?.forms_count ?? forum?.topic_count ?? forum?.topics_count ?? 0
   const createdByUser = forum?.created_by_user ?? forum?.owner ?? forum?.responsible_user ?? null
 
   return {
     ...forum,
     participant_count: participantCount,
     participants_count: forum?.participants_count ?? participantCount,
-    form_count: formCount,
-    forms_count: forum?.forms_count ?? formCount,
-    topic_count: formCount,
-    topics_count: forum?.topics_count ?? formCount,
+    formulir_count: formulirCount,
+    form_count: forum?.form_count ?? formulirCount,
+    forms_count: forum?.forms_count ?? formulirCount,
+    topic_count: forum?.topic_count ?? formulirCount,
+    topics_count: forum?.topics_count ?? formulirCount,
     stats: {
       ...(forum?.stats ?? {}),
       participant_count: forum?.stats?.participant_count ?? participantCount,
-      form_count: forum?.stats?.form_count ?? forum?.stats?.topic_count ?? formCount,
-      topic_count: forum?.stats?.topic_count ?? formCount,
+      formulir_count: forum?.stats?.formulir_count ?? formulirCount,
+      form_count: forum?.stats?.form_count ?? forum?.stats?.topic_count ?? formulirCount,
+      topic_count: forum?.stats?.topic_count ?? formulirCount,
     },
     created_by_user: createdByUser,
     owner: forum?.owner ?? createdByUser,

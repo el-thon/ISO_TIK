@@ -610,7 +610,12 @@ const ForumDetailPanel = ({ periods, isOpen, onClose }) => {
   if (!isOpen) return null
 
   const childForums = selectedPeriod?.forums || []
-  const discrepancyForms = selectedChildForum?.topics || selectedChildForum?.discrepancy_forms || []
+  const discrepancyForms =
+    selectedChildForum?.formulirs ||
+    selectedChildForum?.forms ||
+    selectedChildForum?.discrepancy_forms ||
+    selectedChildForum?.topics ||
+    []
 
   return (
     <Card className="border border-gray-200 mt-6">
@@ -716,7 +721,7 @@ const ForumDetailPanel = ({ periods, isOpen, onClose }) => {
                       <div>
                         <div className="font-medium text-gray-900">{child.name}</div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Formulir: {child.formulir_count || child.topics?.length || 0}
+                          Formulir: {child.formulir_count || child.formulirs?.length || child.forms?.length || child.topics?.length || 0}
                         </div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-gray-400" />

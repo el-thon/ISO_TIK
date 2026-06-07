@@ -77,17 +77,18 @@ const normalizeForumRelation = (forum = {}) => {
   const currentUserRole = forum?.current_user_role ?? forum?.user_role ?? null
   const explicitRelated = typeof forum?.is_related === 'boolean' ? forum.is_related : null
   const participantCount = forum?.participant_count ?? forum?.participants_count ?? 0
-  const formCount = forum?.form_count ?? forum?.forms_count ?? forum?.topic_count ?? forum?.topics_count ?? forum?.formulir_count ?? 0
+  const formulirCount = forum?.formulir_count ?? forum?.form_count ?? forum?.forms_count ?? forum?.topic_count ?? forum?.topics_count ?? 0
   const createdByUser = forum?.created_by_user ?? forum?.owner ?? forum?.responsible_user ?? null
 
   return {
     ...forum,
     participant_count: participantCount,
     participants_count: forum?.participants_count ?? participantCount,
-    form_count: formCount,
-    forms_count: forum?.forms_count ?? formCount,
-    topic_count: formCount,
-    topics_count: forum?.topics_count ?? formCount,
+    formulir_count: formulirCount,
+    form_count: forum?.form_count ?? formulirCount,
+    forms_count: forum?.forms_count ?? formulirCount,
+    topic_count: forum?.topic_count ?? formulirCount,
+    topics_count: forum?.topics_count ?? formulirCount,
     created_by_user: createdByUser,
     owner: forum?.owner ?? createdByUser,
     created_by: forum?.created_by ?? createdByUser?.name ?? createdByUser?.username ?? null,
@@ -270,12 +271,16 @@ export async function listPeriodForumForms(periodId, forumId, params = {}) {
   }
 }
 
+export const listPeriodForumFormulirs = listPeriodForumForms
+
 export async function createPeriodForumForm(periodId, forumId, payload) {
   if (!periodId) throw new Error('periodId is required')
   if (!forumId) throw new Error('forumId is required')
   const res = await requestPeriod('post', `${PERIOD_ROUTE}/${periodId}/forums/${forumId}/topics`, payload)
   return unwrap(res) ?? {}
 }
+
+export const createPeriodForumFormulir = createPeriodForumForm
 
 export async function joinPeriodByCode(payload) {
   if (!payload?.period_id) throw new Error('period_id is required to join period')
@@ -337,7 +342,9 @@ export default {
   listPeriodForums,
   createPeriodForum,
   updatePeriodForum,
+  listPeriodForumFormulirs,
   listPeriodForumForms,
+  createPeriodForumFormulir,
   createPeriodForumForm,
   joinPeriodByCode,
   listPeriodJoinRequests,

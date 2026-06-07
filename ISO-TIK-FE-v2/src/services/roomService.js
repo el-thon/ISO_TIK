@@ -4,19 +4,21 @@ import { ensureArray, mergePagination, unwrapApiPayload } from './serviceUtils'
 const unwrapRoomPayload = (payload = {}) => payload.forum ?? payload.room ?? payload
 const normalizeRoom = (room = {}) => {
 	const participantCount = room?.participant_count ?? room?.participants_count ?? 0
-	const topicCount = room?.topic_count ?? room?.topics_count ?? room?.formulir_count ?? 0
+	const formulirCount = room?.formulir_count ?? room?.form_count ?? room?.forms_count ?? room?.topic_count ?? room?.topics_count ?? 0
 	const createdByUser = room?.created_by_user ?? room?.owner ?? room?.responsible_user ?? null
 
 	return {
 		...room,
 		participant_count: participantCount,
 		participants_count: room?.participants_count ?? participantCount,
-		topic_count: topicCount,
-		topics_count: room?.topics_count ?? topicCount,
+		formulir_count: formulirCount,
+		topic_count: room?.topic_count ?? formulirCount,
+		topics_count: room?.topics_count ?? formulirCount,
 		stats: {
 			...(room?.stats ?? {}),
 			participant_count: room?.stats?.participant_count ?? participantCount,
-			topic_count: room?.stats?.topic_count ?? topicCount,
+			formulir_count: room?.stats?.formulir_count ?? formulirCount,
+			topic_count: room?.stats?.topic_count ?? formulirCount,
 		},
 		created_by_user: createdByUser,
 		owner: room?.owner ?? createdByUser,
@@ -145,15 +147,19 @@ export async function leaveRoom(roomId) {
 	return unwrapApiPayload(res) ?? {}
 }
 
-export async function listTopics(roomId, params = {}) {
+export async function listFormulirs(roomId, params = {}) {
 	if (!roomId) throw new Error('roomId is required')
 	const res = await api.get(`/forums/${roomId}/topics`, { params })
 	const payload = unwrapApiPayload(res) ?? {}
+	const formulirs = ensureArray(payload.formulirs ?? payload.forms ?? payload.topics ?? [])
 	return {
-		topics: ensureArray(payload.topics ?? []),
+		formulirs,
+		topics: formulirs,
 		pagination: mergePagination(payload.pagination),
 	}
 }
+
+export const listTopics = listFormulirs
 
 export async function joinForumByCode(payload) {
 	const res = await api.post('/forums/join', payload)
@@ -198,6 +204,7 @@ export default {
 	updateParticipant,
 	removeParticipant,
 	leaveRoom,
+	listFormulirs,
 	listTopics,
 	joinForumByCode,
 	listAvailableUsers,

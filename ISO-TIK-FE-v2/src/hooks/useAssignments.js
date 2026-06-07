@@ -21,10 +21,10 @@ export function useAssignments(params = {}, options = {}) {
   })
 }
 
-export function useAssignTopic(options = {}) {
+export function useAssignFormulir(options = {}) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ topicId, payload }) => assignmentsService.assignTopic(topicId, payload),
+    mutationFn: ({ formulirId, topicId: legacyTopicId, payload }) => assignmentsService.assignFormulir(formulirId ?? legacyTopicId, payload),
     onSuccess: (data, variables, context) => {
       invalidateAssignments(queryClient)
       if (options.onSuccess) options.onSuccess(data, variables, context)
@@ -32,6 +32,8 @@ export function useAssignTopic(options = {}) {
     ...options,
   })
 }
+
+export const useAssignTopic = useAssignFormulir
 
 export function useCompleteAssignment(options = {}) {
   const queryClient = useQueryClient()
@@ -65,6 +67,7 @@ export function useCancelAssignment(options = {}) {
 
 export default {
   useAssignments,
+  useAssignFormulir,
   useAssignTopic,
   useCompleteAssignment,
   useCancelAssignment,

@@ -35,13 +35,14 @@ const unwrap = (response) => {
 
 const normalizeAssignment = (raw) => {
   if (!raw || typeof raw !== 'object') return raw
-  const topic = raw.topic || raw.topic_data || null
+  const formulir = raw.formulir || raw.formulir_data || raw.topic || raw.topic_data || null
   const comment = raw.comment || raw.comment_data || null
   const assignee = raw.assignee || raw.to_user || null
   const assignedBy = raw.assigned_by || raw.assigner || raw.from_user || null
   return {
     ...raw,
-    topic,
+    formulir,
+    topic: raw.topic || formulir,
     comment,
     from_user: assignedBy || raw.created_by || raw.author || null,
     to_user: assignee || raw.user || null,
@@ -119,12 +120,14 @@ export async function listAssignments(params = {}) {
   }
 }
 
-export async function assignTopic(topicId, payload) {
-  if (!topicId) throw new Error('topicId is required to assign topic')
-  const res = await api.post(`/topics/${topicId}/assignments`, payload)
+export async function assignFormulir(formulirId, payload) {
+  if (!formulirId) throw new Error('formulirId is required to assign formulir')
+  const res = await api.post(`/topics/${formulirId}/assignments`, payload)
   const body = unwrap(res)
   return normalizeAssignment(body.assignment ?? body)
 }
+
+export const assignTopic = assignFormulir
 
 export async function completeAssignment(assignmentId) {
   if (!assignmentId) throw new Error('assignmentId is required')
@@ -142,6 +145,7 @@ export async function cancelAssignment(assignmentId, payload = {}) {
 
 export default {
   listAssignments,
+  assignFormulir,
   assignTopic,
   completeAssignment,
   cancelAssignment,

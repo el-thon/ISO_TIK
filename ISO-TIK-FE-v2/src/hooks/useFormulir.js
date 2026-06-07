@@ -59,6 +59,7 @@ export function useCreateFormulir(options = {}) {
       queryClient.invalidateQueries({ queryKey: ['formulirs'] })
       queryClient.invalidateQueries({ queryKey: ['topics'] })
       queryClient.invalidateQueries({ queryKey: ['forums', variables?.forumId, 'forms'] })
+      queryClient.invalidateQueries({ queryKey: ['rooms', variables?.forumId, 'formulirs'] })
       queryClient.invalidateQueries({ queryKey: ['rooms', variables?.forumId, 'topics'] })
       if (options.onSuccess) options.onSuccess(data, variables, context)
     },
@@ -82,7 +83,7 @@ const useFormulirWorkflowMutation = (serviceFn, options = {}) => {
   const queryClient = useQueryClient()
   const { onSuccess, ...rest } = options
   return useMutation({
-    mutationFn: ({ formulirId, topicId, payload }) => serviceFn(formulirId ?? topicId, payload ?? {}),
+    mutationFn: ({ formulirId, topicId: legacyTopicId, payload }) => serviceFn(formulirId ?? legacyTopicId, payload ?? {}),
     onSuccess: (data, variables, context) => {
       invalidateFormulirQueries(queryClient, variables?.formulirId ?? variables?.topicId)
       if (onSuccess) onSuccess(data, variables, context)
@@ -116,7 +117,7 @@ export function useRevertFormulirVersion(options = {}) {
   const queryClient = useQueryClient()
   const { onSuccess, ...rest } = options
   return useMutation({
-    mutationFn: ({ formulirId, topicId, versionId, payload }) => formulirService.revertFormulirVersion(formulirId ?? topicId, versionId, payload ?? {}),
+    mutationFn: ({ formulirId, topicId: legacyTopicId, versionId, payload }) => formulirService.revertFormulirVersion(formulirId ?? legacyTopicId, versionId, payload ?? {}),
     onSuccess: (data, variables, context) => {
       invalidateFormulirQueries(queryClient, variables?.formulirId ?? variables?.topicId)
       if (onSuccess) onSuccess(data, variables, context)
@@ -129,7 +130,7 @@ export function useCreateInputItem(options = {}) {
   const queryClient = useQueryClient()
   const { onSuccess, ...rest } = options
   return useMutation({
-    mutationFn: ({ formulirId, topicId, payload }) => formulirService.createInputItem(formulirId ?? topicId, payload),
+    mutationFn: ({ formulirId, topicId: legacyTopicId, payload }) => formulirService.createInputItem(formulirId ?? legacyTopicId, payload),
     onSuccess: (data, variables, context) => {
       const id = variables?.formulirId ?? variables?.topicId
       queryClient.invalidateQueries({ queryKey: ['formulirs', id, 'input-items'] })

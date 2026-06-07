@@ -43,17 +43,19 @@ export function useRoomParticipants(roomId, params = {}, options = {}) {
   })
 }
 
-export function useRoomTopics(roomId, params = {}, options = {}) {
+export function useRoomFormulirs(roomId, params = {}, options = {}) {
   const { enabled, ...rest } = options
   return useQuery({
-    queryKey: ['rooms', roomId, 'topics', params],
-    queryFn: () => roomService.listTopics(roomId, params),
+    queryKey: ['rooms', roomId, 'formulirs', params],
+    queryFn: () => roomService.listFormulirs(roomId, params),
     keepPreviousData: true,
     staleTime: 15_000,
     ...rest,
     enabled: computeEnabled({ enabled }, Boolean(roomId)),
   })
 }
+
+export const useRoomTopics = useRoomFormulirs
 
 export function useUpdateRoom(roomId, options = {}) {
   const queryClient = useQueryClient()
@@ -225,6 +227,7 @@ export default {
   useRooms,
   useRoom,
   useRoomParticipants,
+  useRoomFormulirs,
   useRoomTopics,
   useUpdateRoom,
   useDeleteRoom,

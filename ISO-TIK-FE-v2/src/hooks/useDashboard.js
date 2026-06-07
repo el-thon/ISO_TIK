@@ -141,7 +141,7 @@ export const useDashboardData = ({ findingType } = {}) => {
   })
 
   const usersArray = ensureArray(usersData?.users)
-  const topicsArray = ensureArray(formulirsData?.formulirs ?? formulirsData?.topics)
+  const formulirsArray = ensureArray(formulirsData?.formulirs ?? formulirsData?.topics)
   const periodsRaw = ensureArray(periodsResp?.periods)
   const documentMasterArray = ensureArray(adminMasters)
   const statsForumsPerRoom = ensureArray(statsData?.statistics?.forums_per_room)
@@ -199,32 +199,32 @@ export const useDashboardData = ({ findingType } = {}) => {
     ),
   }
 
-  const topicsByPeriod = topicsArray.reduce((acc, topic) => {
+  const formulirsByPeriod = formulirsArray.reduce((acc, formulir) => {
     let periodId = null
 
-    if (topic?.forum && (topic.forum?.forum_period_id || topic.forum?.forumPeriodId)) {
-      periodId = topic.forum.forum_period_id || topic.forum.forumPeriodId
+    if (formulir?.forum && (formulir.forum?.forum_period_id || formulir.forum?.forumPeriodId)) {
+      periodId = formulir.forum.forum_period_id || formulir.forum.forumPeriodId
     }
 
-    periodId = periodId || topic?.forum_period_id || topic?.forumPeriodId || null
+    periodId = periodId || formulir?.forum_period_id || formulir?.forumPeriodId || null
 
     if (!periodId) return acc
 
     if (!acc[periodId]) acc[periodId] = []
-    acc[periodId].push(topic)
+    acc[periodId].push(formulir)
     return acc
   }, {})
 
-  const topicsByForum = topicsArray.reduce((acc, topic) => {
+  const formulirsByForum = formulirsArray.reduce((acc, formulir) => {
     const forumId =
-      topic?.forum_id ||
-      topic?.forumId ||
-      topic?.forum?.id ||
+      formulir?.forum_id ||
+      formulir?.forumId ||
+      formulir?.forum?.id ||
       null
 
     if (!forumId) return acc
     if (!acc[forumId]) acc[forumId] = []
-    acc[forumId].push(topic)
+    acc[forumId].push(formulir)
     return acc
   }, {})
 
@@ -235,11 +235,11 @@ export const useDashboardData = ({ findingType } = {}) => {
     const childForumsSource = childForumsFromStats.length > 0 ? childForumsFromStats : childForumsRaw
 
     const childForums = childForumsSource.map((forum) => {
-      const forumTopics = topicsByForum[forum?.id] || []
+      const forumFormulirs = formulirsByForum[forum?.id] || []
       const countedFromStats = Number(forum?.total_discrepancy_forms || 0)
       const countedFromForum = Number(forum?.topics_count || forum?.formulir_count || forum?.document_count || 0)
-      const countedFromTopics = forumTopics.length
-      const resolvedCount = Math.max(countedFromStats, countedFromForum, countedFromTopics)
+      const countedFromFormulirs = forumFormulirs.length
+      const resolvedCount = Math.max(countedFromStats, countedFromForum, countedFromFormulirs)
 
       return {
         ...forum,
@@ -248,7 +248,7 @@ export const useDashboardData = ({ findingType } = {}) => {
         topics_count: resolvedCount,
       }
     })
-    const topicsForPeriod = topicsByPeriod[period.id] || []
+    const formulirsForPeriod = formulirsByPeriod[period.id] || []
 
     const statsTotalChildForums = periodId ? statsForumsPerRoomMap.get(periodId) : undefined
 
@@ -260,8 +260,8 @@ export const useDashboardData = ({ findingType } = {}) => {
       return sum + Number(forum?.topics_count || forum?.formulir_count || 0)
     }, 0)
 
-    const totalFormulirFromTopics = topicsForPeriod.length
-    const totalFormulir = Math.max(totalFormulirFromForums, totalFormulirFromTopics)
+    const totalFormulirFromItems = formulirsForPeriod.length
+    const totalFormulir = Math.max(totalFormulirFromForums, totalFormulirFromItems)
 
     return {
       id: period?.id,
