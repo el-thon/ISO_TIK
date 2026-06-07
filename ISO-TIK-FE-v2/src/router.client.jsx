@@ -8,7 +8,7 @@ import CreateTopic from './pages/topics/CreateTopic'
 import TopicDetail from './pages/topics/detail'
 import Profile from './pages/profile'
 import Administration from './pages/administration'
-import PeriodsPage from './pages/periods'
+import PeriodePage from './pages/periode'
 import ForumsPage from './pages/forums'
 import ForumDetailPage from './pages/forums/detail'
 import NotFound from './pages/not-found'
@@ -25,7 +25,7 @@ export const router = createBrowserRouter(
     { path: '/beranda', element: (<ProtectedRoute><Dashboard /></ProtectedRoute>) },
   { path: '/forum', element: (<ProtectedRoute><ForumsPage/></ProtectedRoute>) },
   { path: '/forum/:id', element: (<ProtectedRoute><ForumDetailPage /></ProtectedRoute>) },
-  { path: '/period', element: (<ProtectedRoute><PeriodsPage/></ProtectedRoute>) },
+  { path: '/period', element: (<ProtectedRoute><PeriodePage/></ProtectedRoute>) },
   { path: '/administrasi', element: (<ProtectedRoute requireAdmin><Administration /></ProtectedRoute>) },
     { path: '/formulir/:id', element: (<ProtectedRoute><TopicDetail /></ProtectedRoute>) },
     { path: '/formulir/buat', element: (<ProtectedRoute><CreateTopic /></ProtectedRoute>) },
