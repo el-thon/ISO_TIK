@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
-import { useUpdateForumPeriod } from '@/hooks/useForumPeriod'
+import { useUpdatePeriod } from '@/hooks/usePeriod'
 import { updatePeriodSchema } from '../constants'
 
 export default function UpdatePeriodForm({ period, onSuccess }) {
@@ -33,7 +33,7 @@ export default function UpdatePeriodForm({ period, onSuccess }) {
     })
   }, [period, reset])
 
-  const updatePeriodMutation = useUpdateForumPeriod(period?.id, {
+  const updatePeriodMutation = useUpdatePeriod(period?.id, {
     onSuccess: (data, variables, context) => {
       if (onSuccess) onSuccess(data, variables, context)
     },
