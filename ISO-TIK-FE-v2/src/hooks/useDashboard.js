@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/services/api'
 import { listForumPeriods, listForumPeriodForums } from '@/services/forumPeriodService'
-import { listTopics } from '@/services/topicService'
+import { listFormulirs } from '@/services/formulirService'
 
 const ensureArray = (data) => {
   if (!data) return []
@@ -115,15 +115,15 @@ export const useDashboardData = ({ findingType } = {}) => {
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data: topicsData, isLoading: topicsLoading, error: topicsError } = useQuery({
-    queryKey: ['topics', 'list', 'dashboard'],
+  const { data: formulirsData, isLoading: formulirsLoading, error: formulirsError } = useQuery({
+    queryKey: ['formulirs', 'list', 'dashboard'],
     queryFn: async () => {
       try {
-        return await listTopics({ per_page: 100 })
+        return await listFormulirs({ per_page: 100 })
       } catch (error) {
         const status = error?.response?.status
         if (status === 401 || status === 403) {
-          return { topics: [] }
+          return { formulirs: [], topics: [] }
         }
         throw error
       }
@@ -141,7 +141,7 @@ export const useDashboardData = ({ findingType } = {}) => {
   })
 
   const usersArray = ensureArray(usersData?.users)
-  const topicsArray = ensureArray(topicsData?.topics)
+  const topicsArray = ensureArray(formulirsData?.formulirs ?? formulirsData?.topics)
   const periodsRaw = ensureArray(periodsResp?.periods)
   const documentMasterArray = ensureArray(adminMasters)
   const statsForumsPerRoom = ensureArray(statsData?.statistics?.forums_per_room)
@@ -281,14 +281,14 @@ export const useDashboardData = ({ findingType } = {}) => {
     usersLoading ||
     statsLoading ||
     periodsLoading ||
-    topicsLoading ||
+    formulirsLoading ||
     adminMastersLoading
 
   const error =
     usersError ||
     statsError ||
     periodsError ||
-    topicsError ||
+    formulirsError ||
     adminMastersError
 
   return {

@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useTopics } from '@/hooks/useTopic'
+import { useFormulirs } from '@/hooks/useFormulir'
 
 // Constants
 const STATUS_OPTIONS = [
@@ -257,7 +257,7 @@ export default function TopicsPage() {
     isError, 
     error, 
     refetch 
-  } = useTopics(params)
+  } = useFormulirs(params)
 
   const {
     data: myTopicsData,
@@ -265,7 +265,7 @@ export default function TopicsPage() {
     isError: myTopicsError,
     error: myTopicsErrorObj,
     refetch: refetchMyTopics,
-  } = useTopics(myTopicsParams, { 
+  } = useFormulirs(myTopicsParams, { 
     keepPreviousData: true,
     // Tambahkan untuk mencegah double fetch
     staleTime: 30000,

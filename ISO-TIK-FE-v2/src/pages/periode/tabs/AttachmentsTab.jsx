@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/use-toast';
 import { Paperclip, Download, Search, UploadCloud, RefreshCw, X, FileText, Image, File } from 'lucide-react';
 import * as forumAttachmentService from '@/services/forumAttachmentService';
-import * as topicService from '@/services/topicService';
+import * as formulirService from '@/services/formulirService';
 import { getAccessToken } from '@/services/api';
 import { useBootstrapSession } from '@/hooks/useAuth';
 import { getUserData, isProductOwnerUser } from '@/utils/auth'
@@ -273,7 +273,7 @@ export default function AttachmentsTab({ roomId }) {
     setDownloadProgress(prev => ({ ...prev, [documentId]: 0 }));
     
     try {
-      const { blob, filename: serverFilename } = await topicService.downloadAttachment(documentId);
+      const { blob, filename: serverFilename } = await formulirService.downloadAttachment(documentId);
       setDownloadProgress(prev => ({ ...prev, [documentId]: 100 }));
       
       const finalFilename = serverFilename || filename;
