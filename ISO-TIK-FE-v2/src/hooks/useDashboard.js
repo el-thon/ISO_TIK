@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import api from '@/services/api'
-import { listForumPeriods, listForumPeriodForums } from '@/services/forumPeriodService'
+import { listPeriods, listPeriodForums } from '@/services/periodService'
 import { listFormulirs } from '@/services/formulirService'
 
 const ensureArray = (data) => {
@@ -23,16 +23,18 @@ export const useDashboardStats = () => {
   })
 }
 
-export const useForumPeriods = () => {
+export const usePeriods = () => {
   return useQuery({
     queryKey: ['period'],
     queryFn: async () => {
-      const response = await listForumPeriods({ per_page: 100 })
+      const response = await listPeriods({ per_page: 100 })
       return response?.periods || []
     },
     staleTime: 5 * 60 * 1000,
   })
 }
+
+export const useForumPeriods = usePeriods
 
 export const useChildForumDetails = (childId) => {
   return useQuery({
@@ -71,15 +73,15 @@ export const useDashboardData = ({ findingType } = {}) => {
   })
 
   const { data: periodsResp, isLoading: periodsLoading, error: periodsError } = useQuery({
-    queryKey: ['forumPeriods', 'list', 'dashboard'],
+    queryKey: ['periods', 'list', 'dashboard'],
     queryFn: async () => {
-      const periodsResult = await listForumPeriods({ per_page: 100 })
+      const periodsResult = await listPeriods({ per_page: 100 })
       const rawPeriods = ensureArray(periodsResult?.periods)
 
       const periodsWithForums = await Promise.all(
         rawPeriods.map(async (period) => {
           try {
-            const forumResp = await listForumPeriodForums(period.id, { per_page: 100 })
+            const forumResp = await listPeriodForums(period.id, { per_page: 100 })
 
             const forums = ensureArray(forumResp?.forums).map((forum) => ({
               ...forum,
@@ -305,6 +307,7 @@ export const useDashboardData = ({ findingType } = {}) => {
 
 export default {
   useDashboardStats,
+  usePeriods,
   useForumPeriods,
   useChildForumDetails,
   useDashboardData,
