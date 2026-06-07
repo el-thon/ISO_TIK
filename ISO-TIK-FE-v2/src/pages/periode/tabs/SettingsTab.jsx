@@ -4,18 +4,19 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
-import { useArchiveRoom, useLockRoom, useRestoreRoom, useUnlockRoom, useUpdateRoom } from '@/hooks/useRoom'
+import { useArchiveForum, useLockForum, useRestoreForum, useUnlockForum, useUpdateForum } from '@/hooks/useForum'
 import { useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { toast } from '@/components/ui/use-toast'
 
-export default function SettingsTab({ room }) {
-  const roomId = room?.id
+export default function SettingsTab({ room, forum: forumProp }) {
+  const forum = forumProp ?? room
+  const forumId = forum?.id
 
-  const lockMutation = useLockRoom(roomId)
-  const unlockMutation = useUnlockRoom(roomId)
-  const archiveMutation = useArchiveRoom(roomId)
-  const restoreMutation = useRestoreRoom(roomId)
+  const lockMutation = useLockForum(forumId)
+  const unlockMutation = useUnlockForum(forumId)
+  const archiveMutation = useArchiveForum(forumId)
+  const restoreMutation = useRestoreForum(forumId)
 
   const isActionPending =
     lockMutation.isPending ||
@@ -24,8 +25,8 @@ export default function SettingsTab({ room }) {
     restoreMutation.isPending
 
   const handleLockToggle = () => {
-    if (!roomId) return
-    if (room?.is_locked) {
+    if (!forumId) return
+    if (forum?.is_locked) {
       unlockMutation.mutate()
     } else {
       lockMutation.mutate()
@@ -33,8 +34,8 @@ export default function SettingsTab({ room }) {
   }
 
   const handleArchiveToggle = () => {
-    if (!roomId) return
-    if (room?.is_archived) {
+    if (!forumId) return
+    if (forum?.is_archived) {
       restoreMutation.mutate()
     } else {
       archiveMutation.mutate()
@@ -42,10 +43,10 @@ export default function SettingsTab({ room }) {
   }
 
   const infoItems = [
-    { label: 'ID Ruangan', value: room?.id || '-' },
-    { label: 'Status', value: room?.is_locked ? 'Locked' : 'Unlocked' },
-    { label: 'Arsip', value: room?.is_archived ? 'Archived' : 'Active' },
-    { label: 'Peran Saya', value: room?.user_role || 'Tidak diketahui' },
+    { label: 'ID Forum', value: forum?.id || '-' },
+    { label: 'Status', value: forum?.is_locked ? 'Locked' : 'Unlocked' },
+    { label: 'Arsip', value: forum?.is_archived ? 'Archived' : 'Active' },
+    { label: 'Peran Saya', value: forum?.user_role || 'Tidak diketahui' },
   ]
 
   const errorMessage =
@@ -63,11 +64,11 @@ export default function SettingsTab({ room }) {
       <div>
         <h3 className="font-semibold text-lg">Ubah Detail Forum</h3>
         <div className="mt-3 p-4 border rounded-md bg-white">
-          <UpdateRoomDetailsForm room={room} />
+          <UpdateForumDetailsForm forum={forum} />
         </div>
       </div>
       <div>
-        <h3 className="font-semibold text-lg">Informasi Ruangan</h3>
+        <h3 className="font-semibold text-lg">Informasi Forum</h3>
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           {infoItems.map((item) => (
             <div key={item.label} className="p-4 border rounded-md bg-white">
@@ -82,24 +83,20 @@ export default function SettingsTab({ room }) {
         <h3 className="font-semibold text-lg">Tindakan</h3>
         <div className="mt-4 flex flex-wrap gap-3">
           <Button
-            variant={room?.is_locked ? 'outline' : 'default'}
+            variant={forum?.is_locked ? 'outline' : 'default'}
             onClick={handleLockToggle}
-            disabled={!roomId || isActionPending}
+            disabled={!forumId || isActionPending}
           >
-            {(lockMutation.isPending || unlockMutation.isPending) && (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            )}
-            {room?.is_locked ? 'Buka Kunci' : 'Kunci Ruangan'}
+            {(lockMutation.isPending || unlockMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {forum?.is_locked ? 'Buka Kunci' : 'Kunci Forum'}
           </Button>
           <Button
-            variant={room?.is_archived ? 'outline' : 'destructive'}
+            variant={forum?.is_archived ? 'outline' : 'destructive'}
             onClick={handleArchiveToggle}
-            disabled={!roomId || isActionPending}
+            disabled={!forumId || isActionPending}
           >
-            {(archiveMutation.isPending || restoreMutation.isPending) && (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            )}
-            {room?.is_archived ? 'Pulihkan' : 'Arsipkan'}
+            {(archiveMutation.isPending || restoreMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            {forum?.is_archived ? 'Pulihkan' : 'Arsipkan'}
           </Button>
         </div>
         {errorMessage && (
@@ -112,9 +109,9 @@ export default function SettingsTab({ room }) {
   )
 }
 
-function UpdateRoomDetailsForm({ room }) {
-  const roomId = room?.id
-  const periodId = room?.forum_period_id
+function UpdateForumDetailsForm({ forum }) {
+  const forumId = forum?.id
+  const periodId = forum?.forum_period_id
   const queryClient = useQueryClient()
 
   const {
@@ -125,85 +122,57 @@ function UpdateRoomDetailsForm({ room }) {
     formState: { errors },
   } = useForm({
     defaultValues: {
-      name: room?.name || '',
-      description: room?.description || '',
+      name: forum?.name || '',
+      description: forum?.description || '',
     },
   })
 
   React.useEffect(() => {
     reset({
-      name: room?.name || '',
-      description: room?.description || '',
+      name: forum?.name || '',
+      description: forum?.description || '',
     })
-  }, [room?.name, room?.description, reset])
+  }, [forum?.name, forum?.description, reset])
 
   const watchedDescription = watch('description') || ''
 
-  const updateMutation = useUpdateRoom(roomId, {
+  const updateMutation = useUpdateForum(forumId, {
     onMutate: async (variables) => {
-      if (!roomId) return {}
-      await queryClient.cancelQueries({ queryKey: ['rooms', roomId] })
-      const previousRoom = queryClient.getQueryData(['rooms', roomId])
+      if (!forumId) return {}
+      await queryClient.cancelQueries({ queryKey: ['forums', forumId] })
+      const previousForum = queryClient.getQueryData(['forums', forumId])
 
-      queryClient.setQueryData(['rooms', roomId], (old) => ({
+      queryClient.setQueryData(['forums', forumId], (old) => ({
         ...(old ?? {}),
-        ...previousRoom,
+        ...previousForum,
         name: variables.name,
         description: variables.description,
       }))
 
       if (periodId) {
-        const keyPrefixes = [
-          ['ruangan', periodId, 'forums'],
-          ['forum-periods', periodId, 'forums'],
-        ]
-
-        keyPrefixes.forEach((prefix) => {
-          const matching = queryClient.getQueriesData({ queryKey: prefix, exact: false })
-          matching.forEach(([key, data]) => {
-            if (!data) return
-            queryClient.setQueryData(key, (old) => {
-              if (!old || !old.forums) return old
-              const updated = { ...old }
-              updated.forums = (Array.isArray(old.forums) ? old.forums : []).map((f) =>
-                f?.id === roomId
-                  ? {
-                      ...f,
-                      name: variables.name,
-                      description: variables.description,
-                    }
-                  : f
-              )
-              return updated
-            })
-          })
-        })
+        queryClient.invalidateQueries({ queryKey: ['period', periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: ['period', periodId] })
       }
 
-      return { previousRoom }
+      return { previousForum }
     },
     onError: (err, variables, context) => {
-      if (context?.previousRoom) {
-        queryClient.setQueryData(['rooms', roomId], context.previousRoom)
+      if (context?.previousForum) {
+        queryClient.setQueryData(['forums', forumId], context.previousForum)
       }
       const message = err?.response?.data?.message || err?.message || 'Gagal memperbarui detail forum.'
       toast({ variant: 'destructive', title: 'Gagal', description: message })
-      if (typeof updateMutation?.onError === 'function') {
-        // noop, left for parity
-      }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['rooms', roomId] })
+      queryClient.invalidateQueries({ queryKey: ['forums', forumId] })
       if (periodId) {
-        queryClient.invalidateQueries({ queryKey: ['ruangan', periodId, 'forums'] })
-        queryClient.invalidateQueries({ queryKey: ['ruangan', periodId] })
-        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId, 'forums'] })
-        queryClient.invalidateQueries({ queryKey: ['forum-periods', periodId] })
+        queryClient.invalidateQueries({ queryKey: ['period', periodId, 'forums'] })
+        queryClient.invalidateQueries({ queryKey: ['period', periodId] })
       }
     },
     onSuccess: (data) => {
-      const resolvedName = data?.name ?? room?.name ?? ''
-      const resolvedDescription = data?.description ?? room?.description ?? ''
+      const resolvedName = data?.name ?? forum?.name ?? ''
+      const resolvedDescription = data?.description ?? forum?.description ?? ''
       toast({ title: 'Berhasil', description: 'Detail forum berhasil diperbarui.' })
       reset({
         name: resolvedName,
@@ -225,8 +194,8 @@ function UpdateRoomDetailsForm({ room }) {
 
   const handleCancel = () => {
     reset({
-      name: room?.name || '',
-      description: room?.description || '',
+      name: forum?.name || '',
+      description: forum?.description || '',
     })
   }
 
@@ -234,15 +203,15 @@ function UpdateRoomDetailsForm({ room }) {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       <div className="rounded-lg border border-slate-200 bg-slate-50/40 p-4">
         <p className="text-sm text-slate-700">
-          Perbarui informasi forum agar anggota ruangan lebih mudah memahami konteks forum.
+          Perbarui informasi forum agar anggota lebih mudah memahami konteks forum.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
         <div>
-          <Label htmlFor="settings-room-name">Nama Forum</Label>
+          <Label htmlFor="settings-forum-name">Nama Forum</Label>
           <Input
-            id="settings-room-name"
+            id="settings-forum-name"
             {...register('name', { required: true, minLength: 3 })}
             className="mt-2"
             placeholder="Contoh: General Discussion"
@@ -251,9 +220,9 @@ function UpdateRoomDetailsForm({ room }) {
         </div>
 
         <div>
-          <Label htmlFor="settings-room-description">Deskripsi Forum</Label>
+          <Label htmlFor="settings-forum-description">Deskripsi Forum</Label>
           <textarea
-            id="settings-room-description"
+            id="settings-forum-description"
             {...register('description', { maxLength: 1000 })}
             rows={4}
             className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
@@ -263,16 +232,12 @@ function UpdateRoomDetailsForm({ room }) {
             <p className="text-xs text-muted-foreground">Opsional, maksimal 1000 karakter.</p>
             <p className="text-xs text-muted-foreground">{watchedDescription.length}/1000</p>
           </div>
-          {errors.description && (
-            <p className="text-xs text-rose-600 mt-1">{errors.description.message || 'Deskripsi maksimal 1000 karakter'}</p>
-          )}
+          {errors.description && <p className="text-xs text-rose-600 mt-1">{errors.description.message || 'Deskripsi maksimal 1000 karakter'}</p>}
         </div>
       </div>
 
       <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-        <Button type="button" variant="outline" onClick={handleCancel} disabled={updateMutation.isPending}>
-          Reset
-        </Button>
+        <Button type="button" variant="outline" onClick={handleCancel} disabled={updateMutation.isPending}>Reset</Button>
         <Button type="submit" disabled={updateMutation.isPending}>
           {updateMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Simpan Perubahan
         </Button>
