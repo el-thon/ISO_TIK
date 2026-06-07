@@ -34,8 +34,6 @@ export const usePeriods = () => {
   })
 }
 
-export const useForumPeriods = usePeriods
-
 export const useChildForumDetails = (childId) => {
   return useQuery({
     queryKey: ['child-forum', childId, 'details'],
@@ -308,7 +306,6 @@ export const useDashboardData = ({ findingType } = {}) => {
 export default {
   useDashboardStats,
   usePeriods,
-  useForumPeriods,
   useChildForumDetails,
   useDashboardData,
 }
