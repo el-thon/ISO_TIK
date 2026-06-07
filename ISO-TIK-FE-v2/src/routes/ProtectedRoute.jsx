@@ -21,17 +21,6 @@ const isUserAdmin = (userData) => {
     userData?.data?.is_admin === true
 }
 
-const isUserProductOwner = (userData) => {
-  if (!userData) return false
-
-  const roles = userData?.roles ||
-    userData?.data?.roles ||
-    userData?.data?.user?.roles ||
-    []
-
-  return roles.includes('product_owner') || roles.includes('product owner')
-}
-
 export default function ProtectedRoute({ children, requireAdmin = false }) {
   const location = useLocation()
   const hasShownExpiredToast = useRef(false)
@@ -48,14 +37,12 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
     const storedUser = getUserData()
     const isAuthorized = Boolean(token && storedUser)
     const isAdmin = isAuthorized ? isUserAdmin(storedUser) : false
-    const isProductOwner = isAuthorized ? isUserProductOwner(storedUser) : false
 
     return {
       token,
       storedUser,
       isAuthorized,
       isAdmin,
-      isProductOwner,
     }
   }, [location.pathname])
   
@@ -89,7 +76,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
     return <Navigate to="/" replace state={{ from: location }} />
   }
 
-  if (requireAdmin && !(authState.isAdmin || authState.isProductOwner)) {
+  if (requireAdmin && !authState.isAdmin) {
     return <Navigate to="/beranda" replace state={{ from: location }} />
   }
   
@@ -124,7 +111,7 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
         } catch {
           cachedUser = null
         }
-        if (!isUserAdmin(cachedUser) && !isUserProductOwner(cachedUser)) {
+        if (!isUserAdmin(cachedUser)) {
           return <Navigate to="/beranda" replace state={{ from: location }} />
         }
       }
