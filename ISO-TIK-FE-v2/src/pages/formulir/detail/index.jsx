@@ -1,22 +1,21 @@
-// pages/topics/detail/components/index.js
-// NOTE: Avoid `export *` here so react-refresh can verify we only re-export components.
-
-export { default as TopicBreadcrumb } from './TopicBreadcrumb'
-export { default as NotificationBanner } from './NotificationBanner'
-export { default as ErrorAlert } from './ErrorAlert'
-export { default as TopicHeader } from './TopicHeader'
-export { default as InputItem } from './InputItem'
-export { default as ReviewForm } from './ReviewForm'
-export { default as ReviewItem } from './ReviewItem'
-export { default as VersionItem } from './VersionItem'
-export { default as ActionButton } from './ActionButton'
-export { default as TopicDetailSkeleton } from './TopicDetailSkeleton'
-export { default as InputItemsSkeleton } from './InputItemsSkeleton'
-export { default as ReviewsSkeleton } from './ReviewsSkeleton'
-export { default as VersionsSkeleton } from './VersionsSkeleton'
-export { default as TopicDetailSidebar } from './TopicDetailSidebar'
-export { default as TopicReviewsHeader } from './TopicReviewsHeader'
-export { default as TopicVersionsHeader } from './TopicVersionsHeader'
-export { default as Labels } from './Labels'
-export { default as Routings } from './Routings'
-export { default as WorkflowStates } from './WorkflowStates'
+export {
+  FormulirBreadcrumb,
+  NotificationBanner,
+  ErrorAlert,
+  FormulirHeader,
+  InputItem,
+  ReviewForm,
+  ReviewItem,
+  VersionItem,
+  ActionButton,
+  FormulirDetailSkeleton,
+  InputItemsSkeleton,
+  ReviewsSkeleton,
+  VersionsSkeleton,
+  FormulirDetailSidebar,
+  FormulirReviewsHeader,
+  FormulirVersionsHeader,
+  Labels,
+  Routings,
+  WorkflowStates,
+} from './components'

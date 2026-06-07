@@ -1,4 +1,4 @@
-// pages/topics/detail/components/Labels.jsx
+// pages/formulir/detail/components/Labels.jsx
 import React from 'react'
 import { Tag } from 'lucide-react'
 

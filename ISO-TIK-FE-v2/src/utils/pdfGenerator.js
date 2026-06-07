@@ -8,7 +8,7 @@ import { jsPDF } from 'jspdf'
 class PDFGenerator {
   constructor(options = {}) {
     this.printRef = options.printRef || null
-    this.topicId = options.topicId || null
+    this.formulirId = options.formulirId || options.topicId || null
     this.hasSignature = options.hasSignature || false
     this.downloadSignature = options.downloadSignature || null
     this.toDataUrl = options.toDataUrl || null
@@ -23,7 +23,7 @@ class PDFGenerator {
    */
   setDependencies(deps) {
     this.printRef = deps.printRef || this.printRef
-    this.topicId = deps.topicId || this.topicId
+    this.formulirId = deps.formulirId || deps.topicId || this.formulirId
     this.hasSignature = deps.hasSignature ?? this.hasSignature
     this.downloadSignature = deps.downloadSignature || this.downloadSignature
     this.toDataUrl = deps.toDataUrl || this.toDataUrl
@@ -459,10 +459,10 @@ class PDFGenerator {
       }
 
       // Generate dan save PDF
-      const pdf = this.generatePDFFromCanvas(canvas, this.topicId)
+      const pdf = this.generatePDFFromCanvas(canvas, this.formulirId)
       
       if (pdf) {
-        const filename = `Form-Temuan-${this.topicId || 'export'}.pdf`
+        const filename = `Form-Temuan-${this.formulirId || 'export'}.pdf`
         if (this.mode === 'preview') {
           const url = pdf.output('bloburl')
           window.open(url, '_blank', 'noopener,noreferrer')

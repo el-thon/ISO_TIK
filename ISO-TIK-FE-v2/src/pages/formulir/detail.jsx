@@ -22,22 +22,23 @@ import {
 import { useMe } from '@/hooks/useAuth'
 import { useAdminClauses } from '@/hooks/useAdminClause'
 import { useRoomParticipants } from '@/hooks/useRoom'
-import { ACTION_METADATA, isLikelyTopicId, buildErrorMessage } from './detail/utils'
+import { ACTION_METADATA, isLikelyFormulirId, buildErrorMessage } from './detail/utils'
 import { toast } from '@/components/ui/use-toast'
 import api from '@/services/api'
+import * as formulirService from '@/services/formulirService'
 import { getUserData } from '@/utils/auth'
 import {
-  TopicBreadcrumb,
+  FormulirBreadcrumb,
   ErrorAlert,
-  TopicHeader,
+  FormulirHeader,
   InputItem,
   VersionItem,
   ActionButton,
-  TopicDetailSidebar,
-  TopicVersionsHeader,
+  FormulirDetailSidebar,
+  FormulirVersionsHeader,
   WorkflowStates,
   Routings,
-  TopicDetailSkeleton,
+  FormulirDetailSkeleton,
   InputItemsSkeleton,
   VersionsSkeleton,
 } from './detail/components'
@@ -62,17 +63,15 @@ const useCreateFormulirInputItem = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const mutateAsync = async ({ topicId, data, inputItemId }) => {
+  const mutateAsync = async ({ formulirId, data, inputItemId }) => {
     setIsLoading(true)
     setError(null)
     try {
       if (inputItemId) {
-        const response = await api.put(`/input-items/${inputItemId}`, data)
-        return response?.data
+        return formulirService.updateInputItem(inputItemId, data)
       }
 
-      const response = await api.post(`/topics/${topicId}/input-items`, data)
-      return response?.data
+      return formulirService.createInputItem(formulirId, data)
     } catch (err) {
       setError(err)
       throw err
@@ -88,15 +87,15 @@ const useCreateFormulirInputItem = () => {
   }
 }
 
-const useWorkflowActions = (topic, currentUser, hasContent) => {
-  const status = (topic?.status || '').toLowerCase()
+const useWorkflowActions = (formulir, currentUser, hasContent) => {
+  const status = (formulir?.status || '').toLowerCase()
   const currentUserId = currentUser?.id
   const normalizedCurrentUserId = currentUserId != null ? String(currentUserId) : null
   const isCreator = Boolean(
     normalizedCurrentUserId &&
-    (String(topic?.created_by_user_id ?? '') === normalizedCurrentUserId || String(topic?.created_by?.id ?? '') === normalizedCurrentUserId)
+    (String(formulir?.created_by_user_id ?? '') === normalizedCurrentUserId || String(formulir?.created_by?.id ?? '') === normalizedCurrentUserId)
   )
-  const forum = topic?.forum || topic?.room || null
+  const forum = formulir?.forum || formulir?.room || null
   const responsibleId =
     forum?.responsible_user_id ??
     forum?.responsible_user?.id ??
@@ -104,7 +103,7 @@ const useWorkflowActions = (topic, currentUser, hasContent) => {
   const isResponsible = Boolean(
     normalizedCurrentUserId && responsibleId != null && String(responsibleId) === normalizedCurrentUserId
   )
-  const isFrozen = Boolean(topic?.is_frozen || topic?.frozen_at)
+  const isFrozen = Boolean(formulir?.is_frozen || formulir?.frozen_at)
 
   const canPublish = status === 'draft' && isCreator && currentUser?.can_create_topics
   const canApprove = ['in_review', 'changes_requested'].includes(status) && currentUser?.can_approve_topics
@@ -130,8 +129,8 @@ const useWorkflowActions = (topic, currentUser, hasContent) => {
     if (canApprove) {
       result.push({
         type: 'approve',
-        label: 'Setujui Topik',
-        description: 'Konfirmasi bahwa topik siap dijalankan.',
+        label: 'Setujui Formulir',
+        description: 'Konfirmasi bahwa formulir siap dijalankan.',
         icon: CheckCircle2,
         variant: 'default',
       })
@@ -148,8 +147,8 @@ const useWorkflowActions = (topic, currentUser, hasContent) => {
     if (canClose) {
       result.push({
         type: 'close',
-        label: 'Tutup Topik',
-        description: 'Kunci topik yang sudah approved.',
+        label: 'Tutup Formulir',
+        description: 'Kunci formulir yang sudah approved.',
         icon: Lock,
         variant: 'outline',
       })
@@ -158,7 +157,7 @@ const useWorkflowActions = (topic, currentUser, hasContent) => {
       result.push({
         type: 'reopen',
         label: 'Buka Kembali',
-        description: 'Kembalikan topik ke tahap review.',
+        description: 'Kembalikan formulir ke tahap review.',
         icon: Undo2,
         variant: 'outline',
       })
@@ -176,7 +175,7 @@ const useWorkflowActions = (topic, currentUser, hasContent) => {
       result.push({
         type: 'unfreeze',
         label: 'Lepas Beku',
-        description: 'Aktifkan kembali topik.',
+        description: 'Aktifkan kembali formulir.',
         icon: Unlock,
         variant: 'outline',
       })
@@ -191,9 +190,9 @@ const useWorkflowActions = (topic, currentUser, hasContent) => {
 // Main Component
 // ============================================================================
 
-export default function TopicDetail() {
-  const { id: paramTopicId } = useParams()
-  const isValidTopicId = useMemo(() => isLikelyTopicId(paramTopicId), [paramTopicId])
+export default function FormulirDetail() {
+  const { id: paramFormulirId } = useParams()
+  const isValidFormulirId = useMemo(() => isLikelyFormulirId(paramFormulirId), [paramFormulirId])
 
   const printRef = useRef(null)
 
@@ -223,8 +222,8 @@ export default function TopicDetail() {
   const createInputItemMutation = useCreateFormulirInputItem()
 
   // Data fetching hooks
-  const { data: topic, isLoading, isError, error: topicError, refetch } = useFormulir(paramTopicId, { 
-    enabled: isValidTopicId,
+  const { data: formulir, isLoading, isError, error: formulirError, refetch } = useFormulir(paramFormulirId, { 
+    enabled: isValidFormulirId,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   })
@@ -236,21 +235,21 @@ export default function TopicDetail() {
     isError: versionsError,
     error: versionsErrorObj,
     refetch: refetchVersions,
-  } = useFormulirVersions(paramTopicId, versionsParams, { 
-    enabled: isValidTopicId,
+  } = useFormulirVersions(paramFormulirId, versionsParams, { 
+    enabled: isValidFormulirId,
     refetchOnMount: true,
   })
 
   const inputItemsParams = useMemo(() => ({ per_page: 100 }), [])
-  const { data: inputItemsData } = useFormulirInputItems(paramTopicId, inputItemsParams, {
-    enabled: isValidTopicId,
+  const { data: inputItemsData } = useFormulirInputItems(paramFormulirId, inputItemsParams, {
+    enabled: isValidFormulirId,
     refetchOnMount: true,
   })
 
-  // Definisikan topicId setelah topic tersedia
-  const topicId = topic?.id || paramTopicId
+  // Definisikan formulirId setelah formulir tersedia
+  const formulirId = formulir?.id || paramFormulirId
 
-  const forumId = topic?.forum?.id || topic?.room?.id || topic?.forum_id || topic?.room_id
+  const forumId = formulir?.forum?.id || formulir?.room?.id || formulir?.forum_id || formulir?.room_id
 
   // Load participants to determine whether current user can add/edit findings.
   const participantsParams = useMemo(() => ({ per_page: 200 }), [])
@@ -261,11 +260,11 @@ export default function TopicDetail() {
 
   // Load finding data dari input_items
   const resolvedInputItems = useMemo(() => {
-    if (Array.isArray(topic?.input_items) && topic.input_items.length) {
-      return topic.input_items
+    if (Array.isArray(formulir?.input_items) && formulir.input_items.length) {
+      return formulir.input_items
     }
     return inputItemsData?.items ?? []
-  }, [topic, inputItemsData])
+  }, [formulir, inputItemsData])
 
   const resolveLogoUrl = useCallback(() => {
     const fallbackOrigin = typeof window !== 'undefined' ? window.location.origin : ''
@@ -546,7 +545,7 @@ export default function TopicDetail() {
 
       await generatePDF({
         printRef,
-        topicId,
+        formulirId,
         hasSignature: Boolean(auditorBlob),
         downloadSignature: auditorSignatureDownloader,
         toDataUrl,
@@ -559,7 +558,7 @@ export default function TopicDetail() {
     }
   }, [
     printRef, 
-    topicId, 
+    formulirId, 
     toDataUrl, 
     setSignatureDataUrl, 
     ensureImagesLoaded,
@@ -602,7 +601,7 @@ export default function TopicDetail() {
 
       await generatePDF({
         printRef,
-        topicId,
+        formulirId,
         hasSignature: Boolean(auditorBlob),
         downloadSignature: auditorSignatureDownloader,
         toDataUrl,
@@ -615,7 +614,7 @@ export default function TopicDetail() {
     }
   }, [
     printRef,
-    topicId,
+    formulirId,
     toDataUrl,
     setSignatureDataUrl,
     ensureImagesLoaded,
@@ -640,11 +639,12 @@ export default function TopicDetail() {
 
   const handleError = useCallback((err) => {
     const message = buildErrorMessage(err)
-    if (String(message).toLowerCase().includes('topic is frozen')) {
+    const normalizedMessage = String(message).toLowerCase()
+    if (normalizedMessage.includes('formulir is frozen') || normalizedMessage.includes('topic is frozen')) {
       toast({
         variant: 'destructive',
-        title: 'Topik sedang dibekukan',
-        description: 'Aksi tidak dapat dilakukan karena topik sedang dibekukan.',
+        title: 'Formulir sedang dibekukan',
+        description: 'Aksi tidak dapat dilakukan karena formulir sedang dibekukan.',
       })
       return
     }
@@ -658,18 +658,18 @@ export default function TopicDetail() {
   // PERBAIKAN: Handler untuk menyimpan finding
   const handleSaveFinding = useCallback(async (formData) => {
     try {
-      if (String(topic?.status || '').toLowerCase() === 'closed') {
+      if (String(formulir?.status || '').toLowerCase() === 'closed') {
         toast({
           variant: 'destructive',
-          title: 'Topik sudah ditutup',
-          description: 'Perubahan temuan tidak diizinkan untuk topik yang sudah ditutup.',
+          title: 'Formulir sudah ditutup',
+          description: 'Perubahan temuan tidak diizinkan untuk formulir yang sudah ditutup.',
         })
         return
       }
       const inputItem = convertFormToInputItem(formData)
       
       await createInputItemMutation.mutateAsync({
-        topicId,
+        formulirId,
         data: inputItem,
         inputItemId: findingInputItemId
       })
@@ -678,26 +678,26 @@ export default function TopicDetail() {
       setShowFindingForm(false)
       handleSuccess('Data temuan berhasil disimpan')
       
-      // Refresh data topic
+      // Refresh data formulir
       refetch()
     } catch (err) {
       handleError(err)
     }
-  }, [topic?.status, topicId, createInputItemMutation, handleSuccess, handleError, refetch, findingInputItemId])
+  }, [formulir?.status, formulirId, createInputItemMutation, handleSuccess, handleError, refetch, findingInputItemId])
 
   // Mutation hooks - workflow
   const revertVersionMutation = useRevertFormulirVersion({
-    onSuccess: () => handleSuccess('Versi topik berhasil dipulihkan.'),
+    onSuccess: () => handleSuccess('Versi formulir berhasil dipulihkan.'),
     onError: handleError,
   })
 
   const publishMutation = usePublishFormulir({
-    onSuccess: () => handleSuccess('Topik berhasil diajukan untuk review.'),
+    onSuccess: () => handleSuccess('Formulir berhasil diajukan untuk review.'),
     onError: handleError,
   })
 
   const approveMutation = useApproveFormulir({
-    onSuccess: () => handleSuccess('Topik disetujui.'),
+    onSuccess: () => handleSuccess('Formulir disetujui.'),
     onError: handleError,
   })
 
@@ -706,45 +706,45 @@ export default function TopicDetail() {
     onError: handleError,
   })
 
-  const closeTopicMutation = useCloseFormulir({
+  const closeFormulirMutation = useCloseFormulir({
     onSuccess: () => {
-      handleSuccess('Topik berhasil ditutup.')
+      handleSuccess('Formulir berhasil ditutup.')
       toast({
-        title: 'Topik ditutup',
-        description: 'Topik berhasil ditutup.',
+        title: 'Formulir ditutup',
+        description: 'Formulir berhasil ditutup.',
       })
     },
     onError: handleError,
   })
 
-  const reopenTopicMutation = useReopenFormulir({
+  const reopenFormulirMutation = useReopenFormulir({
     onSuccess: () => {
-      handleSuccess('Topik berhasil dibuka kembali.')
+      handleSuccess('Formulir berhasil dibuka kembali.')
       toast({
-        title: 'Topik dibuka kembali',
-        description: 'Topik berhasil dibuka kembali.',
+        title: 'Formulir dibuka kembali',
+        description: 'Formulir berhasil dibuka kembali.',
       })
     },
     onError: handleError,
   })
 
-  const freezeTopicMutation = useFreezeFormulir({
+  const freezeFormulirMutation = useFreezeFormulir({
     onSuccess: () => {
-      handleSuccess('Topik berhasil dibekukan.')
+      handleSuccess('Formulir berhasil dibekukan.')
       toast({
         title: 'Berhasil',
-        description: 'Topik berhasil dibekukan.',
+        description: 'Formulir berhasil dibekukan.',
       })
     },
     onError: handleError,
   })
 
-  const unfreezeTopicMutation = useUnfreezeFormulir({
+  const unfreezeFormulirMutation = useUnfreezeFormulir({
     onSuccess: () => {
-      handleSuccess('Pembekuan topik telah dilepas.')
+      handleSuccess('Pembekuan formulir telah dilepas.')
       toast({
         title: 'Berhasil',
-        description: 'Pembekuan topik telah dilepas.',
+        description: 'Pembekuan formulir telah dilepas.',
       })
     },
     onError: handleError,
@@ -776,29 +776,29 @@ export default function TopicDetail() {
     publish: publishMutation.isLoading,
     approve: approveMutation.isLoading,
     request_changes: requestChangesMutation.isLoading,
-    close: closeTopicMutation.isLoading,
-    reopen: reopenTopicMutation.isLoading,
-    freeze: freezeTopicMutation.isLoading,
-    unfreeze: unfreezeTopicMutation.isLoading,
+    close: closeFormulirMutation.isLoading,
+    reopen: reopenFormulirMutation.isLoading,
+    freeze: freezeFormulirMutation.isLoading,
+    unfreeze: unfreezeFormulirMutation.isLoading,
   }
 
   const isAnyWorkflowLoading = Object.values(actionLoadingMap).some(Boolean)
   const hasContent = inputItems.length > 0
-  const authorName = topic?.created_by?.profile?.full_name || topic?.created_by?.name || topic?.created_by?.username || 'Tidak diketahui'
-  const roomName = topic?.forum?.name || topic?.room?.name || 'Tidak ada informasi'
-  const isFrozen = Boolean(topic?.is_frozen || topic?.frozen_at)
-  const isClosed = String(topic?.status || '').toLowerCase() === 'closed'
-  const versionDisplay = topic ? `v${topic.version_major}.${topic.version_minor}` : ''
+  const authorName = formulir?.created_by?.profile?.full_name || formulir?.created_by?.name || formulir?.created_by?.username || 'Tidak diketahui'
+  const roomName = formulir?.forum?.name || formulir?.room?.name || 'Tidak ada informasi'
+  const isFrozen = Boolean(formulir?.is_frozen || formulir?.frozen_at)
+  const isClosed = String(formulir?.status || '').toLowerCase() === 'closed'
+  const versionDisplay = formulir ? `v${formulir.version_major}.${formulir.version_minor}` : ''
 
-  const isTopicDeadlinePassed = Boolean(
-    topic?.deadline_at && new Date(topic.deadline_at) < new Date()
+  const isFormulirDeadlinePassed = Boolean(
+    formulir?.deadline_at && new Date(formulir.deadline_at) < new Date()
   )
 
-  // The period deadline should lock down topic editing too.
-  // Backend usually exposes this flag at forum level when topic is loaded with its forum.
+  // The period deadline should lock down formulir editing too.
+  // Backend usually exposes this flag at forum level when formulir is loaded with its forum.
   const resolvePeriodDeadlinePassed = () => {
-    // Always reference the *period* (forum_period_*) fields, never forum/topic deadlines.
-    return isPeriodDeadlinePassedUtil(topic?.forum) || isPeriodDeadlinePassedUtil(topic?.room)
+    // Always reference the *period* (forum_period_*) fields, never forum/formulir deadlines.
+    return isPeriodDeadlinePassedUtil(formulir?.forum) || isPeriodDeadlinePassedUtil(formulir?.room)
   }
 
   const isPeriodDeadlinePassed = resolvePeriodDeadlinePassed()
@@ -807,21 +807,21 @@ export default function TopicDetail() {
 
   const currentUserForumRole = useMemo(() => {
     const embeddedRole =
-      topic?.current_user_role ??
-      topic?.user_role ??
-      topic?.current_user_participant?.role
+      formulir?.current_user_role ??
+      formulir?.user_role ??
+      formulir?.current_user_participant?.role
     if (embeddedRole) return normalizeParticipantRole(embeddedRole)
 
     const currentUserId = currentUser?.id
     if (!currentUserId) return ''
     const normalizedId = String(currentUserId)
-    const participants = forumParticipants.length ? forumParticipants : (topic?.participants ?? [])
+    const participants = forumParticipants.length ? forumParticipants : (formulir?.participants ?? [])
     const match = participants.find((p) => String(p?.user_id ?? p?.user?.id ?? '') === normalizedId)
     return normalizeParticipantRole(match?.role)
-  }, [currentUser?.id, forumParticipants, topic])
+  }, [currentUser?.id, forumParticipants, formulir])
 
   const isCurrentUserAuditor = currentUserForumRole === 'auditor'
-  const isFindingLockedByDeadline = isTopicDeadlinePassed || isPeriodDeadlinePassed
+  const isFindingLockedByDeadline = isFormulirDeadlinePassed || isPeriodDeadlinePassed
   const isFindingReadOnly = isFindingLockedByDeadline || !isCurrentUserAuditor
 
   useEffect(() => {
@@ -830,7 +830,7 @@ export default function TopicDetail() {
     }
   }, [isClosed])
 
-  const actionButtons = useWorkflowActions(topic, currentUser, hasContent)
+  const actionButtons = useWorkflowActions(formulir, currentUser, hasContent)
   const activeMeta = activeAction ? ACTION_METADATA[activeAction] : null
 
   // More handlers
@@ -841,53 +841,53 @@ export default function TopicDetail() {
   }, [])
 
   const handleConfirmAction = useCallback(() => {
-    if (!activeAction || !topicId) return
+    if (!activeAction || !formulirId) return
     const trimmed = note.trim()
     setNoteError(null)
 
     switch (activeAction) {
       case 'publish':
-        publishMutation.mutate({ topicId })
+        publishMutation.mutate({ formulirId })
         break
       case 'approve':
-        approveMutation.mutate({ topicId, payload: trimmed ? { comment: trimmed } : {} })
+        approveMutation.mutate({ formulirId, payload: trimmed ? { comment: trimmed } : {} })
         break
       case 'request_changes':
         if (!trimmed) {
           setNoteError('Mohon isi detail perubahan yang diminta.')
           return
         }
-        requestChangesMutation.mutate({ topicId, payload: { comment: trimmed } })
+        requestChangesMutation.mutate({ formulirId, payload: { comment: trimmed } })
         break
       case 'close':
-        closeTopicMutation.mutate({ topicId, payload: trimmed ? { reason: trimmed } : {} })
+        closeFormulirMutation.mutate({ formulirId, payload: trimmed ? { reason: trimmed } : {} })
         break
       case 'reopen':
-        reopenTopicMutation.mutate({ topicId, payload: trimmed ? { reason: trimmed } : {} })
+        reopenFormulirMutation.mutate({ formulirId, payload: trimmed ? { reason: trimmed } : {} })
         break
       case 'freeze':
-        freezeTopicMutation.mutate({ topicId, payload: trimmed ? { reason: trimmed } : {} })
+        freezeFormulirMutation.mutate({ formulirId, payload: trimmed ? { reason: trimmed } : {} })
         break
       case 'unfreeze':
-        unfreezeTopicMutation.mutate({ topicId, payload: trimmed ? { reason: trimmed } : {} })
+        unfreezeFormulirMutation.mutate({ formulirId, payload: trimmed ? { reason: trimmed } : {} })
         break
       default:
         break
     }
-  }, [activeAction, topicId, note, publishMutation, approveMutation, requestChangesMutation, closeTopicMutation, reopenTopicMutation, freezeTopicMutation, unfreezeTopicMutation])
+  }, [activeAction, formulirId, note, publishMutation, approveMutation, requestChangesMutation, closeFormulirMutation, reopenFormulirMutation, freezeFormulirMutation, unfreezeFormulirMutation])
 
   const handleRevertVersion = useCallback((versionId) => {
-    if (!versionId || !topicId) return
-    revertVersionMutation.mutate({ topicId, versionId })
-  }, [topicId, revertVersionMutation])
+    if (!versionId || !formulirId) return
+    revertVersionMutation.mutate({ formulirId, versionId })
+  }, [formulirId, revertVersionMutation])
 
   // Early returns
-  if (!isValidTopicId) {
+  if (!isValidFormulirId) {
     return (
       <MainLayout>
         <div className="max-w-4xl mx-auto px-6 py-10">
-          <h1 className="text-heading-3 font-semibold mb-2">Topik tidak valid</h1>
-          <p className="text-sm text-muted-foreground mb-4">ID topik tampaknya tidak valid. Silakan kembali ke daftar topik.</p>
+          <h1 className="text-heading-3 font-semibold mb-2">Formulir tidak valid</h1>
+          <p className="text-sm text-muted-foreground mb-4">ID formulir tampaknya tidak valid. Silakan kembali ke daftar formulir.</p>
           <Link to="/beranda" className="text-primary hover:underline text-sm">Kembali ke beranda</Link>
         </div>
       </MainLayout>
@@ -898,25 +898,25 @@ export default function TopicDetail() {
     <MainLayout>
       <div className="mx-auto max-w-full px-3 py-4 sm:px-6 sm:py-6">
         <div className="mb-4">
-          <TopicBreadcrumb title={topic?.title} />
+          <FormulirBreadcrumb title={formulir?.title} />
         </div>
 
-        {isLoading && <TopicDetailSkeleton />}
+        {isLoading && <FormulirDetailSkeleton />}
 
         {isError && (
           <ErrorAlert 
-            error={topicError} 
+            error={formulirError} 
             onRetry={refetch} 
-            message={topicError?.response?.data?.message || topicError?.message || 'Silakan coba ulang.'} 
+            message={formulirError?.response?.data?.message || formulirError?.message || 'Silakan coba ulang.'} 
           />
         )}
 
-        {!isLoading && topic && (
+        {!isLoading && formulir && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:gap-6">
             {/* Main Content */}
             <div className="lg:col-span-8 space-y-4">
-              <TopicHeader 
-                topic={topic} 
+              <FormulirHeader 
+                formulir={formulir} 
                 authorName={authorName} 
                 roomName={roomName} 
                 versionDisplay={versionDisplay}
@@ -990,7 +990,7 @@ export default function TopicDetail() {
                   )}
                   {isClosed && (
                     <p className="text-xs text-muted-foreground">
-                      Topik sudah ditutup. Edit temuan akan aktif kembali setelah topik dibuka.
+                      Formulir sudah ditutup. Edit temuan akan aktif kembali setelah formulir dibuka.
                     </p>
                   )}
 
@@ -1022,26 +1022,26 @@ export default function TopicDetail() {
               </Card>
 
               {/* Routings Section */}
-              {topic.routings && topic.routings.length > 0 && (
+              {formulir.routings && formulir.routings.length > 0 && (
                 <Card>
                   <CardContent className="pt-6">
-                    <Routings routings={topic.routings} />
+                    <Routings routings={formulir.routings} />
                   </CardContent>
                 </Card>
               )}
 
               {/* Workflow States Section */}
-              {topic.workflow_states && topic.workflow_states.length > 0 && (
+              {formulir.workflow_states && formulir.workflow_states.length > 0 && (
                 <Card>
                   <CardContent className="pt-6">
-                    <WorkflowStates states={topic.workflow_states} />
+                    <WorkflowStates states={formulir.workflow_states} />
                   </CardContent>
                 </Card>
               )}
 
               {/* Versions Section */}
               <Card>
-                <TopicVersionsHeader onRefresh={refetchVersions} isLoading={versionsLoading} />
+                <FormulirVersionsHeader onRefresh={refetchVersions} isLoading={versionsLoading} />
                 <CardContent>
                   {versionsLoading ? (
                     <VersionsSkeleton count={3} />
@@ -1071,8 +1071,8 @@ export default function TopicDetail() {
             </div>
 
             {/* Sidebar */}
-            <TopicDetailSidebar
-              topic={topic}
+            <FormulirDetailSidebar
+              formulir={formulir}
               roomName={roomName}
               authorName={authorName}
               isFrozen={isFrozen}
@@ -1082,8 +1082,8 @@ export default function TopicDetail() {
               currentUser={currentUser}
               onOpenActionDialog={openActionDialog}
               versionDisplay={versionDisplay}
-              commentsCount={topic.comments_count}
-              deadlineAt={topic.deadline_at}
+              commentsCount={formulir.comments_count}
+              deadlineAt={formulir.deadline_at}
             />
           </div>
         )}

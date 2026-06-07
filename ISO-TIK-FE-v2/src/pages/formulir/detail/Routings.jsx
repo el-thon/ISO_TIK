@@ -1,4 +1,4 @@
-// pages/topics/detail/components/Routings.jsx
+// pages/formulir/detail/components/Routings.jsx
 import React from 'react'
 import { GitBranch, User, CheckCircle, Clock, XCircle } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'

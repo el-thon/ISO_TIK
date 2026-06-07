@@ -92,7 +92,7 @@ const findUuidInValue = (value) => {
   return match?.[0] ?? null
 }
 
-const isLikelyTopicId = (value) => {
+const isLikelyFormulirId = (value) => {
   if (typeof value !== 'string') return false
   const trimmed = value.trim()
   if (/^[0-9a-fA-F-]{32,40}$/.test(trimmed)) return true
@@ -100,43 +100,56 @@ const isLikelyTopicId = (value) => {
   return false
 }
 
-const resolveCreatedTopicId = (payload) => {
+const resolveCreatedFormulirId = (payload) => {
   if (!payload || typeof payload !== 'object') return null
 
   const candidates = [
     payload.id,
+    payload.formulir_id,
+    payload.formulir_uuid,
     payload.topic_id,
     payload.topic_uuid,
     payload.uuid,
+    payload.formulir?.id,
+    payload.formulir?.formulir_id,
+    payload.formulir?.uuid,
     payload.topic?.id,
     payload.topic?.topic_id,
     payload.topic?.uuid,
     payload.data?.id,
+    payload.data?.formulir_id,
+    payload.data?.formulir?.id,
     payload.data?.topic_id,
     payload.data?.topic?.id,
+    payload.meta?.formulir_id,
     payload.meta?.topic_id,
     payload.result?.id,
+    payload.result?.formulir_id,
     payload.result?.topic_id,
+    payload.message?.formulir_id,
     payload.message?.topic_id,
     payload.message?.id,
+    payload.message?.formulir?.id,
     payload.message?.topic?.id,
   ]
 
   for (const candidate of candidates) {
     const normalized = stringifyId(candidate)
-    if (normalized && isLikelyTopicId(normalized)) return normalized
+    if (normalized && isLikelyFormulirId(normalized)) return normalized
   }
 
   const linkCandidates = [
     payload.redirect_url,
+    payload.formulir_url,
     payload.topic_url,
     payload.links?.detail,
     payload.links?.self,
+    payload.formulir?.url,
     payload.topic?.url,
   ]
   for (const link of linkCandidates) {
     const normalized = extractIdFromUrl(link)
-    if (normalized && isLikelyTopicId(normalized)) return normalized
+    if (normalized && isLikelyFormulirId(normalized)) return normalized
   }
 
   const messageUuid = findUuidInValue(payload.message)
@@ -1090,10 +1103,10 @@ export default function CreateFormulir() {
         payload: formulirPayload
       })
             
-      // Extract topic ID from response
-      const newTopicId = resolveCreatedTopicId(created)
+      // Extract formulir ID from response
+      const newFormulirId = resolveCreatedFormulirId(created)
       
-      if (!newTopicId) {
+      if (!newFormulirId) {
         throw new Error('Formulir ID not found in response')
       }
             
@@ -1130,12 +1143,12 @@ export default function CreateFormulir() {
       }
             
       await createInputItem.mutateAsync({
-        topicId: newTopicId,
+        formulirId: newFormulirId,
         payload: inputItemPayload
       })
             
       // Navigate to the formulir page
-      navigate(`/formulir/${newTopicId}`)
+      navigate(`/formulir/${newFormulirId}`)
       
     } catch (err) {
       

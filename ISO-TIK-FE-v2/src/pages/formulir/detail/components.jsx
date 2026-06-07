@@ -51,7 +51,7 @@ const getTypeIcon = (type) => {
   return <Icon className="w-4 h-4 text-slate-500" />
 }
 
-export const TopicBreadcrumb = ({ title }) => (
+export const FormulirBreadcrumb = ({ title }) => (
   <Breadcrumb>
     <BreadcrumbList>
       <BreadcrumbItem>
@@ -117,26 +117,26 @@ export const ErrorAlert = ({ error, onRetry, message }) => {
   )
 }
 
-export const TopicHeader = ({ topic, authorName, roomName }) => (
+export const FormulirHeader = ({ formulir, authorName, roomName }) => (
   <Card>
     <CardContent className="pt-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-xl font-semibold text-slate-800">{topic.title}</h1>
+          <h1 className="text-xl font-semibold text-slate-800">{formulir.title}</h1>
           <div className="text-sm text-muted-foreground flex flex-wrap items-center gap-2">
-            <span>ID: {topic.id}</span>
-            {topic.status && (
+            <span>ID: {formulir.id}</span>
+            {formulir.status && (
               <span className="inline-flex items-center gap-2 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 capitalize">
                 <FileText className="h-3 w-3" />
-                {String(topic.status).replace('_', ' ')}
+                {String(formulir.status).replace('_', ' ')}
               </span>
             )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {topic.category && (
+          {formulir.category && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-              {topic.category}
+              {formulir.category}
             </span>
           )}
         </div>
@@ -153,14 +153,14 @@ export const TopicHeader = ({ topic, authorName, roomName }) => (
         </div>
         <div className="p-3 rounded-md border bg-slate-50">
           <div className="text-xs text-muted-foreground">Dibuat</div>
-          <div className="font-medium text-slate-800">{formatDate(topic.created_at, true)}</div>
+          <div className="font-medium text-slate-800">{formatDate(formulir.created_at, true)}</div>
         </div>
       </div>
 
       <div className="p-4 rounded-md border bg-slate-50">
         <div className="text-xs text-muted-foreground mb-1">Deskripsi</div>
         <div className="text-sm text-slate-800 whitespace-pre-line">
-          {topic.description || 'Tidak ada deskripsi.'}
+          {formulir.description || 'Tidak ada deskripsi.'}
         </div>
       </div>
     </CardContent>
@@ -550,7 +550,7 @@ export const ReviewForm = ({
 
     <div className="flex items-center justify-between">
       <div className="text-xs text-muted-foreground">
-        Temuan ini akan terlihat oleh pembuat dan penanggung jawab topik.
+        Temuan ini akan terlihat oleh pembuat dan penanggung jawab formulir.
       </div>
       <Button size="sm" onClick={onSubmit} disabled={isLoading}>
         {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
@@ -671,7 +671,7 @@ export const ActionButton = ({ action, onClick, isLoading, disabled, isAnyLoadin
   )
 }
 
-export function TopicDetailSkeleton() {
+export function FormulirDetailSkeleton() {
   return (
     <div className="space-y-4">
       <Card>
@@ -738,8 +738,8 @@ export function VersionsSkeleton({ count = 3 }) {
   )
 }
 
-export const TopicDetailSidebar = ({
-  topic,
+export const FormulirDetailSidebar = ({
+  formulir,
   roomName,
   authorName,
   isFrozen,
@@ -755,7 +755,7 @@ export const TopicDetailSidebar = ({
         <CardHeader>
           <CardTitle className="text-sm font-medium">Aksi Workflow</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">
-            Sesuaikan status topik sesuai peran Anda.
+            Sesuaikan status formulir sesuai peran Anda.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -775,7 +775,7 @@ export const TopicDetailSidebar = ({
 
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Detail Topik</CardTitle>
+        <CardTitle className="text-sm font-medium">Detail Formulir</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm text-muted-foreground">
         <div>
@@ -790,7 +790,7 @@ export const TopicDetailSidebar = ({
             </Avatar>
             <div>
               <div className="font-medium text-slate-700">{authorName}</div>
-              <div className="text-xs">{formatDate(topic.created_at, true)}</div>
+              <div className="text-xs">{formatDate(formulir.created_at, true)}</div>
             </div>
           </div>
         </div>
@@ -804,13 +804,13 @@ export const TopicDetailSidebar = ({
       </CardContent>
     </Card>
 
-    {topic.attachments?.length ? (
+    {formulir.attachments?.length ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium">Lampiran</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {topic.attachments.map((attachment) => (
+          {formulir.attachments.map((attachment) => (
             <div key={attachment.id} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <FileText className="w-4 h-4" />
@@ -825,7 +825,7 @@ export const TopicDetailSidebar = ({
   </aside>
 )
 
-export const TopicReviewsHeader = () => (
+export const FormulirReviewsHeader = () => (
   <CardHeader>
     <CardTitle className="text-sm font-medium flex items-center gap-2">
       <MessageSquare className="h-4 w-4" /> Tinjauan & Komentar
@@ -836,7 +836,7 @@ export const TopicReviewsHeader = () => (
   </CardHeader>
 )
 
-export const TopicVersionsHeader = ({ onRefresh, isLoading }) => (
+export const FormulirVersionsHeader = ({ onRefresh, isLoading }) => (
   <CardHeader className="flex flex-row items-center justify-between gap-4">
     <div>
       <CardTitle className="text-sm font-medium flex items-center gap-2">

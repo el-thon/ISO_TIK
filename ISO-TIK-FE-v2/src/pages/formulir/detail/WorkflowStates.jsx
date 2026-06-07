@@ -1,4 +1,4 @@
-// pages/topics/detail/components/WorkflowStates.jsx
+// pages/formulir/detail/components/WorkflowStates.jsx
 import React from 'react'
 import { History, User, CheckCircle, Clock, XCircle, FileText, AlertTriangle } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'

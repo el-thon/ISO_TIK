@@ -1,51 +1,51 @@
 export const ACTION_METADATA = {
   publish: {
-    title: 'Publikasikan Topik',
-    description: 'Kirim topik ke reviewer. Status berubah dari Draft menjadi In Review.',
+    title: 'Publikasikan Formulir',
+    description: 'Kirim formulir ke reviewer. Status berubah dari Draft menjadi In Review.',
     confirmLabel: 'Ajukan Review',
   },
   approve: {
-    title: 'Setujui Topik',
-    description: 'Tandai topik sebagai Approved dan kabari pembuat.',
+    title: 'Setujui Formulir',
+    description: 'Tandai formulir sebagai Approved dan kabari pembuat.',
     confirmLabel: 'Setujui',
     noteLabel: 'Catatan untuk pembuat (opsional)',
-    notePlaceholder: 'Opsional: masukkan catatan singkat untuk pembuat topik.',
+    notePlaceholder: 'Opsional: masukkan catatan singkat untuk pembuat formulir.',
   },
   request_changes: {
     title: 'Minta Perubahan',
-    description: 'Kembalikan topik ke pembuat dengan detail revisi yang dibutuhkan.',
+    description: 'Kembalikan formulir ke pembuat dengan detail revisi yang dibutuhkan.',
     confirmLabel: 'Kirim Permintaan',
     noteLabel: 'Detail permintaan perubahan',
     notePlaceholder: 'Jelaskan revisi yang harus dilakukan secara spesifik.',
     noteRequired: true,
   },
   close: {
-    title: 'Tutup Topik',
-    description: 'Kunci topik yang sudah approved agar tidak bisa diedit lagi.',
-    confirmLabel: 'Tutup Topik',
+    title: 'Tutup Formulir',
+    description: 'Kunci formulir yang sudah approved agar tidak bisa diedit lagi.',
+    confirmLabel: 'Tutup Formulir',
     noteLabel: 'Alasan penutupan (opsional)',
-    notePlaceholder: 'Opsional: catat alasan topik ditutup.',
+    notePlaceholder: 'Opsional: catat alasan formulir ditutup.',
   },
   reopen: {
-    title: 'Buka Kembali Topik',
-    description: 'Reopen topik yang sudah ditutup agar bisa direview ulang.',
+    title: 'Buka Kembali Formulir',
+    description: 'Reopen formulir yang sudah ditutup agar bisa direview ulang.',
     confirmLabel: 'Buka Kembali',
     noteLabel: 'Alasan pembukaan kembali (opsional)',
-    notePlaceholder: 'Opsional: jelaskan kenapa topik perlu dibuka kembali.',
+    notePlaceholder: 'Opsional: jelaskan kenapa formulir perlu dibuka kembali.',
   },
   freeze: {
-    title: 'Bekukan Topik',
-    description: 'Bekukan topik untuk mencegah perubahan sementara.',
+    title: 'Bekukan Formulir',
+    description: 'Bekukan formulir untuk mencegah perubahan sementara.',
     confirmLabel: 'Bekukan',
     noteLabel: 'Alasan pembekuan (opsional)',
-    notePlaceholder: 'Opsional: catat alasan topik dibekukan.',
+    notePlaceholder: 'Opsional: catat alasan formulir dibekukan.',
   },
   unfreeze: {
     title: 'Lepaskan Pembekuan',
-    description: 'Aktifkan kembali topik yang sedang dibekukan.',
+    description: 'Aktifkan kembali formulir yang sedang dibekukan.',
     confirmLabel: 'Lepaskan',
     noteLabel: 'Catatan (opsional)',
-    notePlaceholder: 'Opsional: catat alasan topik diaktifkan kembali.',
+    notePlaceholder: 'Opsional: catat alasan formulir diaktifkan kembali.',
   },
 }
 
@@ -55,7 +55,7 @@ export const REVIEW_FINDING_TYPES = [
   { value: 'observation', label: 'Observation' },
 ]
 
-export const isLikelyTopicId = (value) => {
+export const isLikelyFormulirId = (value) => {
   if (typeof value !== 'string') return false
   const trimmed = value.trim()
   if (!trimmed) return false
